@@ -22,15 +22,15 @@ Prefix IDs with `b` (block) and `a` (ask):
 
 **🚫 block** — rejected outright:
 
-| id | pattern | reason |
+| id | command | reason |
 |----|---------|--------|
-| b1 | `pattern` | reason |
+| b1 | `name` | reason |
 
 **❓ ask** — require confirmation:
 
-| id | pattern | reason |
+| id | command | reason |
 |----|---------|--------|
-| a1 | `pattern` | reason |
+| a1 | `name` | reason |
 
 ### 3. Check for `--list` flag
 

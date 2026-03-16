@@ -50,9 +50,19 @@ def parse_rules_yml(path):
                 current_section = stripped[:-1]
                 current_item = None
 
-            elif indent == 4 and stripped.startswith("- pattern:") and current_section is not None:
-                current_item = {"pattern": _unquote(stripped[10:].strip()), "reason": "", "ref": ""}
+            elif indent == 4 and stripped.startswith("- name:") and current_section is not None:
+                current_item = {"name": _unquote(stripped[7:].strip()), "pattern": "", "reason": "", "ref": ""}
                 rules[current_section].append(current_item)
+
+            elif indent == 4 and stripped.startswith("- pattern:") and current_section is not None:
+                current_item = {"name": "", "pattern": _unquote(stripped[10:].strip()), "reason": "", "ref": ""}
+                rules[current_section].append(current_item)
+
+            elif indent == 6 and stripped.startswith("pattern:") and current_item is not None:
+                current_item["pattern"] = _unquote(stripped[8:].strip())
+
+            elif indent == 6 and stripped.startswith("name:") and current_item is not None:
+                current_item["name"] = _unquote(stripped[5:].strip())
 
             elif indent == 6 and stripped.startswith("reason:") and current_item is not None:
                 current_item["reason"] = _unquote(stripped[7:].strip())

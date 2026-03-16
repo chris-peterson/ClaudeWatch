@@ -26,6 +26,6 @@ This is a Claude Code plugin that enforces git safety via a `PreToolUse` hook.
 
 **Hook protocol:** Claude Code passes tool invocations as JSON on stdin. The hook outputs `{"decision":"block",...}`, `{"decision":"ask",...}`, or nothing (allow). Exit code must always be 0.
 
-**YAML parser:** `git-guard.py` ships a minimal pure-Python parser for `rules.yml` — no external dependencies. Each rule has `pattern`, `reason`, and `ref` fields. If the format needs to change, update `parse_rules_yml()` in `scripts/git-guard.py` alongside `rules.yml`.
+**YAML parser:** `git-guard.py` ships a minimal pure-Python parser for `rules.yml` — no external dependencies. Each rule has `name`, `pattern`, `reason`, and `ref` fields. If the format needs to change, update `parse_rules_yml()` in `scripts/git-guard.py` alongside `rules.yml`.
 
 **Rule patterns** are Python regexes matched with `re.search()` (matches anywhere in the command string). This is the core safety advantage over Claude Code's built-in deny rules, which use `startsWith()` and miss compound commands like `git add . && git commit`.

@@ -10,7 +10,7 @@ docs:
 
 # preview docs site locally
 docs-preview: docs
-    npx docsify-cli serve docs/_site
+    npx docsify-cli serve docs/_site --open
 
 # launch an interactive session with the plugin loaded and open the rules skill
 rules:

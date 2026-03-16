@@ -19,11 +19,11 @@ def load_parser():
 
 
 def rule_table(rules):
-    lines = ["| Pattern | Reason | Ref |", "| --- | --- | --- |"]
+    lines = ["| Command | Reason | Ref |", "| --- | --- | --- |"]
     for r in rules:
-        pattern = f"`{r['pattern'].replace('|', '\\|')}`"
+        name = f"`{r.get('name', '')}`" if r.get("name") else ""
         ref = f"[docs]({r['ref']})" if r["ref"] else ""
-        lines.append(f"| {pattern} | {r['reason']} | {ref} |")
+        lines.append(f"| {name} | {r['reason']} | {ref} |")
     return "\n".join(lines)
 
 
@@ -55,7 +55,7 @@ def main():
     write_file(site_dir, "rules.md", "\n".join([
         "# Default Rules",
         "",
-        "Generated from [`rules.yml`](https://github.com/chris-peterson/git-guardian/blob/main/rules.yml).",
+        "Generated from [`rules.yml`](/rules-yml).",
         "",
         "> [!TIP]",
         "> Use the `/git-guardian:rules` skill to interactively customize or extend these rules.",

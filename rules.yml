@@ -1,0 +1,66 @@
+rules:
+  deny:
+    - pattern: 'git\s+push\s.*(--force|-[a-zA-Z]*f\b)'
+      reason: overwrites shared remote history
+      ref: https://git-scm.com/docs/git-push#Documentation/git-push.txt--f
+
+    - pattern: 'git\s+reset\s.*--hard'
+      reason: discards uncommitted changes with no recovery
+      ref: https://git-scm.com/docs/git-reset#Documentation/git-reset.txt---hard
+
+    - pattern: 'git\s+checkout\s+\.\s*$'
+      reason: discards all working tree changes with no recovery
+      ref: https://git-scm.com/docs/git-checkout
+
+    - pattern: 'git\s+checkout\s+--\s'
+      reason: discards working tree changes to specified files with no recovery
+      ref: https://git-scm.com/docs/git-checkout
+
+    - pattern: 'git\s+restore\s+\.\s*$'
+      reason: discards all unstaged changes with no recovery
+      ref: https://git-scm.com/docs/git-restore
+
+    - pattern: 'git\s+clean\s.*-[a-zA-Z]*f'
+      reason: deletes untracked files with no recovery
+      ref: https://git-scm.com/docs/git-clean#Documentation/git-clean.txt--f
+
+    - pattern: 'git\s+branch\s.*-[a-zA-Z]*D'
+      reason: force-deletes branch regardless of merge status
+      ref: https://git-scm.com/docs/git-branch#Documentation/git-branch.txt--D
+
+    - pattern: 'git\s+stash\s+(drop|clear)'
+      reason: discards stashed changes with no recovery
+      ref: https://git-scm.com/docs/git-stash#Documentation/git-stash.txt-drop
+
+    - pattern: 'git\s+reflog\s+(expire|delete)'
+      reason: destroys the local recovery log
+      ref: https://git-scm.com/docs/git-reflog#Documentation/git-reflog.txt-expire
+
+  ask:
+    - pattern: 'git\s+add(\s|$)'
+      reason: stages files for commit
+      ref: https://git-scm.com/docs/git-add
+
+    - pattern: 'git\s+rm\b(?!.*--cached)'
+      reason: deletes file from disk and stages its removal
+      ref: https://git-scm.com/docs/git-rm
+
+    - pattern: 'git\s+rm\s.*--cached'
+      reason: removes file from index without deleting from disk
+      ref: https://git-scm.com/docs/git-rm
+
+    - pattern: 'git\s+reset(\s|$)'
+      reason: modifies index or moves HEAD
+      ref: https://git-scm.com/docs/git-reset
+
+    - pattern: 'git\s+commit(\s|$)'
+      reason: creates a permanent commit
+      ref: https://git-scm.com/docs/git-commit
+
+    - pattern: 'git\s+stash(\s|$)'
+      reason: modifies the stash stack
+      ref: https://git-scm.com/docs/git-stash
+
+    - pattern: 'git\s+push(\s|$)'
+      reason: publishes commits to the shared remote
+      ref: https://git-scm.com/docs/git-push

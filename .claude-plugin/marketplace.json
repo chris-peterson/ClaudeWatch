@@ -1,0 +1,24 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "git-guardian",
+  "description": "git safety rules as a PreToolUse hook — blocks (or asks for confirmation) for destructive commands",
+  "owner": {
+    "name": "chris-peterson"
+  },
+  "plugins": [
+    {
+      "name": "git-guardian",
+      "description": "PreToolUse hook that enforces git safety rules beyond Claude Code's built-in permission system",
+      "version": "1.0.0",
+      "author": {
+        "name": "chris-peterson"
+      },
+      "source": {
+        "source": "url",
+        "url": "https://github.com/chris-peterson/git-guardian.git"
+      },
+      "category": "security",
+      "homepage": "https://github.com/chris-peterson/git-guardian"
+    }
+  ]
+}

@@ -7,5 +7,5 @@
   },
   "repository": "https://github.com/chris-peterson/git-guardian",
   "license": "MIT",
-  "keywords": ["git", "safety", "hooks", "permissions"]
+  "keywords": ["git", "guardian", "safety", "permissions", "guardrail", "hook"]
 }

@@ -14,7 +14,7 @@ claude --plugin-dir .
 
 ## Architecture
 
-This is a Claude Code plugin that enforces git safety as a `PreToolUse` hook.
+This is a Claude Code plugin that enforces git safety via a `PreToolUse` hook.
 
 **Key files:**
 

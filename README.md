@@ -13,20 +13,47 @@ A [security report](https://github.com/anthropics/claude-code/issues/13371) demo
 
 ## Example
 
-`❯ push it`
-```text
-⏺ Bash(git push)
-  ⎿  PreToolUse:Bash hook returned blocking error
-  ⎿  git-guardian: git push: BLOCKED
-  ⎿  Error: git-guardian: git push: BLOCKED
+The default configuration asks to confirm `git push`, but it blocks `git push -f|--force`
 
-⏺ The git-guardian hook is blocking the push. Want me to check why, or do you want to run the push yourself?
+`❯ git push --force`
+
+```text
+⏺ Bash(git push --force)
+  ⎿  PreToolUse:Bash hook returned blocking error
+  ⎿  git-guard: overwrites shared remote history — https://git-scm.com/docs/git-push#Documentation/git-push.txt--f
+  ⎿  Error: git-guard: overwrites shared remote history — https://git-scm.com/docs/git-push#Documentation/git-push.txt--f
+
+⏺ The git-guard hook is blocking the force-push because it's configured to protect shared remote history on main.
 ```
 
-To keep context switching costs low, you can leverage "!" to issue terminal commands
-that override permission rules when desired:
+`❯ git push`
 
-`❯ !git push`
+presents a confirmation dialog --
+```text
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   git push
+   Push to origin/main
+
+ This command requires approval
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and don’t ask again for: git push:*
+   3. No
+```
+
+⬇️
+
+```text
+⏺ Bash(git push)
+  ⎿  PreToolUse:Bash hook error
+  ⎿  To gitlab.getty.cloud:cpeterson/ai-sdlc.git
+        c8f457c..971f77d  main -> main
+
+⏺ Pushed.
+```
 
 ## Requirements
 

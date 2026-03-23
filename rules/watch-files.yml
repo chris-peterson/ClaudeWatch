@@ -1,0 +1,55 @@
+name: watch-files
+filter: '\b(rm|chmod|chown|mv|shred)\b'
+
+rules:
+  block:
+    - name: rm -rf /
+      pattern: 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+/\s*$|rm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*\s+/\s*$'
+      reason: destroys the entire filesystem
+      ref: https://man7.org/linux/man-pages/man1/rm.1.html
+
+    - name: rm -rf /*
+      pattern: 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f\s+/\*|rm\s+-[a-zA-Z]*f[a-zA-Z]*r\s+/\*'
+      reason: destroys the entire filesystem
+      ref: https://man7.org/linux/man-pages/man1/rm.1.html
+
+    - name: chmod 777
+      pattern: 'chmod\s+(-R\s+)?777\b'
+      reason: makes files world-readable/writable/executable
+      ref: https://man7.org/linux/man-pages/man1/chmod.1.html
+
+    - name: mv to /dev/null
+      pattern: 'mv\s+.*\s+/dev/null'
+      reason: destroys files by moving them to /dev/null
+      ref: https://man7.org/linux/man-pages/man1/mv.1.html
+
+    - name: shred
+      pattern: 'shred\s+'
+      reason: irrecoverably destroys file contents
+      ref: https://man7.org/linux/man-pages/man1/shred.1.html
+
+  ask:
+    - name: rm -rf
+      pattern: 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f|rm\s+-[a-zA-Z]*f[a-zA-Z]*r'
+      reason: recursively deletes files and directories
+      ref: https://man7.org/linux/man-pages/man1/rm.1.html
+
+    - name: rm -r
+      pattern: 'rm\s+-[a-zA-Z]*r'
+      reason: recursively deletes directories
+      ref: https://man7.org/linux/man-pages/man1/rm.1.html
+
+    - name: mv /
+      pattern: 'mv\s+/'
+      reason: moves files from root-level paths
+      ref: https://man7.org/linux/man-pages/man1/mv.1.html
+
+    - name: chmod
+      pattern: 'chmod\s+'
+      reason: changes file permissions
+      ref: https://man7.org/linux/man-pages/man1/chmod.1.html
+
+    - name: chown
+      pattern: 'chown\s+'
+      reason: changes file ownership
+      ref: https://man7.org/linux/man-pages/man1/chown.1.html

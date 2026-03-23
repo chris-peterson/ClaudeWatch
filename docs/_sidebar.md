@@ -1,3 +1,3 @@
 - [Home](/)
+- [Schema](/schema)
 - [Default Rules](/rules)
-  - [rules.yml](/rules-yml)

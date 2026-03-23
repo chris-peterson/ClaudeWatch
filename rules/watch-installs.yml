@@ -1,0 +1,85 @@
+name: watch-installs
+filter: '\b(npm|yarn|pnpm|pip|pip3|cargo|go|brew|curl|wget|npx|gem|composer)\b'
+
+rules:
+  block:
+    - name: curl | sh
+      pattern: 'curl\s.*\|\s*(sh|bash|zsh)'
+      reason: executes unreviewed remote code
+      ref: https://blog.sandstorm.io/news/2015-09-24-is-curl-bash-insecure-pgp-verified-install.html
+
+    - name: wget | sh
+      pattern: 'wget\s.*\|\s*(sh|bash|zsh)'
+      reason: executes unreviewed remote code
+      ref: https://blog.sandstorm.io/news/2015-09-24-is-curl-bash-insecure-pgp-verified-install.html
+
+    - name: npm install -g
+      pattern: 'npm\s+install\s.*-[a-zA-Z]*g|npm\s+install\s.*--global'
+      reason: modifies global system packages
+      ref: https://docs.npmjs.com/cli/install
+
+    - name: pip install (no venv)
+      pattern: 'sudo\s+pip3?\s+install'
+      reason: installs packages system-wide as root
+      ref: https://pip.pypa.io/en/stable/cli/pip_install/
+
+    - name: brew install
+      pattern: 'brew\s+install'
+      reason: modifies system-level packages
+      ref: https://docs.brew.sh/Manpage
+
+  ask:
+    - name: npm install
+      pattern: 'npm\s+install(\s|$)'
+      reason: adds project dependencies
+      ref: https://docs.npmjs.com/cli/install
+
+    - name: yarn add
+      pattern: 'yarn\s+add(\s|$)'
+      reason: adds project dependencies
+      ref: https://yarnpkg.com/cli/add
+
+    - name: pnpm add
+      pattern: 'pnpm\s+add(\s|$)'
+      reason: adds project dependencies
+      ref: https://pnpm.io/cli/add
+
+    - name: pip install
+      pattern: 'pip3?\s+install(\s|$)'
+      reason: adds Python dependencies
+      ref: https://pip.pypa.io/en/stable/cli/pip_install/
+
+    - name: cargo add
+      pattern: 'cargo\s+add(\s|$)'
+      reason: adds Rust dependencies
+      ref: https://doc.rust-lang.org/cargo/commands/cargo-add.html
+
+    - name: cargo install
+      pattern: 'cargo\s+install(\s|$)'
+      reason: installs Rust binaries
+      ref: https://doc.rust-lang.org/cargo/commands/cargo-install.html
+
+    - name: go install
+      pattern: 'go\s+install(\s|$)'
+      reason: installs Go binaries
+      ref: https://pkg.go.dev/cmd/go#hdr-Compile_and_install_packages_and_dependencies
+
+    - name: go get
+      pattern: 'go\s+get(\s|$)'
+      reason: adds Go dependencies
+      ref: https://pkg.go.dev/cmd/go#hdr-Add_dependencies_to_current_module_and_install_them
+
+    - name: gem install
+      pattern: 'gem\s+install(\s|$)'
+      reason: adds Ruby dependencies
+      ref: https://guides.rubygems.org/command-reference/#gem-install
+
+    - name: composer require
+      pattern: 'composer\s+require(\s|$)'
+      reason: adds PHP dependencies
+      ref: https://getcomposer.org/doc/03-cli.md#require
+
+    - name: npx
+      pattern: 'npx\s+'
+      reason: executes package code (may download and run)
+      ref: https://docs.npmjs.com/cli/commands/npx

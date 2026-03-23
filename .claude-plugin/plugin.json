@@ -1,11 +1,12 @@
 {
-  "name": "git-guardian",
-  "version": "1.0.0",
-  "description": "PreToolUse hook that enforces git safety rules beyond Claude Code's built-in permission system",
+  "name": "ClaudeWatch",
+  "version": "0.0.1",
+  "description": "PreToolUse hook that enforce command safety rules via 'claude-watches'",
   "author": {
     "name": "chris-peterson"
   },
-  "repository": "https://github.com/chris-peterson/git-guardian",
+  "repository": "https://github.com/chris-peterson/ClaudeWatch",
+  "icon": "docs/logo.svg",
   "license": "MIT",
-  "keywords": ["git", "guardian", "safety", "permissions", "guardrail", "hook"]
+  "keywords": ["claude", "watch", "safety", "permissions", "guardrail", "hook", "watchdog", "installs", "git-guardian"]
 }

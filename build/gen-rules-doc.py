@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate docs/_site from rules.yml and static docs (single source of truth)."""
+"""Generate docs/_site from rule sets and static docs (single source of truth)."""
 
 import os
 import shutil
@@ -12,19 +12,22 @@ ROOT_DIR = os.path.dirname(SCRIPT_DIR)
 
 
 def load_parser():
-    spec = spec_from_file_location("git_guard", os.path.join(ROOT_DIR, "scripts", "git-guard.py"))
+    spec = spec_from_file_location("watchdog", os.path.join(ROOT_DIR, "scripts", "watchdog.py"))
     mod = module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.parse_rules_yml
 
 
-def unified_table(rules):
+def unified_table(config):
+    rules = config["rules"]
     lines = ["| | Command | Reason | Ref |", "| --- | --- | --- | --- |"]
     for section, emoji in [("block", ":no_entry_sign:"), ("ask", ":raised_hand:")]:
         for r in rules[section]:
-            name = f"`{r.get('name', '')}`" if r.get("name") else ""
+            raw_name = r.get("name", "").replace("|", "\\|")
+            name = f"`{raw_name}`" if raw_name else ""
+            reason = r["reason"].replace("|", "\\|")
             ref = f"[docs]({r['ref']})" if r["ref"] else ""
-            lines.append(f"| {emoji} | {name} | {r['reason']} | {ref} |")
+            lines.append(f"| {emoji} | {name} | {reason} | {ref} |")
     lines.append("")
     lines.append(":no_entry_sign: = blocked outright &nbsp;&nbsp; :raised_hand: = requires user confirmation")
     return "\n".join(lines)
@@ -37,8 +40,8 @@ def write_file(site_dir, name, content):
 
 def main():
     parse_rules_yml = load_parser()
-    rules = parse_rules_yml(os.path.join(ROOT_DIR, "rules.yml"))
 
+    rules_dir = os.path.join(ROOT_DIR, "rules")
     docs_dir = os.path.join(ROOT_DIR, "docs")
     site_dir = os.path.join(docs_dir, "_site")
 
@@ -48,22 +51,35 @@ def main():
 
     for name in os.listdir(docs_dir):
         src = os.path.join(docs_dir, name)
-        if name.startswith("_") or not os.path.isfile(src):
+        if name.startswith("_"):
             continue
-        shutil.copy2(src, os.path.join(site_dir, name))
+        dst = os.path.join(site_dir, name)
+        if os.path.isdir(src):
+            shutil.copytree(src, dst)
+        elif os.path.isfile(src):
+            shutil.copy2(src, dst)
 
     shutil.copy2(os.path.join(docs_dir, "_sidebar.md"), os.path.join(site_dir, "_sidebar.md"))
-    shutil.copy2(os.path.join(ROOT_DIR, "rules.yml"), os.path.join(site_dir, "rules.yml"))
+
+    # process each rule set
+    rule_files = sorted(f for f in os.listdir(rules_dir) if f.endswith(".yml"))
+    sections = []
+    for rf in rule_files:
+        src = os.path.join(rules_dir, rf)
+        shutil.copy2(src, os.path.join(site_dir, rf))
+        config = parse_rules_yml(src)
+        label = config.get("name") or os.path.splitext(rf)[0]
+        sections.append(f"## {label}\n\n{unified_table(config)}")
 
     write_file(site_dir, "rules.md", "\n".join([
         "# Default Rules",
         "",
-        "Generated from [`rules.yml`](/rules-yml).",
+        "Generated from rule files in `rules/`.",
         "",
         "> [!TIP]",
-        "> Use the `/git-guardian:rules` skill to interactively customize or extend these rules.",
+        "> Use the `/ClaudeWatch:rules` skill to interactively customize or extend these rules.",
         "",
-        unified_table(rules),
+        "\n\n".join(sections),
         "",
     ]))
 

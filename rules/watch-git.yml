@@ -1,3 +1,6 @@
+name: watch-git
+filter: '\bgit\b'
+
 rules:
   block:
     - name: git push --force

@@ -2,9 +2,9 @@ default: test
 
 # run the unattended test suite
 test:
-    bash tests/test-git-guard.sh
+    bash tests/test-watchdog.sh
 
-# regenerate docs from rules.yml
+# regenerate docs from rules
 docs:
     python3 build/gen-rules-doc.py
 
@@ -14,4 +14,4 @@ docs-preview: docs
 
 # launch an interactive session with the plugin loaded and open the rules skill
 rules:
-    claude --plugin-dir . "/git-guardian:rules"
+    claude --plugin-dir . "/ClaudeWatch:rules"

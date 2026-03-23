@@ -1,31 +1,73 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>git-guardian</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClaudeWatch</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+  <meta name="description" content="Claude Code plugin for command safety rules">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple-dark.css">
+  <!-- Docsify themeable (base styles) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.min.css">
+  <!-- Prism Dracula theme for syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prism-themes@1/themes/prism-dracula.min.css">
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Dracula/Alucard theme -->
+  <link rel="stylesheet" href="https://chris-peterson.github.io/css/theme.css">
+  <!-- Titlebar component -->
+  <link rel="stylesheet" href="https://chris-peterson.github.io/css/titlebar.css">
 </head>
 <body>
-  <div id="app"></div>
+  <!-- Overlay for mobile sidebar -->
+  <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+  <!-- Unified titlebar -->
+  <div class="titlebar" id="titlebar">
+    <button class="mobile-menu-toggle" id="mobileMenuToggle" onclick="toggleSidebar()" title="Toggle menu">
+      <i class="fas fa-bars"></i>
+    </button>
+    <a href="#/" class="titlebar-brand">
+      <img src="logo.svg" alt="">
+      <span>ClaudeWatch</span>
+    </a>
+    <div class="titlebar-spacer"></div>
+    <div class="titlebar-actions">
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle theme"><i class="fas fa-moon"></i></button>
+      <a href="https://github.com/chris-peterson/ClaudeWatch" target="_blank" class="titlebar-github" title="View on GitHub">
+        <i class="fab fa-github"></i>
+      </a>
+    </div>
+  </div>
+  <div id="app">Loading...</div>
   <script>
     window.$docsify = {
-      name: '<img src="logo.svg" alt="" width="24" height="24"> git-guardian',
-      repo: 'https://github.com/chris-peterson/git-guardian',
+      name: 'ClaudeWatch',
       loadSidebar: true,
       subMaxLevel: 2,
       auto2top: true,
+      coverpage: false,
+      notFoundPage: true,
+      relativePath: false,
+      alias: {
+        '/.*/_sidebar.md': '/_sidebar.md'
+      },
+      hideSidebar: false,
       'flexible-alerts': {
         style: 'callout',
       },
     }
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/docsify@4/lib/docsify.min.js"></script>
+  <!-- Docsify core -->
+  <script src="https://cdn.jsdelivr.net/npm/docsify@4"></script>
+  <!-- Flexible alerts -->
   <script src="https://cdn.jsdelivr.net/npm/docsify-plugin-flexible-alerts@1/dist/docsify-plugin-flexible-alerts.min.js"></script>
+  <!-- Copy code plugin -->
+  <script src="https://cdn.jsdelivr.net/npm/docsify-copy-code@2"></script>
+  <!-- Syntax highlighting -->
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/prismjs@1/components/prism-python.min.js"></script>
-  <script src="https://unpkg.com/docsify-copy-code@2/dist/docsify-copy-code.min.js"></script>
+  <!-- Shared docsify functionality (theme, sidebar, copy buttons) -->
+  <script src="https://chris-peterson.github.io/js/docsify-shared.js"></script>
 </body>
 </html>

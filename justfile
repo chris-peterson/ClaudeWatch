@@ -12,6 +12,10 @@ docs:
 docs-preview: docs
     npx docsify-cli serve docs/_site --open
 
+# launch an interactive session with the local plugin loaded
+try:
+    claude --plugin-dir .
+
 # launch an interactive session with the plugin loaded and open the rules skill
 rules:
     claude --plugin-dir . "/ClaudeWatch:rules"

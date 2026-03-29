@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#282a36"/>
   <defs>
     <linearGradient id="ringTop" x1="0" y1="1" x2="0" y2="0">
       <stop offset="0%" stop-color="#9ACA3C"/>
@@ -25,46 +26,45 @@
       "/>
     </clipPath>
   </defs>
-
-  <!-- Clipped Claude starburst -->
-  <g clip-path="url(#innerClip)">
-    <g transform="translate(256,256)">
-      <g fill="#E87E54">
-        <rect x="-10" y="-155" width="20" height="88" rx="10" transform="rotate(0)"/>
-        <rect x="-8" y="-138" width="16" height="72" rx="8" transform="rotate(30)"/>
-        <rect x="-10" y="-158" width="20" height="92" rx="10" transform="rotate(60)"/>
-        <rect x="-8" y="-133" width="16" height="67" rx="8" transform="rotate(90)"/>
-        <rect x="-10" y="-155" width="20" height="88" rx="10" transform="rotate(120)"/>
-        <rect x="-8" y="-138" width="16" height="72" rx="8" transform="rotate(150)"/>
-        <rect x="-10" y="-155" width="20" height="88" rx="10" transform="rotate(180)"/>
-        <rect x="-8" y="-138" width="16" height="72" rx="8" transform="rotate(210)"/>
-        <rect x="-10" y="-158" width="20" height="92" rx="10" transform="rotate(240)"/>
-        <rect x="-8" y="-133" width="16" height="67" rx="8" transform="rotate(270)"/>
-        <rect x="-10" y="-155" width="20" height="88" rx="10" transform="rotate(300)"/>
-        <rect x="-8" y="-138" width="16" height="72" rx="8" transform="rotate(330)"/>
+  <g transform="translate(-4, -6) scale(0.14)">
+    <!-- Clipped Claude starburst -->
+    <g clip-path="url(#innerClip)">
+      <g transform="translate(256,256)">
+        <g fill="#E87E54">
+          <rect x="-10" y="-155" width="20" height="88" rx="10" transform="rotate(0)"/>
+          <rect x="-8" y="-138" width="16" height="72" rx="8" transform="rotate(30)"/>
+          <rect x="-10" y="-158" width="20" height="92" rx="10" transform="rotate(60)"/>
+          <rect x="-8" y="-133" width="16" height="67" rx="8" transform="rotate(90)"/>
+          <rect x="-10" y="-155" width="20" height="88" rx="10" transform="rotate(120)"/>
+          <rect x="-8" y="-138" width="16" height="72" rx="8" transform="rotate(150)"/>
+          <rect x="-10" y="-155" width="20" height="88" rx="10" transform="rotate(180)"/>
+          <rect x="-8" y="-138" width="16" height="72" rx="8" transform="rotate(210)"/>
+          <rect x="-10" y="-158" width="20" height="92" rx="10" transform="rotate(240)"/>
+          <rect x="-8" y="-133" width="16" height="67" rx="8" transform="rotate(270)"/>
+          <rect x="-10" y="-155" width="20" height="88" rx="10" transform="rotate(300)"/>
+          <rect x="-8" y="-138" width="16" height="72" rx="8" transform="rotate(330)"/>
+        </g>
+        <circle cx="0" cy="0" r="58" fill="#E87E54"/>
       </g>
-      <circle cx="0" cy="0" r="58" fill="#E87E54"/>
     </g>
-  </g>
-
-  <!-- 3D Octagon ring -->
-  <g transform="translate(256,256)">
-    <path d="
-      M 0,-158 L 111.72,-111.72 L 158,0 L 111.72,111.72 L 0,158 L -111.72,111.72 L -158,0 L -111.72,-111.72 Z
-      M 0,-140 L -98.99,-98.99 L -140,0 L -98.99,98.99 L 0,140 L 98.99,98.99 L 140,0 L 98.99,-98.99 Z
-    " fill="url(#ringTop)" fill-rule="evenodd"/>
-
-    <!-- Outer depth edges -->
-    <polygon points="-111.72,111.72 0,158 0,174 -111.72,127.72" fill="url(#ringFrontL)"/>
-    <polygon points="0,158 111.72,111.72 111.72,127.72 0,174" fill="url(#ringFrontR)"/>
-    <polygon points="111.72,111.72 158,0 158,16 111.72,127.72" fill="url(#ringFrontR)"/>
-    <polygon points="-111.72,111.72 -158,0 -158,16 -111.72,127.72" fill="url(#ringFrontL)"/>
-    <polygon points="158,0 111.72,-111.72 111.72,-95.72 158,16" fill="url(#ringFrontR)" opacity="0.4"/>
-    <polygon points="-158,0 -111.72,-111.72 -111.72,-95.72 -158,16" fill="url(#ringFrontL)" opacity="0.4"/>
-    <!-- Inner depth edges -->
-    <polygon points="-98.99,98.99 0,140 0,156 -98.99,114.99" fill="url(#ringFrontR)" opacity="0.5"/>
-    <polygon points="0,140 98.99,98.99 98.99,114.99 0,156" fill="url(#ringFrontL)" opacity="0.5"/>
-    <polygon points="98.99,98.99 140,0 140,16 98.99,114.99" fill="url(#ringFrontL)" opacity="0.4"/>
-    <polygon points="-98.99,98.99 -140,0 -140,16 -98.99,114.99" fill="url(#ringFrontR)" opacity="0.4"/>
+    <!-- 3D Octagon ring -->
+    <g transform="translate(256,256)">
+      <path d="
+        M 0,-158 L 111.72,-111.72 L 158,0 L 111.72,111.72 L 0,158 L -111.72,111.72 L -158,0 L -111.72,-111.72 Z
+        M 0,-140 L -98.99,-98.99 L -140,0 L -98.99,98.99 L 0,140 L 98.99,98.99 L 140,0 L 98.99,-98.99 Z
+      " fill="url(#ringTop)" fill-rule="evenodd"/>
+      <!-- Outer depth edges -->
+      <polygon points="-111.72,111.72 0,158 0,174 -111.72,127.72" fill="url(#ringFrontL)"/>
+      <polygon points="0,158 111.72,111.72 111.72,127.72 0,174" fill="url(#ringFrontR)"/>
+      <polygon points="111.72,111.72 158,0 158,16 111.72,127.72" fill="url(#ringFrontR)"/>
+      <polygon points="-111.72,111.72 -158,0 -158,16 -111.72,127.72" fill="url(#ringFrontL)"/>
+      <polygon points="158,0 111.72,-111.72 111.72,-95.72 158,16" fill="url(#ringFrontR)" opacity="0.4"/>
+      <polygon points="-158,0 -111.72,-111.72 -111.72,-95.72 -158,16" fill="url(#ringFrontL)" opacity="0.4"/>
+      <!-- Inner depth edges -->
+      <polygon points="-98.99,98.99 0,140 0,156 -98.99,114.99" fill="url(#ringFrontR)" opacity="0.5"/>
+      <polygon points="0,140 98.99,98.99 98.99,114.99 0,156" fill="url(#ringFrontL)" opacity="0.5"/>
+      <polygon points="98.99,98.99 140,0 140,16 98.99,114.99" fill="url(#ringFrontL)" opacity="0.4"/>
+      <polygon points="-98.99,98.99 -140,0 -140,16 -98.99,114.99" fill="url(#ringFrontR)" opacity="0.4"/>
+    </g>
   </g>
 </svg>

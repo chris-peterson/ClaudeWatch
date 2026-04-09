@@ -54,7 +54,7 @@ presents a confirmation dialog --
 ## Installation
 
 ```bash
-claude plugin marketplace add https://github.com/chris-peterson/ClaudeWatch
+claude plugin marketplace add https://github.com/chris-peterson/claude-marketplace
 claude plugin install ClaudeWatch
 ```
 

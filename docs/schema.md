@@ -18,6 +18,7 @@ rules:
   ask:                    # rules that require user confirmation
     - name: <string>
       pattern: '<regex>'
+      except: '<regex>'   # optional — skip this rule if except matches
       reason: <string>
       ref: <url>
 ```
@@ -59,12 +60,12 @@ Contains two lists: `block` and `ask`. Both are optional (you can have a rule se
 **Evaluation order:**
 
 1. All `block` rules are checked first, in order. First match wins — the command is rejected.
-2. If no block rule matches, all `ask` rules are checked in order. First match wins — the user is prompted.
+2. If no block rule matches, all `ask` rules are checked in order. For each matching ask rule, if `except` is set and matches the command, that rule is skipped. First non-excepted match wins — the user is prompted.
 3. If nothing matches, the command is allowed silently.
 
 ## Rule fields
 
-Each rule in a `block` or `ask` list has four fields:
+Each rule in a `block` or `ask` list has these fields:
 
 ### `name` (required)
 
@@ -107,6 +108,20 @@ URL to relevant documentation. Shown at the end of the block/ask message. Can be
 ```yaml
 ref: https://git-scm.com/docs/git-push#Documentation/git-push.txt--f
 ```
+
+### `except` (optional, ask rules only)
+
+A Python regex that exempts matching commands from this rule. If `except` matches the command, the rule is skipped even though `pattern` matched. This reduces prompt noise for known-safe patterns without weakening block rules.
+
+```yaml
+- name: rm -rf
+  pattern: 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f'
+  except: 'rm\s+(-[a-zA-Z]+\s+)*(~/\.cache/|/tmp/|/var/tmp/)'
+  reason: recursively deletes files and directories
+  ref: https://man7.org/linux/man-pages/man1/rm.1.html
+```
+
+Using `except` on a `block` rule emits a warning and is ignored — block rules always fire.
 
 ## Hook wiring
 
@@ -175,6 +190,7 @@ rules:
   ask:
     - name: docker run
       pattern: 'docker\s+run(\s|$)'
+      except: 'docker\s+run\s+--rm\b'
       reason: starts a new container
       ref: https://docs.docker.com/reference/cli/docker/container/run/
 ```

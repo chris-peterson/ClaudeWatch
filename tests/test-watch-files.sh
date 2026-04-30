@@ -39,6 +39,11 @@ echo "--- ask: chown ---"
 t "chown user"       ask   '{"tool_name":"Bash","tool_input":{"command":"chown www-data:www-data index.html"}}'
 t "sudo chown -R root" ask '{"tool_name":"Bash","tool_input":{"command":"sudo chown -R root /opt"}}'
 
+echo "--- except: cache/temp file deletion ---"
+t "rm -rf cache dir"    allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf ~/.cache/pip"}}'
+t "rm -rf /tmp"         allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/build-output"}}'
+t "rm -r /var/tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"rm -r /var/tmp/stale-dir"}}'
+
 echo "--- allow: safe operations ---"
 t "rm single file"   allow '{"tool_name":"Bash","tool_input":{"command":"rm temp.txt"}}'
 t "mv local"         allow '{"tool_name":"Bash","tool_input":{"command":"mv old.txt new.txt"}}'

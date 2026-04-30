@@ -49,6 +49,43 @@ echo "--- block: missing rules file ---"
 run_test "$TMPDIR_TESTS/nonexistent.yml" "missing file blocks" block \
   '{"tool_name":"Bash","tool_input":{"command":"anything"}}'
 
+echo "--- except bypasses ask but not block ---"
+cat > "$TMPDIR_TESTS/except-test.yml" <<'YAMLEOF'
+name: except-test
+rules:
+  block:
+    - name: dangerous
+      pattern: 'rm.*--no-preserve-root'
+      reason: destroys filesystem
+      ref: n/a
+  ask:
+    - name: rm -rf
+      pattern: 'rm\s+-rf'
+      except: '/tmp/'
+      reason: recursive delete
+      ref: n/a
+YAMLEOF
+run_test "$TMPDIR_TESTS/except-test.yml" "except bypasses ask" allow \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/build"}}'
+run_test "$TMPDIR_TESTS/except-test.yml" "except does not bypass block" block \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -rf --no-preserve-root /tmp/"}}'
+run_test "$TMPDIR_TESTS/except-test.yml" "ask fires without except match" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -rf ./src"}}'
+
+echo "--- except on block emits warning ---"
+cat > "$TMPDIR_TESTS/except-block-warn.yml" <<'YAMLEOF'
+name: except-block-warn
+rules:
+  block:
+    - name: dangerous
+      pattern: 'rm -rf'
+      except: '/tmp/'
+      reason: destroys stuff
+      ref: n/a
+YAMLEOF
+run_test "$TMPDIR_TESTS/except-block-warn.yml" "except on block still blocks" block \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/build"}}'
+
 rm -rf "$TMPDIR_TESTS"
 
 echo ""
@@ -68,6 +105,7 @@ run_test "$RULES_DIR" "file block (dir)"    block '{"tool_name":"Bash","tool_inp
 run_test "$RULES_DIR" "file ask (dir)"      ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf ./build"}}'
 run_test "$RULES_DIR" "secret block (dir)"  block '{"tool_name":"Bash","tool_input":{"command":"cat ~/.ssh/id_rsa"}}'
 run_test "$RULES_DIR" "secret ask (dir)"    ask   '{"tool_name":"Bash","tool_input":{"command":"cat ~/.bashrc"}}'
+run_test "$RULES_DIR" "file except (dir)"    allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf ~/.cache/pip"}}'
 run_test "$RULES_DIR" "safe cmd (dir)"      allow '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'
 
 print_results

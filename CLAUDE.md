@@ -29,7 +29,7 @@ This is a Claude Code plugin that enforces Bash command safety via a `PreToolUse
 
 **Hook protocol:** Claude Code passes tool invocations as JSON on stdin. The hook outputs `{"decision":"block",...}`, `{"decision":"ask",...}`, or nothing (allow). Exit code must always be 0.
 
-**YAML format:** Each rules file has top-level `name`, optional `filter` (regex pre-check to skip irrelevant commands), and a `rules` map with `block`/`ask` lists. Each rule has `name`, `pattern`, `reason`, and `ref` fields. `watchdog.py` ships a minimal pure-Python parser — no external dependencies. See the [schema reference](https://chris-peterson.github.io/ClaudeWatch/#/schema) for details.
+**YAML format:** Each rules file has top-level `name`, optional `filter` (regex pre-check to skip irrelevant commands), and a `rules` map with `block`/`ask` lists. Each rule has `name`, `pattern`, `reason`, and `ref` fields. Ask rules also support an optional `except` field — a regex that skips the rule for known-safe patterns (ignored on block rules). `watchdog.py` ships a minimal pure-Python parser — no external dependencies. See the [schema reference](https://chris-peterson.github.io/ClaudeWatch/#/schema) for details.
 
 **Rule patterns** are Python regexes matched with `re.search()` (matches anywhere in the command string). This is the core safety advantage over Claude Code's built-in deny rules, which use `startsWith()` and miss compound commands like `git add . && git commit`.
 

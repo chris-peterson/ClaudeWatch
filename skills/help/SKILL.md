@@ -21,6 +21,9 @@ rules miss.
 | `watch-installs` | `curl \| sh`, global installs, sudo pip/apt, npm/yarn/pip dependency changes |
 | `watch-files` | `rm -rf /`, `chmod 777`, shred, recursive chmod/chown |
 | `watch-secrets` | SSH keys, cloud credentials, echoed env vars, dotfile reads |
+| `watch-pwsh` | PowerShell destructive primitives (`Format-Volume`, `Restart-Computer`, `IWR \| iex`, `Remove-Item -Recurse -Force`) — inline and in `.ps1`/`.psm1`/`.psd1` files |
+| `watch-python` | Python destructive primitives (`shutil.rmtree`, `pickle.loads`, `os.system`, `subprocess shell=True`, `eval`, `exec`) — inline and in `.py` files |
+| `watch-dotnet` | .NET decompilers, `.nupkg` downloads/extraction, `nuget install` — nudges toward SourceLink |
 
 Rules live in `rules/*.yml`. Disable a set by renaming to `*.yml.disabled`.
 Add a set by dropping a new `watch-*.yml` file in the same directory — the

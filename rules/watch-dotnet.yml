@@ -1,0 +1,24 @@
+name: watch-dotnet
+filter: '(?i)(\.nupkg\b|\b(ilspycmd|ildasm|dotpeek|dnspy(ex)?|justdecompile|nuget)\b)'
+
+rules:
+  ask:
+    - name: .NET decompiler
+      pattern: '(?i)\b(ilspycmd|ildasm|dotpeek|dnspy(ex)?|justdecompile)\b'
+      reason: decompiled output is approximate — see ref for SourceLink, which navigates from PDB symbols to the real upstream source
+      ref: https://learn.microsoft.com/en-us/dotnet/standard/library-guidance/sourcelink
+
+    - name: extract .nupkg
+      pattern: '\b(unzip|tar)\b[^&|;]*\.nupkg\b'
+      reason: cracking a NuGet package open is usually a precursor to decompilation
+      ref: https://learn.microsoft.com/en-us/dotnet/standard/library-guidance/sourcelink
+
+    - name: download .nupkg
+      pattern: '\b(curl|wget)\b[^&|;]*\.nupkg\b'
+      reason: downloading a NuGet package is usually a precursor to decompilation
+      ref: https://learn.microsoft.com/en-us/dotnet/standard/library-guidance/sourcelink
+
+    - name: nuget install
+      pattern: '\bnuget\s+install\b'
+      reason: ad-hoc nuget install is usually a precursor to inspecting a package
+      ref: https://learn.microsoft.com/en-us/dotnet/standard/library-guidance/sourcelink

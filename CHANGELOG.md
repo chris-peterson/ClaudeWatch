@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+
+### Features
+- New `watch-dotnet` rule set nudges agents toward SourceLink when they reach for the "download .nupkg → decompile DLL" path. Asks (rather than blocks) on .NET decompilers (`ilspycmd`, `ildasm`, `dotpeek`, `dnspy`/`dnspyex`, `justdecompile`), on `.nupkg` extraction (`unzip`/`tar`) or download (`curl`/`wget`), and on ad-hoc `nuget install`. Decompiled output is approximate; SourceLink follows the package's PDB symbols to the real upstream commit — the rule's `ref` URL takes the user straight to the docs. Decompiler-name matching is case-insensitive so Windows-style executables aren't bypassed by capitalization.
+
+### Other
+- `/ClaudeWatch:help` overview now lists every shipped rule set (`watch-pwsh`, `watch-python`, `watch-dotnet` were missing from the table).
+- `SPEC.md` adds `SH-10` covering the new rule set.
+
 ## 0.5.0
 
 ### Features

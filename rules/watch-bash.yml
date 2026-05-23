@@ -1,0 +1,66 @@
+name: watch-bash
+extensions: ['.sh', '.bash', '.zsh']
+
+rules:
+  block:
+    - name: rm -rf / (file)
+      pattern: 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+/\s|rm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+/\s*$|rm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*\s+/\s|rm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*\s+/\s*$'
+      target: file-content
+      reason: destroys the entire filesystem
+      ref: https://man7.org/linux/man-pages/man1/rm.1.html
+
+    - name: rm -rf /* (file)
+      pattern: 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f\s+/\*|rm\s+-[a-zA-Z]*f[a-zA-Z]*r\s+/\*'
+      target: file-content
+      reason: destroys the entire filesystem
+      ref: https://man7.org/linux/man-pages/man1/rm.1.html
+
+    - name: curl | sh (file)
+      pattern: '\b(curl|wget)\b[^|]*\|\s*(sh|bash|zsh)\b'
+      target: file-content
+      reason: executes arbitrary code fetched from the network
+      ref: https://en.wikipedia.org/wiki/Curl-pipe-sh
+
+    - name: dd to raw device (file)
+      pattern: '\bdd\b[^\n]*\bof\s*=\s*/dev/(sd|nvme|disk|hd|xvd)'
+      target: file-content
+      reason: writes raw bytes directly to a block device
+      ref: https://man7.org/linux/man-pages/man1/dd.1.html
+
+    - name: mkfs on device (file)
+      pattern: '\bmkfs(\.\w+)?\s+/dev/'
+      target: file-content
+      reason: creates a new filesystem on a block device (wipes existing data)
+      ref: https://man7.org/linux/man-pages/man8/mkfs.8.html
+
+    - name: shred (file)
+      pattern: '\bshred\s+'
+      target: file-content
+      reason: irrecoverably destroys file contents
+      ref: https://man7.org/linux/man-pages/man1/shred.1.html
+
+  ask:
+    - name: rm -rf (file)
+      pattern: '\brm\s+-[a-zA-Z]*r[a-zA-Z]*f|\brm\s+-[a-zA-Z]*f[a-zA-Z]*r'
+      except: '\brm\s+(-[a-zA-Z]+\s+)*(~/\.cache/|/tmp/|/var/tmp/|\$TMPDIR)'
+      target: file-content
+      reason: recursively deletes files and directories
+      ref: https://man7.org/linux/man-pages/man1/rm.1.html
+
+    - name: chmod 777 (file)
+      pattern: '\bchmod\s+(-R\s+)?777\b'
+      target: file-content
+      reason: makes files world-readable/writable/executable
+      ref: https://man7.org/linux/man-pages/man1/chmod.1.html
+
+    - name: chown -R (file)
+      pattern: '\bchown\s+-R\b'
+      target: file-content
+      reason: recursive ownership change
+      ref: https://man7.org/linux/man-pages/man1/chown.1.html
+
+    - name: shell eval (file)
+      pattern: '(^|[;&|\s])eval\s+["\x27$`]'
+      target: file-content
+      reason: shell eval executes dynamic strings — code-injection risk on unsanitized input
+      ref: https://www.gnu.org/software/bash/manual/html_node/Bourne-Shell-Builtins.html

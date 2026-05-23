@@ -129,6 +129,23 @@ def parse_rules_yml(path):
                 else:
                     current_item["except"] = _unquote(stripped[7:].strip())
 
+            else:
+                # Unrecognized line — warn so typos surface instead of silently disappearing.
+                label = result["name"] or path
+                where = ""
+                if indent == 0:
+                    where = "top-level"
+                elif indent == 2:
+                    where = "section header"
+                elif indent == 4:
+                    where = "list item"
+                elif indent == 6:
+                    rule_name = current_item.get("name", "?") if current_item else "?"
+                    where = f"rule {rule_name!r}"
+                else:
+                    where = f"indent {indent}"
+                print(f"warning: {label} — unrecognized line in {where}: {stripped!r}", file=sys.stderr)
+
     return result
 
 

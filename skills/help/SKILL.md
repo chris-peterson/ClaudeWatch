@@ -17,13 +17,16 @@ rules miss.
 
 | Name | Guards |
 |---|---|
+| `watch-bash` | Shell-script destructive primitives in `.sh`/`.bash`/`.zsh` file content (`rm -rf /`, `curl\|sh`, `dd of=/dev/sd*`, `mkfs`, `shred`, `chmod 777`, `chown -R`) — bash-target coverage lives in `watch-files` |
+| `watch-dotnet` | .NET decompilers, `.nupkg` downloads/extraction, `nuget install` — nudges toward SourceLink |
+| `watch-files` | `rm -rf /`, `chmod 777`, shred, recursive chmod/chown |
 | `watch-git` | Destructive (force push, reset --hard, branch -D) and mutating (add, commit, push) git ops |
 | `watch-installs` | `curl \| sh`, global installs, sudo pip/apt, npm/yarn/pip dependency changes |
-| `watch-files` | `rm -rf /`, `chmod 777`, shred, recursive chmod/chown |
-| `watch-secrets` | SSH keys, cloud credentials, echoed env vars, dotfile reads |
+| `watch-node` | Node/JS destructive primitives (`fs.rmSync`, `child_process.exec`, `new Function`, `vm.runInThisContext`, `eval`) — inline (`node -e`/`bun`/`deno`/`tsx`) and in `.js`/`.mjs`/`.cjs`/`.ts`/`.mts`/`.cts` files |
 | `watch-pwsh` | PowerShell destructive primitives (`Format-Volume`, `Restart-Computer`, `IWR \| iex`, `Remove-Item -Recurse -Force`) — inline and in `.ps1`/`.psm1`/`.psd1` files |
 | `watch-python` | Python destructive primitives (`shutil.rmtree`, `pickle.loads`, `os.system`, `subprocess shell=True`, `eval`, `exec`) — inline and in `.py` files |
-| `watch-dotnet` | .NET decompilers, `.nupkg` downloads/extraction, `nuget install` — nudges toward SourceLink |
+| `watch-ruby` | Ruby destructive primitives (`FileUtils.rm_rf`, `Marshal.load`, `YAML.load`, `system`/`exec`, backtick exec with interpolation, `eval`, `instance_eval`) — inline (`ruby -e`) and in `.rb` files |
+| `watch-secrets` | SSH keys, cloud credentials, echoed env vars, dotfile reads |
 
 Rules live in `rules/*.yml`. Disable a set by renaming to `*.yml.disabled`.
 Add a set by dropping a new `watch-*.yml` file in the same directory — the

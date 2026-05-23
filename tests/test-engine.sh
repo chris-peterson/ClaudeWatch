@@ -86,6 +86,26 @@ YAMLEOF
 run_test "$TMPDIR_TESTS/except-block-warn.yml" "except on block still blocks" block \
   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/build"}}'
 
+echo "--- unrecognized YAML field emits warning to stderr ---"
+cat > "$TMPDIR_TESTS/typo-field.yml" <<'YAMLEOF'
+name: typo-field
+rules:
+  ask:
+    - name: rule with typo
+      pattern: 'whatever'
+      refrence: 'this typo should warn'
+      reason: typo'd ref field
+      ref: n/a
+YAMLEOF
+TYPO_STDERR=$(echo '{"tool_name":"Bash","tool_input":{"command":"whatever"}}' \
+  | python3 "$HOOK" "$TMPDIR_TESTS/typo-field.yml" 2>&1 >/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$TYPO_STDERR" | grep -q "unrecognized line"; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: unrecognized YAML field warns"
+else
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: unrecognized YAML field warns (stderr: ${TYPO_STDERR:-empty})"
+fi
+
 rm -rf "$TMPDIR_TESTS"
 
 echo ""

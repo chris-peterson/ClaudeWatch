@@ -1,0 +1,94 @@
+name: watch-node
+filter: '\b(node|deno|bun|tsx|ts-node)\b'
+extensions: ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts']
+
+rules:
+  block:
+    - name: fs.rmSync at sensitive root (bash)
+      pattern: '\.(rmSync|rmdirSync|rm)\s*\(\s*[\x27"`](/|~|\$HOME)'
+      target: bash
+      reason: recursive delete rooted at filesystem root, home, or $HOME
+      ref: https://nodejs.org/api/fs.html#fsrmsyncpath-options
+    - name: fs.rmSync at sensitive root (file)
+      pattern: '\.(rmSync|rmdirSync|rm)\s*\(\s*[\x27"`](/|~|\$HOME)'
+      target: file-content
+      reason: recursive delete rooted at filesystem root, home, or $HOME
+      ref: https://nodejs.org/api/fs.html#fsrmsyncpath-options
+
+    - name: child_process exec rm -rf / (bash)
+      pattern: '\b(exec|execSync|spawnSync|spawn)\s*\([^)]*[\x27"`]rm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+/'
+      target: bash
+      reason: child_process executing destructive shell primitive
+      ref: https://nodejs.org/api/child_process.html
+    - name: child_process exec rm -rf / (file)
+      pattern: '\b(exec|execSync|spawnSync|spawn)\s*\([^)]*[\x27"`]rm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+/'
+      target: file-content
+      reason: child_process executing destructive shell primitive
+      ref: https://nodejs.org/api/child_process.html
+
+    - name: Function constructor (bash)
+      pattern: '\bnew\s+Function\s*\('
+      target: bash
+      reason: Function constructor evaluates arbitrary code at runtime
+      ref: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/Function
+    - name: Function constructor (file)
+      pattern: '\bnew\s+Function\s*\('
+      target: file-content
+      reason: Function constructor evaluates arbitrary code at runtime
+      ref: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Function/Function
+
+  ask:
+    - name: fs.rm recursive (bash)
+      pattern: '\.(rmSync|rm)\s*\([^)]*recursive\s*:\s*true'
+      target: bash
+      reason: recursive delete via fs.rm with recursive option
+      ref: https://nodejs.org/api/fs.html#fsrmsyncpath-options
+    - name: fs.rm recursive (file)
+      pattern: '\.(rmSync|rm)\s*\([^)]*recursive\s*:\s*true'
+      target: file-content
+      reason: recursive delete via fs.rm with recursive option
+      ref: https://nodejs.org/api/fs.html#fsrmsyncpath-options
+
+    - name: fs.unlinkSync (bash)
+      pattern: '\.unlink(Sync)?\s*\('
+      target: bash
+      reason: deletes a file via fs.unlink
+      ref: https://nodejs.org/api/fs.html#fsunlinksyncpath
+    - name: fs.unlinkSync (file)
+      pattern: '\.unlink(Sync)?\s*\('
+      target: file-content
+      reason: deletes a file via fs.unlink
+      ref: https://nodejs.org/api/fs.html#fsunlinksyncpath
+
+    - name: child_process exec (bash)
+      pattern: '\b(exec|execSync)\s*\('
+      target: bash
+      reason: child_process.exec invokes a subshell with arbitrary content
+      ref: https://nodejs.org/api/child_process.html#child_processexeccommand-options-callback
+    - name: child_process exec (file)
+      pattern: '\b(exec|execSync)\s*\('
+      target: file-content
+      reason: child_process.exec invokes a subshell with arbitrary content
+      ref: https://nodejs.org/api/child_process.html#child_processexeccommand-options-callback
+
+    - name: vm.runInThisContext (bash)
+      pattern: '\brunIn(ThisContext|NewContext|Context)\s*\('
+      target: bash
+      reason: vm module evaluates arbitrary code in a context
+      ref: https://nodejs.org/api/vm.html
+    - name: vm.runInThisContext (file)
+      pattern: '\brunIn(ThisContext|NewContext|Context)\s*\('
+      target: file-content
+      reason: vm module evaluates arbitrary code in a context
+      ref: https://nodejs.org/api/vm.html
+
+    - name: eval (bash)
+      pattern: '(^|[^.\w])eval\s*\('
+      target: bash
+      reason: eval executes arbitrary JavaScript
+      ref: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval
+    - name: eval (file)
+      pattern: '(^|[^.\w])eval\s*\('
+      target: file-content
+      reason: eval executes arbitrary JavaScript
+      ref: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/eval

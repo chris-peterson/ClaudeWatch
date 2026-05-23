@@ -6,7 +6,7 @@ the spec is revised.
 
 **Last audit:** 2026-05-08
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 50 / 56 normative requirements (89%) + 3 deferred
+**Coverage:** all normative requirements covered + 3 deferred (FUT-01..FUT-03)
 
 ## Status table
 
@@ -28,13 +28,11 @@ the spec is revised.
 | DIST-01 | Marketplace install | Covered (extrinsic) | Verified via README + `plugin.json#repository`; marketplace lives in sibling repo `claude-marketplace` |
 | DIST-02 | `.claude-plugin/plugin.json` manifest | Covered | `.claude-plugin/plugin.json` |
 | DIST-03 | Runnable via `claude --plugin-dir .` | Covered | `justfile:14-15` (`just try`) |
-| SH-01 | `watch-git` block + ask enumeration | Covered | `rules/watch-git.yml` |
-| SH-01a | Git pre-subcommand flags handling | Covered | `rules/watch-git.yml` (regex prefix on every rule), `tests/test-watch-git.sh:85-104` |
-| SH-02 | `watch-installs` rules | Covered | `rules/watch-installs.yml` (spec updated 2026-05-08 to match shipped rules) |
-| SH-03 | `watch-files` rules + cache/tmp `except` | Covered | `rules/watch-files.yml` (spec updated 2026-05-08) |
-| SH-04 | `watch-secrets` rules | Covered | `rules/watch-secrets.yml` (spec updated 2026-05-08) |
-| SH-04a | Shell-command boundaries on full-token rules | Covered | `rules/watch-secrets.yml:43-44` (env/printenv rule) |
-| SH-05..SH-07 | Filter regex / refs / per-set tests | Covered | All four `rules/*.yml` + `tests/test-watch-*.sh` |
+| SH-01 | Shipped rule sets (bulleted list) | Covered | `rules/*.yml` + per-set `tests/test-watch-*.sh` |
+| SH-02 | Filter regex on bash-target rule sets | Covered | All shipped `rules/*.yml` declaring `target: bash` rules |
+| SH-03 | `ref` URLs on rules | Covered | All shipped `rules/*.yml` |
+| SH-04 | Per-set test files | Covered | `tests/test-watch-*.sh` |
+| RL-14 | Warn on unrecognized YAML field | Covered | `scripts/watchdog.py` (parser else-branch), `tests/test-engine.sh` ("unrecognized YAML field warns") |
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just docs-preview` | Covered | `justfile` + `tests/` |
 | FUT-01 | SessionStart self-check | Deferred | `hooks/cli-freshness.sh` is intentional no-op |
 | FUT-02 | `new` rule-set scaffolds a test file | Deferred — partially covered | `skills/rules/SKILL.md:155-159` already offers this; consider promoting |

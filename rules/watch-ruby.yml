@@ -1,0 +1,105 @@
+name: watch-ruby
+filter: '\bruby\b'
+extensions: ['.rb']
+
+rules:
+  block:
+    - name: FileUtils.rm_rf at sensitive root (bash)
+      pattern: '\bFileUtils\.rm_r?f?\s*\(?\s*[\x27"](/|~|ENV\[)'
+      target: bash
+      reason: recursive delete rooted at filesystem root, home, or $HOME
+      ref: https://docs.ruby-lang.org/en/master/FileUtils.html#method-c-rm_rf
+    - name: FileUtils.rm_rf at sensitive root (file)
+      pattern: '\bFileUtils\.rm_r?f?\s*\(?\s*[\x27"](/|~|ENV\[)'
+      target: file-content
+      reason: recursive delete rooted at filesystem root, home, or $HOME
+      ref: https://docs.ruby-lang.org/en/master/FileUtils.html#method-c-rm_rf
+
+    - name: Marshal.load deserialization (bash)
+      pattern: '\bMarshal\.(load|restore)\s*\('
+      target: bash
+      reason: Marshal.load is an RCE primitive on untrusted input
+      ref: https://docs.ruby-lang.org/en/master/Marshal.html
+    - name: Marshal.load deserialization (file)
+      pattern: '\bMarshal\.(load|restore)\s*\('
+      target: file-content
+      reason: Marshal.load is an RCE primitive on untrusted input
+      ref: https://docs.ruby-lang.org/en/master/Marshal.html
+
+    - name: YAML.load on untrusted input (bash)
+      pattern: '\bYAML\.load\s*\([^)]'
+      target: bash
+      reason: YAML.load (not safe_load) can instantiate arbitrary classes — RCE primitive
+      ref: https://docs.ruby-lang.org/en/master/YAML.html
+    - name: YAML.load on untrusted input (file)
+      pattern: '\bYAML\.load\s*\([^)]'
+      target: file-content
+      reason: YAML.load (not safe_load) can instantiate arbitrary classes — RCE primitive
+      ref: https://docs.ruby-lang.org/en/master/YAML.html
+
+  ask:
+    - name: FileUtils.rm_rf (bash)
+      pattern: '\bFileUtils\.rm_rf\s*\(?'
+      target: bash
+      reason: recursive delete via FileUtils
+      ref: https://docs.ruby-lang.org/en/master/FileUtils.html#method-c-rm_rf
+    - name: FileUtils.rm_rf (file)
+      pattern: '\bFileUtils\.rm_rf\s*\(?'
+      target: file-content
+      reason: recursive delete via FileUtils
+      ref: https://docs.ruby-lang.org/en/master/FileUtils.html#method-c-rm_rf
+
+    - name: File.delete / File.unlink (bash)
+      pattern: '\bFile\.(delete|unlink)\s*\('
+      target: bash
+      reason: deletes a file
+      ref: https://docs.ruby-lang.org/en/master/File.html#method-c-delete
+    - name: File.delete / File.unlink (file)
+      pattern: '\bFile\.(delete|unlink)\s*\('
+      target: file-content
+      reason: deletes a file
+      ref: https://docs.ruby-lang.org/en/master/File.html#method-c-delete
+
+    - name: Kernel.system / exec (bash)
+      pattern: '(^|[^.\w])(system|exec)\s*\([\x27"]'
+      target: bash
+      reason: invokes a subshell with arbitrary content
+      ref: https://docs.ruby-lang.org/en/master/Kernel.html#method-i-system
+    - name: Kernel.system / exec (file)
+      pattern: '(^|[^.\w])(system|exec)\s*\([\x27"]'
+      target: file-content
+      reason: invokes a subshell with arbitrary content
+      ref: https://docs.ruby-lang.org/en/master/Kernel.html#method-i-system
+
+    - name: backtick exec (bash)
+      pattern: '`[^`]*\$\{?[A-Z_a-z]'
+      target: bash
+      reason: backtick executes a subshell with interpolated input
+      ref: https://docs.ruby-lang.org/en/master/Kernel.html#method-i-60
+    - name: backtick exec (file)
+      pattern: '`[^`]*#\{'
+      target: file-content
+      reason: backtick executes a subshell with interpolated input
+      ref: https://docs.ruby-lang.org/en/master/Kernel.html#method-i-60
+
+    - name: eval (bash)
+      pattern: '(^|[^.\w])eval\s*\('
+      target: bash
+      reason: eval executes arbitrary Ruby code
+      ref: https://docs.ruby-lang.org/en/master/Kernel.html#method-i-eval
+    - name: eval (file)
+      pattern: '(^|[^.\w])eval\s*\('
+      target: file-content
+      reason: eval executes arbitrary Ruby code
+      ref: https://docs.ruby-lang.org/en/master/Kernel.html#method-i-eval
+
+    - name: instance_eval / class_eval (bash)
+      pattern: '\b(instance_eval|class_eval|module_eval)\s*\(?'
+      target: bash
+      reason: dynamic eval in a class/instance context
+      ref: https://docs.ruby-lang.org/en/master/BasicObject.html#method-i-instance_eval
+    - name: instance_eval / class_eval (file)
+      pattern: '\b(instance_eval|class_eval|module_eval)\s*\(?'
+      target: file-content
+      reason: dynamic eval in a class/instance context
+      ref: https://docs.ruby-lang.org/en/master/BasicObject.html#method-i-instance_eval

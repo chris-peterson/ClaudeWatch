@@ -10,13 +10,16 @@ The plugin ships these rule sets, each a standalone YAML file auto-discovered by
 
 | Rule set | File | What it guards |
 | --- | --- | --- |
+| **watch-bash** | `rules/watch-bash.yml` | `rm -rf /`, `curl \| sh`, `dd of=/dev/sd*`, `mkfs /dev/*`, `shred` (block); `rm -rf` outside cache/tmp paths, `chmod 777`, `chown -R`, shell `eval` of dynamic strings (ask). Applies to `.sh`/`.bash`/`.zsh` file content authored via Write/Edit (bash-target rules for the same primitives live in watch-files) |
+| **watch-dotnet** | `rules/watch-dotnet.yml` | .NET decompilers (`ilspycmd`, `ildasm`, `dotpeek`, `dnspy[ex]`, `justdecompile`), unzip/tar of `.nupkg`, curl/wget of `.nupkg`, and `nuget install` (ask). Nudges toward SourceLink instead of decompiling NuGet packages |
+| **watch-files** | `rules/watch-files.yml` | rm -rf /, chmod 777, shred, mv /dev/null (block); rm -rf, recursive chmod/chown (ask) |
 | **watch-git** | `rules/watch-git.yml` | Force push, reset --hard, branch -D, and other destructive git ops (block); add, commit, push, and other mutating ops (ask) |
 | **watch-installs** | `rules/watch-installs.yml` | curl\|sh, global installs, sudo pip/apt (block); npm install, yarn add, pip install, and other dependency changes (ask) |
-| **watch-files** | `rules/watch-files.yml` | rm -rf /, chmod 777, shred, mv /dev/null (block); rm -rf, recursive chmod/chown (ask) |
-| **watch-secrets** | `rules/watch-secrets.yml` | cat SSH keys, cloud credentials, echo secrets (block); cat dotfiles, .env files, env/printenv (ask) |
+| **watch-node** | `rules/watch-node.yml` | `fs.rmSync` at root/$HOME, `child_process.exec("rm -rf /")`, `new Function(...)` (block); `fs.unlink`, `fs.rm({recursive:true})`, `exec`/`execSync`, `vm.runIn*Context`, `eval` (ask). Applies to both `node -e`/`bun -e`/`deno`/`tsx` bash invocations and `.js`/`.mjs`/`.cjs`/`.ts`/`.mts`/`.cts` file content authored via Write/Edit |
 | **watch-pwsh** | `rules/watch-pwsh.yml` | Format-Volume, Restart-Computer, IWR \| iex (block); Remove-Item -Recurse -Force, Stop-Process -Force, Out-File to sensitive paths (ask). Applies to both `pwsh -Command "..."` bash invocations and `.ps1`/`.psm1`/`.psd1` file content authored via Write/Edit |
 | **watch-python** | `rules/watch-python.yml` | shutil.rmtree at root/$HOME, pickle.loads, `__import__('os').system`, subprocess shell=True with destructive payload (block); eval, exec, os.system, os.remove, generic shell=True (ask). Applies to both `python3 -c "..."` bash invocations and `.py` file content authored via Write/Edit |
-| **watch-dotnet** | `rules/watch-dotnet.yml` | .NET decompilers (`ilspycmd`, `ildasm`, `dotpeek`, `dnspy[ex]`, `justdecompile`), unzip/tar of `.nupkg`, curl/wget of `.nupkg`, and `nuget install` (ask). Nudges toward SourceLink instead of decompiling NuGet packages |
+| **watch-ruby** | `rules/watch-ruby.yml` | `FileUtils.rm_rf` at root/$HOME, `Marshal.load`, `YAML.load` on input (block); `FileUtils.rm_rf`, `File.delete`, `system`/`exec`, backtick-with-interpolation, `eval`, `instance_eval`/`class_eval`/`module_eval` (ask). Applies to both `ruby -e` bash invocations and `.rb` file content authored via Write/Edit |
+| **watch-secrets** | `rules/watch-secrets.yml` | cat SSH keys, cloud credentials, echo secrets (block); cat dotfiles, .env files, env/printenv (ask) |
 
 Each rule set has an optional `filter` regex that short-circuits bash commands outside its domain. Rule sets targeting script bodies declare `extensions` to gate which `Write`/`Edit` payloads they evaluate. To add a new rule set, drop a YAML file in `rules/`. To disable one, rename it to `*.yml.disabled`.
 
@@ -37,6 +40,23 @@ ClaudeWatch's regex matching reaches anywhere in the command string and into the
   }
 }
 ```
+
+## The `\n#` gate (and how to work around it)
+
+Claude Code's built-in Bash input analyzer flags `\n#` (a newline followed by `#`) inside a quoted argument as potentially hiding arguments from path validation. The gate fires **before** any plugin hook runs, so ClaudeWatch never gets a chance to auto-approve. Agents that habitually write multi-line `python3 -c "..."` or `node -e "..."` scripts with embedded `#` comments will get a permission prompt every single invocation, regardless of the allowlist above.
+
+The workaround is to author the script as a file and execute the file:
+
+```bash
+# instead of: python3 -c "import shutil  # tidy
+# shutil.rmtree('./build')"
+# write to a tmp file and run it:
+TMP=$(mktemp /tmp/probe.XXXXXX.py)
+# ...write the script to $TMP via your editor's Write tool...
+python3 "$TMP"
+```
+
+Coverage is preserved: ClaudeWatch's `Write` and `Edit` hooks run the same `target: file-content` regex set that `target: bash` rules would have run on the inline command. A `Write` of `/tmp/probe.aB3xKp.py` containing `shutil.rmtree("/etc")` still gets blocked — see `watch-python.yml` for the dual `bash` / `file-content` rule pattern.
 
 ## Installation
 

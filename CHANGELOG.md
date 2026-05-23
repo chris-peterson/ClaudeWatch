@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0
+
+### Features
+- Three new interpreter rule sets close the agent-script coverage gap that previously stopped at Python and PowerShell:
+  - `watch-node` covers Node/JavaScript primitives across `node -e`/`bun -e`/`deno`/`tsx`/`ts-node` bash invocations and `.js`/`.mjs`/`.cjs`/`.ts`/`.mts`/`.cts` files. Blocks `fs.rmSync` at filesystem roots, `child_process` exec with `rm -rf /`, and `new Function(...)`. Asks on `fs.unlink`, `fs.rm({recursive:true})`, `exec`/`execSync`, `vm.runIn*Context`, and `eval`.
+  - `watch-ruby` covers Ruby primitives across `ruby -e` and `.rb` files. Blocks `FileUtils.rm_rf` at roots, `Marshal.load`, and `YAML.load(...)`. Asks on `File.delete`, `system`/`exec` with string literals, backtick exec with interpolation, `eval`, and `instance_eval`/`class_eval`/`module_eval`.
+  - `watch-bash` covers `.sh`/`.bash`/`.zsh` file content (bash-target coverage already lives in `watch-files`). Blocks `rm -rf /`, `curl|sh`, `dd of=/dev/sd*`, `mkfs /dev/...`, `shred`. Asks on `rm -rf` outside cache/tmp paths, `chmod 777`, `chown -R`, and shell `eval` of dynamic strings.
+- README now documents the interaction with Claude Code's built-in `\n#` bash-input gate: that gate fires before any plugin hook and can't be auto-approved, so agents that write multi-line `python3 -c "..."` or `node -e "..."` scripts with embedded `#` comments will keep hitting permission prompts. The fix is to write the script to a tmp file (via `Write`) and execute the file — ClaudeWatch's `file-content` rules preserve coverage at the write site.
+- The YAML parser now warns on unrecognized lines (to stderr) instead of silently dropping them. Typos like `refrence:` instead of `ref:` are surfaced so the rule author can fix them, rather than being baked into a rule that doesn't behave as intended.
+
+### Other
+- `SPEC.md` consolidates the shipped-rule-set requirements (formerly one `SH-XX` per rule set) under a single `SH-01` with a bulleted list, so future rule sets can be added without renumbering. Adds `RL-14` for the parser warning behavior.
+- Tests added: `test-watch-bash.sh`, `test-watch-node.sh`, `test-watch-ruby.sh`. Engine tests now include an `unrecognized YAML field warns` case asserting the new parser warning.
+
 ## 0.6.0
 
 ### Features

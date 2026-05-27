@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.1
+
+### Fixes
+- `watch-git` previously blocked `git reset --hard` and `git push --force-with-lease` outright. Both have legitimate uses — discarding uncommitted local work the user explicitly wants gone, and the safer-than-bare-force flag for rewriting a shared branch after rebase — that don't warrant an unrecoverable block. Both now ask instead, so the user still gets the safety prompt with the destructive-action context but can confirm and proceed.
+- The block rule for force push now excludes `--force-with-lease` via a `(?!-)` negative lookahead (it still blocks plain `--force` and `-f`). The generic `git push` and `git reset` ask rules pick up matching negative lookaheads so the more specific ("rewrites remote history with stale-ref protection", "discards uncommitted changes with no recovery") messages aren't duplicated by the generic ones when both would match.
+
 ## 0.7.0
 
 ### Features

@@ -8,12 +8,7 @@ echo "=== watch-git ==="
 
 echo "--- block: force push ---"
 t "--force"             block '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}'
-t "--force-with-lease"  block '{"tool_name":"Bash","tool_input":{"command":"git push --force-with-lease origin feature"}}'
 t "-f"                  block '{"tool_name":"Bash","tool_input":{"command":"git push -f origin feature"}}'
-
-echo "--- block: reset --hard ---"
-t "--hard"              block '{"tool_name":"Bash","tool_input":{"command":"git reset --hard"}}'
-t "--hard HEAD~3"       block '{"tool_name":"Bash","tool_input":{"command":"git reset --hard HEAD~3"}}'
 
 echo "--- block: checkout . ---"
 t "checkout ."          block '{"tool_name":"Bash","tool_input":{"command":"git checkout ."}}'
@@ -54,6 +49,8 @@ t "rm --cached -r"      ask   '{"tool_name":"Bash","tool_input":{"command":"git 
 echo "--- ask: reset ---"
 t "reset --soft"        ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --soft HEAD~1"}}'
 t "reset (mixed)"       ask   '{"tool_name":"Bash","tool_input":{"command":"git reset HEAD~1"}}'
+t "reset --hard"        ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --hard"}}'
+t "reset --hard HEAD~3" ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --hard HEAD~3"}}'
 
 echo "--- ask: commit ---"
 t "commit -m"           ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"fix: update readme\""}}'
@@ -69,6 +66,7 @@ t "push"                ask   '{"tool_name":"Bash","tool_input":{"command":"git 
 t "push origin"         ask   '{"tool_name":"Bash","tool_input":{"command":"git push origin feature-branch"}}'
 t "push -u"             ask   '{"tool_name":"Bash","tool_input":{"command":"git push -u origin main"}}'
 t "push -u (f in name)" ask  '{"tool_name":"Bash","tool_input":{"command":"git push -u origin x-of-tag"}}'
+t "--force-with-lease"  ask   '{"tool_name":"Bash","tool_input":{"command":"git push --force-with-lease origin feature"}}'
 
 echo "--- allow: safe operations ---"
 t "status"              allow '{"tool_name":"Bash","tool_input":{"command":"git status"}}'
@@ -83,12 +81,10 @@ t "mv"                  allow '{"tool_name":"Bash","tool_input":{"command":"git 
 t "log | head"          allow '{"tool_name":"Bash","tool_input":{"command":"git log --oneline | head -5"}}'
 
 echo "--- block: with git global flags between git and subcommand ---"
-t "-C path push --force-with-lease"   block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo push --force-with-lease"}}'
 t "-c key=val push -f"                block '{"tool_name":"Bash","tool_input":{"command":"git -c user.name=x push -f origin main"}}'
 t "--git-dir=PATH push --force"       block '{"tool_name":"Bash","tool_input":{"command":"git --git-dir=/tmp/repo/.git push --force origin main"}}'
 t "--git-dir PATH push --force"       block '{"tool_name":"Bash","tool_input":{"command":"git --git-dir /tmp/repo/.git push --force origin main"}}'
 t "-P push --force"                   block '{"tool_name":"Bash","tool_input":{"command":"git -P push --force origin main"}}'
-t "-C path reset --hard"              block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo reset --hard"}}'
 t "-C path clean -f"                  block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo clean -f"}}'
 t "-C path branch -D"                 block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo branch -D feature"}}'
 t "-C path checkout ."                block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo checkout ."}}'
@@ -98,13 +94,14 @@ t "-C path stash drop"                block '{"tool_name":"Bash","tool_input":{"
 t "-C path reflog expire"             block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo reflog expire --all"}}'
 
 echo "--- block: quoted values containing spaces ---"
-t '-C "/path with spaces" push -f'    block '{"tool_name":"Bash","tool_input":{"command":"git -C \"/tmp/has space\" push --force"}}'
-t "-C '/path with spaces' push -f"    block '{"tool_name":"Bash","tool_input":{"command":"git -C '"'"'/tmp/has space'"'"' push --force-with-lease"}}'
-t '-c "key=val w/ space" push -f'     block '{"tool_name":"Bash","tool_input":{"command":"git -c \"http.extraHeader=Authorization x\" push --force"}}'
-t '-C "/with space" reset --hard'     block '{"tool_name":"Bash","tool_input":{"command":"git -C \"/tmp/has space\" reset --hard"}}'
-
+t '-C "/path with spaces" push --force'   block '{"tool_name":"Bash","tool_input":{"command":"git -C \"/tmp/has space\" push --force"}}'
+t '-c "key=val w/ space" push --force'    block '{"tool_name":"Bash","tool_input":{"command":"git -c \"http.extraHeader=Authorization x\" push --force"}}'
 echo "--- ask: with git global flags between git and subcommand ---"
 t "-C path push"                      ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo push"}}'
+t "-C path push --force-with-lease"   ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo push --force-with-lease"}}'
+t "-C path reset --hard"              ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo reset --hard"}}'
+t '-C "/with space" reset --hard'     ask   '{"tool_name":"Bash","tool_input":{"command":"git -C \"/tmp/has space\" reset --hard"}}'
+t "-C '/space' push --force-with-lease" ask '{"tool_name":"Bash","tool_input":{"command":"git -C '"'"'/tmp/has space'"'"' push --force-with-lease"}}'
 t "-C path commit -m x"               ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo commit -m hi"}}'
 t "-c key=val add ."                  ask   '{"tool_name":"Bash","tool_input":{"command":"git -c user.name=x add ."}}'
 t "-C path rm file"                   ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo rm README.md"}}'

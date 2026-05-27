@@ -9,7 +9,7 @@ Claude Code's built-in permission system uses naive string matching that [fails 
 | Rule set | What it guards |
 | --- | --- |
 | **watch-files** | rm -rf /, chmod 777, shred, mv /dev/null (block); rm -rf, recursive chmod/chown (ask) |
-| **watch-git** | Force push, reset --hard, branch -D, and other destructive git ops (block); add, commit, push, and other mutating ops (ask) |
+| **watch-git** | Force push, branch -D, and other destructive git ops (block); add, commit, push, reset --hard, force-with-lease, and other mutating ops (ask) |
 | **watch-installs** | curl\|sh, global installs, sudo pip/apt (block); npm install, yarn add, pip install, and other dependency changes (ask) |
 | **watch-secrets** | cat SSH keys, cloud credentials, echo secrets (block); cat dotfiles, .env files, env/printenv (ask) |
 

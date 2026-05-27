@@ -4,14 +4,9 @@ filter: '\bgit\b'
 rules:
   block:
     - name: git push --force
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push\s.*(--force|(?<=\s)-[a-zA-Z]*f\b)'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push\s.*(--force(?!-)|(?<=\s)-[a-zA-Z]*f\b)'
       reason: overwrites shared remote history
       ref: https://git-scm.com/docs/git-push#Documentation/git-push.txt--f
-
-    - name: git reset --hard
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+reset\s.*--hard'
-      reason: discards uncommitted changes with no recovery
-      ref: https://git-scm.com/docs/git-reset#Documentation/git-reset.txt---hard
 
     - name: git checkout .
       pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+checkout\s+\.\s*$'
@@ -64,8 +59,13 @@ rules:
       reason: removes file from index without deleting from disk
       ref: https://git-scm.com/docs/git-rm
 
+    - name: git reset --hard
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+reset\s.*--hard'
+      reason: discards uncommitted changes with no recovery
+      ref: https://git-scm.com/docs/git-reset#Documentation/git-reset.txt---hard
+
     - name: git reset
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+reset(\s|$)'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+reset(?!\s.*--hard)(\s|$)'
       reason: modifies index or moves HEAD
       ref: https://git-scm.com/docs/git-reset
 
@@ -79,7 +79,12 @@ rules:
       reason: modifies the stash stack
       ref: https://git-scm.com/docs/git-stash
 
+    - name: git push --force-with-lease
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push\s.*--force-with-lease'
+      reason: rewrites remote history with stale-ref protection
+      ref: https://git-scm.com/docs/git-push#Documentation/git-push.txt---no-force-with-lease
+
     - name: git push
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push(\s|$)'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push(?!\s.*--force-with-lease)(\s|$)'
       reason: publishes commits to the shared remote
       ref: https://git-scm.com/docs/git-push

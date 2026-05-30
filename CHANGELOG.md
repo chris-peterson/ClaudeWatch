@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0
+
+### Features
+- New `watch-aws` rule set guards AWS CLI operations by reversibility. Unlike the deny-list sets, it takes an allow-list posture: it asks on any mutating `aws <service> <operation>` and stays silent only on read-only commands (`get-`/`list-`/`describe-`/`head-` verbs and `s3 ls`). Irreversible operations are blocked outright — `delete-`/`remove-`/`deregister-`/`terminate-`/`purge-`/`reset-`/`revoke-` verbs, `ec2 release-address`, and the `s3 rm` / `s3 rb` high-level commands. Matching reaches through interspersed global flags (`aws --profile prod ec2 terminate-instances`), and the service token is anchored so a profile or region named like a verb (`--profile delete-prod`) doesn't trip a block.
+- README's "Pairing with Bash permissions" section now covers `aws`: add `Bash(aws *)` to your Claude Code allowlist to make the allowed read-only commands frictionless. It's safe because a hook `ask`/`deny` decision takes precedence over a settings `allow` rule — mutating `aws` commands still prompt and destructive ones still block.
+
+### Other
+- A dev-time PostToolUse hook reminds contributors to update the three hand-maintained rule-set indexes (README table, SPEC `[SH-01]`, help-skill table) whenever a `rules/watch-*.yml` file changes — they previously drifted independently. This guards development of ClaudeWatch itself and is not part of the shipped plugin.
+- `AGENTS.md` documents the deny-list vs allow-list posture choice (when to enumerate dangers vs use a catch-all `ask` + `except`) and expands the "new rule set" checklist to name all three indexes.
+- `SPEC.md`: `watch-aws` recorded in `[SH-01]`; `[FUT-04]` added for the gap that `/ClaudeWatch:rules` edits don't survive plugin upgrades; `DOC-03` (Pages hosting) dropped; `DIST-01` reframed to manifest exposure with hosting out of scope.
+
 ## 0.7.1
 
 ### Fixes

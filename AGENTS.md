@@ -49,6 +49,15 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
   applies to ask rules; block rules ignore it with a stderr warning. Use
   `except` to skip prompts on demonstrably-safe variants (`rm -rf /tmp/...`),
   not to make a block rule "softer."
+- **Allow-by-default (deny-list) vs ask-by-default (allow-list).** Most sets
+  are deny-lists: allow-by-default, enumerate the dangerous ops as block/ask —
+  you don't want to prompt on every `git status`. Flip to an allow-list — one
+  broad catch-all `ask` plus an `except` for the safe subset — only when the
+  tool surface is huge and mostly consequential (a cloud control plane), the
+  safe subset is small and cleanly identifiable (AWS `get-`/`list-`/`describe-`/
+  `head-` verbs), and an un-prompted action is costly (spend, data loss, prod
+  change). Litmus test: enumerate the small side. `watch-aws` is the allow-list
+  example; `watch-git` is the deny-list example.
 
 ## Repo conventions
 
@@ -70,9 +79,19 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 - **Engine changes** — Update `scripts/watchdog.py` and `tests/test-engine.sh`
   in the same change. The engine has a small surface; every behavior should
   be exercised by a test.
-- **New rule set** — Add `rules/watch-<name>.yml` and `tests/test-watch-<name>.sh`.
-  No `hooks.json` change needed (auto-discovery). Add a row to the README
-  rule-sets table.
+- **New or changed rule set** — Add/edit `rules/watch-<name>.yml` and
+  `tests/test-watch-<name>.sh`. No `hooks.json` change needed (auto-discovery).
+  A rule set is described in three hand-maintained indexes that drift
+  independently — update whichever the change affects:
+  1. `README.md` — rule-sets table (one row per set)
+  2. `SPEC.md` `[SH-01]` — enumeration with block/ask coverage prose
+  3. `skills/help/SKILL.md` — rule-sets table (one-line summary)
+
+  The `docs/_site` reference is generated, not hand-maintained — run `just docs`.
+  A dev-time PostToolUse hook (`.claude/settings.json` →
+  `.claude/hooks/remind-rules-index.py`) emits this same checklist after any
+  `rules/watch-*.yml` Write/Edit so it isn't forgotten; it is not part of the
+  shipped plugin.
 - **Spec changes** — Update `SPEC.md` first. If a code change reveals a spec
   problem (ambiguity, missing requirement), **note it** and resolve via the
   Gap Resolution Protocol (see the spec-driven recipe), don't silently change

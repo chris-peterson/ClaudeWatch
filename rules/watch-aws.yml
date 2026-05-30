@@ -1,0 +1,61 @@
+name: watch-aws
+filter: '\baws\b'
+
+rules:
+  block:
+    - name: aws delete-*
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z0-9][a-z0-9.-]*(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+delete-'
+      reason: permanently deletes a resource
+      ref: https://docs.aws.amazon.com/cli/latest/reference/
+
+    - name: aws remove-*
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z0-9][a-z0-9.-]*(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+remove-'
+      reason: removes a resource or association
+      ref: https://docs.aws.amazon.com/cli/latest/reference/
+
+    - name: aws deregister-*
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z0-9][a-z0-9.-]*(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+deregister-'
+      reason: deregisters a resource; the prior registration cannot be restored
+      ref: https://docs.aws.amazon.com/cli/latest/reference/
+
+    - name: aws terminate-*
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z0-9][a-z0-9.-]*(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+terminate-'
+      reason: terminates instances or environments; compute and ephemeral storage are destroyed
+      ref: https://docs.aws.amazon.com/cli/latest/reference/ec2/terminate-instances.html
+
+    - name: aws purge-*
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z0-9][a-z0-9.-]*(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+purge-'
+      reason: permanently purges all items (e.g. SQS queue messages)
+      ref: https://docs.aws.amazon.com/cli/latest/reference/sqs/purge-queue.html
+
+    - name: aws reset-*
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z0-9][a-z0-9.-]*(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+reset-'
+      reason: resets settings to defaults; prior values are not recoverable
+      ref: https://docs.aws.amazon.com/cli/latest/reference/
+
+    - name: aws revoke-*
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z0-9][a-z0-9.-]*(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+revoke-'
+      reason: revokes permissions or grants (e.g. security group ingress)
+      ref: https://docs.aws.amazon.com/cli/latest/reference/ec2/revoke-security-group-ingress.html
+
+    - name: aws ec2 release-address
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z0-9][a-z0-9.-]*(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+release-address\b'
+      reason: releases an Elastic IP back to the public pool; the address cannot be reclaimed
+      ref: https://docs.aws.amazon.com/cli/latest/reference/ec2/release-address.html
+
+    - name: aws s3 rm
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+s3(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+rm\b'
+      reason: deletes S3 objects with no recovery
+      ref: https://docs.aws.amazon.com/cli/latest/reference/s3/rm.html
+
+    - name: aws s3 rb
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+s3(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+rb\b'
+      reason: removes an S3 bucket
+      ref: https://docs.aws.amazon.com/cli/latest/reference/s3/rb.html
+
+  ask:
+    - name: aws mutating operation
+      pattern: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z0-9][a-z0-9.-]*(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z]'
+      except: 'aws(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+[a-z0-9][a-z0-9.-]*(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+(?:(?:get|list|describe|head)-|ls\b)'
+      reason: mutates AWS resources or state (read-only get/list/describe/head and s3 ls are allowed)
+      ref: https://docs.aws.amazon.com/cli/latest/reference/

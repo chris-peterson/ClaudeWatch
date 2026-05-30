@@ -138,12 +138,11 @@ without leaving the session.
 
 - **[DOC-01]** The plugin shall ship a Docsify documentation site under `docs/`.
 - **[DOC-02]** `just docs` shall regenerate the rules-reference page from the YAML rule files.
-- **[DOC-03]** The documentation site shall be published at `https://chris-peterson.github.io/ClaudeWatch/`.
 - **[DOC-04]** The documentation shall include a YAML schema reference covering top-level fields and rule fields.
 
 ## 9. Distribution (DIST)
 
-- **[DIST-01]** The plugin shall be installable via `claude plugin install ClaudeWatch@chris-peterson` from the `chris-peterson` marketplace.
+- **[DIST-01]** The plugin shall expose the metadata required for installation as a Claude Code plugin (name, version, description, repository, license) in its manifest. The mechanism by which the plugin is hosted or distributed (marketplace registration, install command) is out of scope.
 - **[DIST-02]** The plugin shall declare a manifest at `.claude-plugin/plugin.json`.
 - **[DIST-03]** The plugin shall be runnable from a working copy via `claude --plugin-dir .` (no install required for local testing).
 
@@ -153,6 +152,8 @@ These are the rule sets the plugin ships out of the box. Each is
 self-contained and removable by renaming its file to `*.yml.disabled`.
 
 - **[SH-01]** The plugin shall ship the following rule sets:
+
+  - **`watch-aws`** — AWS CLI operations classified by reversibility. **Block** rules shall cover irreversible operations: AWS operations whose verb begins with `delete-`, `remove-`, `deregister-`, `terminate-`, `purge-`, `reset-`, or `revoke-`; the EC2 `release-address` operation; and the `s3` high-level `rm` and `rb` subcommands. A single **ask** rule shall match any other `aws <service> <operation>`, with an `except` that allows read-only operations (`get-`/`list-`/`describe-`/`head-` verb prefixes and the `s3` high-level `ls` subcommand). Rules shall match through interspersed global flags (`-`-prefixed options before the service and between service and operation), including quoted values containing spaces, so that `aws --profile prod ec2 terminate-instances` is not silently bypassed.
 
   - **`watch-bash`** — destructive shell primitives in `.sh`/`.bash`/`.zsh` file content authored via `Write`/`Edit`. File-content only; bash-target coverage for the same primitives lives in `watch-files`. **Block** rules shall cover: `rm -rf /`, `rm -rf /*`, `curl|sh`/`wget|sh`, `dd of=/dev/sd*` (and `nvme`/`disk`/`hd`/`xvd`), `mkfs /dev/...`, and `shred`. **Ask** rules shall cover: recursive `rm -rf` (with `except` for `~/.cache/`, `/tmp/`, `/var/tmp/`, `$TMPDIR`), `chmod 777`, recursive `chown -R`, and shell `eval` of dynamic strings.
 
@@ -208,3 +209,4 @@ These describe how the current implementation satisfies the spec. They are
 - **[FUT-01]** Where a plugin-update self-check is implemented, the SessionStart hook shall verify `watchdog.py` emits the expected `hookSpecificOutput.permissionDecision` schema.
 - **[FUT-02]** Where the user adds a custom rule set via `/ClaudeWatch:rules new`, the skill should offer to scaffold a matching test file in `tests/`.
 - **[FUT-03]** Where multi-line YAML strings or nested anchors are required, the parser may switch to PyYAML; currently the minimal parser does not support these constructs.
+- **[FUT-04]** Where the user customizes rules on an installed plugin via `/ClaudeWatch:rules`, those edits shall survive plugin version upgrades. The skill writes to `${CLAUDE_PLUGIN_ROOT}/rules`, which for an installed plugin resolves to the version-scoped cache directory (e.g. `~/.claude/plugins/cache/chris-peterson/ClaudeWatch/0.7.1/rules/`); an upgrade installs a fresh version directory with its own shipped rules and the hook reads from the new root, orphaning prior edits. A durable customization layer would close this gap — e.g. a user rules directory (such as `~/.config/claudewatch/rules/`) that the engine loads in addition to the shipped set, or a migration step on upgrade. Edits made when running from a working copy via `claude --plugin-dir .` (per [DIST-03]) are already durable because `${CLAUDE_PLUGIN_ROOT}` is the git-tracked checkout, not the cache.

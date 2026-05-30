@@ -10,6 +10,7 @@ The plugin ships these rule sets, each a standalone YAML file auto-discovered by
 
 | Rule set | File | What it guards |
 | --- | --- | --- |
+| **watch-aws** | `rules/watch-aws.yml` | `aws … delete-`/`remove-`/`deregister-`/`terminate-`/`purge-`/`reset-`/`revoke-` ops, `release-address`, `s3 rm`/`s3 rb` (block); any other `aws` mutating operation (ask). Read-only `get-`/`list-`/`describe-`/`head-` ops and `s3 ls` are allowed. Matches through interspersed global flags (`aws --profile prod ec2 …`) |
 | **watch-bash** | `rules/watch-bash.yml` | `rm -rf /`, `curl \| sh`, `dd of=/dev/sd*`, `mkfs /dev/*`, `shred` (block); `rm -rf` outside cache/tmp paths, `chmod 777`, `chown -R`, shell `eval` of dynamic strings (ask). Applies to `.sh`/`.bash`/`.zsh` file content authored via Write/Edit (bash-target rules for the same primitives live in watch-files) |
 | **watch-dotnet** | `rules/watch-dotnet.yml` | .NET decompilers (`ilspycmd`, `ildasm`, `dotpeek`, `dnspy[ex]`, `justdecompile`), unzip/tar of `.nupkg`, curl/wget of `.nupkg`, and `nuget install` (ask). Nudges toward SourceLink instead of decompiling NuGet packages |
 | **watch-files** | `rules/watch-files.yml` | rm -rf /, chmod 777, shred, mv /dev/null (block); rm -rf, recursive chmod/chown (ask) |
@@ -34,12 +35,17 @@ ClaudeWatch's regex matching reaches anywhere in the command string and into the
 {
   "permissions": {
     "allow": [
-      "Bash(python3 *)",
-      "Bash(pwsh *)"
+      "Bash(aws *)",
+      "Bash(pwsh *)",
+      "Bash(python3 *)"
     ]
   }
 }
 ```
+
+Broadening the allowlist is safe because a hook decision outranks an `allow` rule: ClaudeWatch's `ask` and `deny` still fire even when your allowlist would otherwise let the command through. The allow rule only takes effect where ClaudeWatch stays silent — a silent hook defers to Claude Code's normal permission flow rather than auto-approving.
+
+`watch-aws` leans on this. Unlike the interpreter sets — which stay silent on most commands and only block destructive variants — it *asks* on most `aws` commands and stays silent only on read-only ops (`get-`/`list-`/`describe-`/`head-`, `s3 ls`). `Bash(aws *)` is what makes those reads frictionless; without it they still hit Claude Code's default prompt. Mutations still prompt and destructive ops (`delete-`, `terminate-`, `s3 rm`, …) are still blocked, because the hook's decision wins over the allow rule.
 
 ## The `\n#` gate (and how to work around it)
 

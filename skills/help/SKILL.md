@@ -17,6 +17,7 @@ rules miss.
 
 | Name | Guards |
 |---|---|
+| `watch-aws` | AWS CLI ops by reversibility — `delete-`/`remove-`/`deregister-`/`terminate-`/`purge-`/`reset-`/`revoke-`, `release-address`, `s3 rm`/`rb` (block); other mutating ops (ask); `get-`/`list-`/`describe-`/`head-` and `s3 ls` allowed |
 | `watch-bash` | Shell-script destructive primitives in `.sh`/`.bash`/`.zsh` file content (`rm -rf /`, `curl\|sh`, `dd of=/dev/sd*`, `mkfs`, `shred`, `chmod 777`, `chown -R`) — bash-target coverage lives in `watch-files` |
 | `watch-dotnet` | .NET decompilers, `.nupkg` downloads/extraction, `nuget install` — nudges toward SourceLink |
 | `watch-files` | `rm -rf /`, `chmod 777`, shred, recursive chmod/chown |

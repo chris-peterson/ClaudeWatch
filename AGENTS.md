@@ -16,8 +16,11 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 ## Core contracts (don't break these)
 
 1. **Determinism.** Given the same command and the same `rules/` tree, the
-   engine must always produce the same decision. No clocks, no randomness,
-   no network.
+   engine must always produce the same *decision*. No clocks, no randomness,
+   no network on the decision path. Decision logging (`CLAUDEWATCH_LOG`, see
+   [LOG-01]–[LOG-04]) is an opt-in side channel: it stamps a timestamp and
+   writes a file *after* the decision is computed, never feeding back into it.
+   Keep it that way — the clock stays in `_log_event`, not in `evaluate_rules`.
 2. **Exit code is always 0.** A non-zero exit blocks the host (Claude Code)
    from getting a useful decision. All errors are surfaced as `deny` decisions
    with explanatory messages.
@@ -96,6 +99,15 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
   problem (ambiguity, missing requirement), **note it** and resolve via the
   Gap Resolution Protocol (see the spec-driven recipe), don't silently change
   the implementation.
+
+## Releasing
+
+Releases are cut by bumping `version` in `.claude-plugin/plugin.json` and adding
+a matching `CHANGELOG.md` section, then merging to `main`. This project does
+**not** use git tags or GitHub releases — don't create them, and don't check for
+them to determine release state. The version in `plugin.json` is the source of
+truth; the next release is `current + 1` (minor bump for features, patch for
+fixes).
 
 ## Known constraints (do not paper over)
 

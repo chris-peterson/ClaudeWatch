@@ -18,9 +18,10 @@ Requirement IDs use `[XX-NN]`. Categories:
 - **RS** — Rule sets (file format, discovery)
 - **RL** — Rules (block, ask, except)
 - **OUT** — Output decisions
+- **LOG** — Decision logging (opt-in side channel)
 - **HK** — Hook wiring
 - **EXT** — Extensibility
-- **SK** — Skills (`/ClaudeWatch:help`, `/ClaudeWatch:rules`)
+- **SK** — Skills (`/ClaudeWatch:help`, `/ClaudeWatch:rules`, `/ClaudeWatch:learn`)
 - **DOC** — Documentation
 - **DIST** — Distribution / install
 - **SH** — Shipped rule sets
@@ -56,6 +57,17 @@ post-edit file content).
 - **[EN-11]** The engine shall not require any third-party Python packages at runtime.
 - **[EN-12]** When evaluating a `Write` input, the engine shall match rules against the value of `tool_input.content`.
 - **[EN-13]** When evaluating an `Edit` input, the engine shall read the file at `tool_input.file_path`, apply the `old_string` → `new_string` substitution (all occurrences if `tool_input.replace_all` is true, otherwise the first occurrence), and match rules against the resulting full content. If the file cannot be read, the engine shall match against `tool_input.new_string` alone.
+
+### Decision logging (LOG)
+
+Logging is an opt-in side channel that records each decision for later review
+(see [SK-13]–[SK-17]). It is separable from the decision: the engine's output
+is identical whether or not logging is enabled.
+
+- **[LOG-01]** Where the `CLAUDEWATCH_LOG` environment variable is set to a non-empty value, the engine shall append one JSON record per evaluated input to that path. The literal value `1` shall select the default path `~/.claude/claudewatch/decisions.jsonl`.
+- **[LOG-02]** When `CLAUDEWATCH_LOG` is unset or empty, the engine shall write no log, and its decision and exit behavior shall be unchanged.
+- **[LOG-03]** Each log record shall include the decision (`allow`/`ask`/`deny`), the matched rule reasons, a UTC timestamp, and the `session_id`, `cwd`, and active `permission_mode` from the hook input. For a `Bash` input the record shall include the command string; for a `Write`/`Edit` input it shall include the target file path rather than the file content.
+- **[LOG-04]** Logging shall not influence the decision and shall not change the process exit code. If a log write fails, then the engine shall report the failure to stderr and otherwise continue, still emitting its decision.
 
 ## 2. Rule Sets (RS)
 
@@ -134,6 +146,18 @@ without leaving the session.
 - **[SK-11]** When the user issues `new`, the skill shall create a new `rules/watch-<name>.yml` (the name shall start with `watch-`) with the standard YAML format.
 - **[SK-12]** After applying changes, the skill shall run `tests/test-watchdog.sh` and shall report any failures.
 
+### `/ClaudeWatch:learn`
+
+The learn skill aggregates the decision log ([LOG-01]–[LOG-04]) into a batch
+of proposed permission changes, so the user vets accumulated prompts once
+rather than per command.
+
+- **[SK-13]** Where the user invokes `/ClaudeWatch:learn`, the skill shall analyze the decision log and present its proposals. If no log exists, the skill shall instruct the user how to enable `CLAUDEWATCH_LOG` and shall make no changes.
+- **[SK-14]** The skill shall present three groups: **allow candidates** (frequently-allowed commands not covered by the current allow list), **ask candidates** (commands ClaudeWatch repeatedly asks about, with the matched rule), and a **deny summary** (blocked commands grouped by reason, informational).
+- **[SK-15]** The skill shall accept an optional time window (e.g. `--since 1d`) and forward it to the analysis.
+- **[SK-16]** Before writing any change, the skill shall present the exact edits and require explicit confirmation, and shall apply only the items the user approves.
+- **[SK-17]** The skill shall apply approved allow-list additions to a `settings.json` whose scope (user or project) the user selects, shall route rule changes (`except` additions, demotions) through `/ClaudeWatch:rules`, and shall not modify deny-summary items automatically.
+
 ## 8. Documentation (DOC)
 
 - **[DOC-01]** The plugin shall ship a Docsify documentation site under `docs/`.
@@ -203,10 +227,17 @@ These describe how the current implementation satisfies the spec. They are
   (`beacon`, `tack`, `logbook`) does not apply here.
 - The rules-skill ID convention strips the `watch-` prefix from the rule set
   name (e.g. `watch-git` → `git-block-01`).
+- Decision logging is implemented in `watchdog.py` as a single `_log_event`
+  call after the decision is computed, guarded by `CLAUDEWATCH_LOG`. The UTC
+  timestamp is the only clock in the script, and it is confined to the logging
+  side channel — the decision path remains clock-free and deterministic.
+- `/ClaudeWatch:learn` reads the log via `scripts/analyze-decisions.py`, a
+  separate read-only, stdlib-only tool. The engine remains the only
+  decision-making component; the analyzer never evaluates rules.
 
 ## 13. Future / Deferred (FUT)
 
 - **[FUT-01]** Where a plugin-update self-check is implemented, the SessionStart hook shall verify `watchdog.py` emits the expected `hookSpecificOutput.permissionDecision` schema.
 - **[FUT-02]** Where the user adds a custom rule set via `/ClaudeWatch:rules new`, the skill should offer to scaffold a matching test file in `tests/`.
 - **[FUT-03]** Where multi-line YAML strings or nested anchors are required, the parser may switch to PyYAML; currently the minimal parser does not support these constructs.
-- **[FUT-04]** Where the user customizes rules on an installed plugin via `/ClaudeWatch:rules`, those edits shall survive plugin version upgrades. The skill writes to `${CLAUDE_PLUGIN_ROOT}/rules`, which for an installed plugin resolves to the version-scoped cache directory (e.g. `~/.claude/plugins/cache/chris-peterson/ClaudeWatch/0.7.1/rules/`); an upgrade installs a fresh version directory with its own shipped rules and the hook reads from the new root, orphaning prior edits. A durable customization layer would close this gap — e.g. a user rules directory (such as `~/.config/claudewatch/rules/`) that the engine loads in addition to the shipped set, or a migration step on upgrade. Edits made when running from a working copy via `claude --plugin-dir .` (per [DIST-03]) are already durable because `${CLAUDE_PLUGIN_ROOT}` is the git-tracked checkout, not the cache.
+- **[FUT-04]** Where the user customizes rules on an installed plugin via `/ClaudeWatch:rules` (including the `except` and demotion edits proposed by `/ClaudeWatch:learn`, which route through that skill), those edits shall survive plugin version upgrades. The skill writes to `${CLAUDE_PLUGIN_ROOT}/rules`, which for an installed plugin resolves to the version-scoped cache directory (e.g. `~/.claude/plugins/cache/chris-peterson/ClaudeWatch/0.8.0/rules/`); an upgrade installs a fresh version directory with its own shipped rules and the hook reads from the new root, orphaning prior edits. The decision log ([LOG-01]) already shows the durable shape: it lives in a fixed user directory (`~/.claude/claudewatch/`) outside the cache and so persists across upgrades. The gap closes by giving rule customizations the same treatment — a user rules directory alongside it (`~/.claude/claudewatch/rules/`) that the engine loads in addition to the shipped set (user rules winning on conflict), or a migration step on upgrade. Until then, only allow-list outputs of `/ClaudeWatch:learn` (written to `settings.json`) are durable on an installed plugin; rule edits are not. Edits made when running from a working copy via `claude --plugin-dir .` (per [DIST-03]) are already durable because `${CLAUDE_PLUGIN_ROOT}` is the git-tracked checkout, not the cache.

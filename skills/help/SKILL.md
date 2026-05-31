@@ -40,6 +40,8 @@ engine auto-discovers it.
 | `/ClaudeWatch:help` | Show this overview |
 | `/ClaudeWatch:rules` | View and interactively edit rules |
 | `/ClaudeWatch:rules --list` | List rules without entering the edit loop |
+| `/ClaudeWatch:learn` | Learn from the decision log and propose permission changes (cut prompt fatigue) |
+| `/ClaudeWatch:learn --since 1d` | Learn from only the last day's decisions |
 
 ## Decisions
 
@@ -48,6 +50,18 @@ When a Bash invocation matches a rule, the hook emits one of:
 - **block** — command rejected with the rule's reason
 - **ask** — prompt the user to confirm
 - (silent) — no rule matched, command runs normally
+
+## Reducing prompts (watch → learn → suggest)
+
+Set `CLAUDEWATCH_LOG` in the hook environment and the engine records each
+decision to a JSONL log. `/ClaudeWatch:learn` reads that log and proposes a
+batch of permission changes: promote frequently-allowed commands to your allow
+list, add `except` clauses to noisy ask rules, and surface blocks that may be
+in your way. You vet accumulated prompts once instead of per command.
+
+```json
+{ "env": { "CLAUDEWATCH_LOG": "~/.claude/claudewatch/decisions.jsonl" } }
+```
 
 ## Docs
 

@@ -12,6 +12,10 @@ Supports three tool inputs:
 - Edit: matches against the full post-edit file content reconstructed from
   the on-disk file plus tool_input.old_string -> tool_input.new_string
   substitution (target: file-content rules)
+
+When CLAUDEWATCH_LOG is set, each decision is appended to that path as a JSONL
+record — an opt-in side channel for the /ClaudeWatch:learn workflow that does
+not affect the decision itself.
 """
 
 import glob
@@ -237,6 +241,51 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None):
     return blocks, asks
 
 
+def _log_event(data, input_kind, input_text, decision, matched):
+    """Append a decision record to the log when CLAUDEWATCH_LOG is set.
+
+    Opt-in side channel for the `/ClaudeWatch:learn` workflow. It never
+    influences the decision (which stays a pure function of command + rules)
+    and never changes the exit code. A log-write failure is reported to stderr
+    and swallowed so the hook still returns its decision.
+
+    CLAUDEWATCH_LOG is the destination path; the literal value "1" selects the
+    default path ~/.claude/claudewatch/decisions.jsonl.
+    """
+    dest = os.environ.get("CLAUDEWATCH_LOG")
+    if not dest:
+        return
+    if dest in ("1", "true", "True"):
+        dest = "~/.claude/claudewatch/decisions.jsonl"
+    dest = os.path.expanduser(dest)
+
+    from datetime import datetime, timezone
+
+    entry = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "session": data.get("session_id"),
+        "cwd": data.get("cwd"),
+        "tool": data.get("tool_name"),
+        "mode": data.get("permission_mode"),
+        "decision": decision,
+        "matched": matched,
+    }
+    if input_kind == "bash":
+        entry["command"] = input_text
+    else:
+        tool_input = data.get("tool_input", {}) or {}
+        entry["path"] = tool_input.get("file_path")
+
+    try:
+        parent = os.path.dirname(dest)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(dest, "a") as f:
+            f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+    except OSError as e:
+        print(f"watchdog: failed to write decision log to {dest}: {e}", file=sys.stderr)
+
+
 def _resolve_input(data):
     """Map tool_input -> (input_kind, input_text, file_extension) or None."""
     tool_name = data.get("tool_name")
@@ -327,8 +376,17 @@ def main():
         all_asks.extend(asks)
 
     if all_blocks:
-        _emit("deny", "\n".join(all_blocks))
+        decision, matched = "deny", all_blocks
     elif all_asks:
+        decision, matched = "ask", all_asks
+    else:
+        decision, matched = "allow", []
+
+    _log_event(data, input_kind, input_text, decision, matched)
+
+    if decision == "deny":
+        _emit("deny", "\n".join(all_blocks))
+    elif decision == "ask":
         _emit("ask", "\n".join(all_asks))
 
     sys.exit(0)

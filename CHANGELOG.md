@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.0
+
+### Features
+- **Decision logging + `/ClaudeWatch:learn`.** Setting `CLAUDEWATCH_LOG` makes the engine append each decision (command, decision, matched rule reasons, timestamp, session, cwd) to a JSONL log. The new `/ClaudeWatch:learn` skill aggregates that log via `scripts/analyze-decisions.py` (read-only, stdlib-only) into a batch of proposed permission changes — promote frequently-allowed commands to your allow list, add `except` clauses to noisy ask rules, and surface blocks that may be in your way — so accumulated prompts are vetted once rather than per command. It works from the hook's own decisions (allowed / asked / blocked) rather than heuristically scanning transcripts. Logging is an opt-in side channel that does not affect the decision (see `SPEC.md` `[LOG-01]`–`[LOG-04]`, `[SK-13]`–`[SK-17]`).
+- Each record also captures the active `permission_mode`. Since the `PreToolUse` hook runs before the permission-mode check, ClaudeWatch's `deny`/`ask` still take effect under `auto` mode — and `/ClaudeWatch:learn` reports `by_mode` and a per-candidate `auto_executed` count, so under auto mode it doubles as an audit of what ran unattended.
+
+### Other
+- `SPEC.md`: new `LOG` category and `[LOG-01]`–`[LOG-04]`; `/ClaudeWatch:learn` recorded in `[SK-13]`–`[SK-17]`. `AGENTS.md` clarifies the determinism contract covers the decision, with logging confined to `_log_event`. Engine logging is exercised by `tests/test-logging.sh`; the analyzer by `tests/test-analyze.sh`.
+
 ## 0.8.0
 
 ### Features

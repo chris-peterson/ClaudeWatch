@@ -47,6 +47,17 @@ Broadening the allowlist is safe because a hook decision outranks an `allow` rul
 
 `watch-aws` leans on this. Unlike the interpreter sets — which stay silent on most commands and only block destructive variants — it *asks* on most `aws` commands and stays silent only on read-only ops (`get-`/`list-`/`describe-`/`head-`, `s3 ls`). `Bash(aws *)` is what makes those reads frictionless; without it they still hit Claude Code's default prompt. Mutations still prompt and destructive ops (`delete-`, `terminate-`, `s3 rm`, …) are still blocked, because the hook's decision wins over the allow rule.
 
+### Discovering what to allow (`/ClaudeWatch:learn`)
+
+Deciding *which* patterns to add to the allowlist is itself the chore. Set `CLAUDEWATCH_LOG` in the hook environment and the engine appends each decision to a JSONL log:
+
+```jsonc
+// settings.json — the ClaudeWatch hook's env
+{ "env": { "CLAUDEWATCH_LOG": "~/.claude/claudewatch/decisions.jsonl" } }
+```
+
+Then `/ClaudeWatch:learn` aggregates the log into a batch proposal: frequently-allowed commands that aren't in your allowlist yet (promote them), ask rules you keep approving (add an `except`), and blocks that may be in your way. `scripts/analyze-decisions.py` does the read-only analysis; the skill drives the per-item approval. Because it works from the hook's own decisions rather than scanning transcripts heuristically, it distinguishes allowed / asked / blocked instead of guessing what looks read-only. You vet a window's worth of prompts once instead of one at a time.
+
 ## The `\n#` gate (and how to work around it)
 
 Claude Code's built-in Bash input analyzer flags `\n#` (a newline followed by `#`) inside a quoted argument as potentially hiding arguments from path validation. The gate fires **before** any plugin hook runs, so ClaudeWatch never gets a chance to auto-approve. Agents that habitually write multi-line `python3 -c "..."` or `node -e "..."` scripts with embedded `#` comments will get a permission prompt every single invocation, regardless of the allowlist above.

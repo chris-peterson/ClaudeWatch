@@ -49,10 +49,11 @@ Broadening the allowlist is safe because a hook decision outranks an `allow` rul
 
 ### Discovering what to allow (`/ClaudeWatch:learn`)
 
-Deciding *which* patterns to add to the allowlist is itself the chore. Set `CLAUDEWATCH_LOG` in the hook environment and the engine appends each decision to a JSONL log:
+Deciding *which* patterns to add to the allowlist is itself the chore. The engine appends each decision to a JSONL log by default, at `~/.claude/claudewatch/decisions.jsonl` — no setup needed. To log elsewhere, point `CLAUDEWATCH_LOG` at a path; to opt out, set it to `off` (which also disables `/ClaudeWatch:learn`, since it has nothing to read without the log):
 
 ```jsonc
-// settings.json — the ClaudeWatch hook's env
+// settings.json — the ClaudeWatch hook's env. Optional: override the default
+// path, or set "off" to disable logging (and with it, /ClaudeWatch:learn).
 { "env": { "CLAUDEWATCH_LOG": "~/.claude/claudewatch/decisions.jsonl" } }
 ```
 

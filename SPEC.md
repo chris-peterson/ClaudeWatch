@@ -18,7 +18,7 @@ Requirement IDs use `[XX-NN]`. Categories:
 - **RS** — Rule sets (file format, discovery)
 - **RL** — Rules (block, ask, except)
 - **OUT** — Output decisions
-- **LOG** — Decision logging (opt-in side channel)
+- **LOG** — Decision logging (on by default, opt-out side channel)
 - **HK** — Hook wiring
 - **EXT** — Extensibility
 - **SK** — Skills (`/ClaudeWatch:help`, `/ClaudeWatch:rules`, `/ClaudeWatch:learn`)
@@ -60,12 +60,13 @@ post-edit file content).
 
 ### Decision logging (LOG)
 
-Logging is an opt-in side channel that records each decision for later review
-(see [SK-13]–[SK-17]). It is separable from the decision: the engine's output
-is identical whether or not logging is enabled.
+Logging records each decision for later review (see [SK-13]–[SK-17]) and is on
+by default — the decision log is the input the `/ClaudeWatch:learn` workflow
+reads. It is separable from the decision: the engine's output is identical
+whether or not logging is enabled.
 
-- **[LOG-01]** Where the `CLAUDEWATCH_LOG` environment variable is set to a non-empty value, the engine shall append one JSON record per evaluated input to that path. The literal value `1` shall select the default path `~/.claude/claudewatch/decisions.jsonl`.
-- **[LOG-02]** When `CLAUDEWATCH_LOG` is unset or empty, the engine shall write no log, and its decision and exit behavior shall be unchanged.
+- **[LOG-01]** By default — when `CLAUDEWATCH_LOG` is unset, or set to `1`/`true`/`on`/`yes` (case-insensitive) — the engine shall append one JSON record per evaluated input to the default path `~/.claude/claudewatch/decisions.jsonl`. Where `CLAUDEWATCH_LOG` is set to any other non-disabling value, the engine shall treat it as the destination path and append records there.
+- **[LOG-02]** Where `CLAUDEWATCH_LOG` is set to `off`, `0`, `false`, `none`, or the empty string (case-insensitive), the engine shall write no log, and its decision and exit behavior shall be unchanged. This is the opt-out.
 - **[LOG-03]** Each log record shall include the decision (`allow`/`ask`/`deny`), the matched rule reasons, a UTC timestamp, and the `session_id`, `cwd`, and active `permission_mode` from the hook input. For a `Bash` input the record shall include the command string; for a `Write`/`Edit` input it shall include the target file path rather than the file content.
 - **[LOG-04]** Logging shall not influence the decision and shall not change the process exit code. If a log write fails, then the engine shall report the failure to stderr and otherwise continue, still emitting its decision.
 
@@ -152,7 +153,7 @@ The learn skill aggregates the decision log ([LOG-01]–[LOG-04]) into a batch
 of proposed permission changes, so the user vets accumulated prompts once
 rather than per command.
 
-- **[SK-13]** Where the user invokes `/ClaudeWatch:learn`, the skill shall analyze the decision log and present its proposals. If no log exists, the skill shall instruct the user how to enable `CLAUDEWATCH_LOG` and shall make no changes.
+- **[SK-13]** Where the user invokes `/ClaudeWatch:learn`, the skill shall analyze the decision log and present its proposals. If no log exists, the skill shall make no changes and shall report why: when logging is disabled (`CLAUDEWATCH_LOG` set to an opt-out value per [LOG-02]) it shall warn that disabling logging disables `/ClaudeWatch:learn` and explain how to re-enable; otherwise (logging on by default, but no records yet) it shall explain that no sessions have run with the hook active.
 - **[SK-14]** The skill shall present three groups: **allow candidates** (frequently-allowed commands not covered by the current allow list), **ask candidates** (commands ClaudeWatch repeatedly asks about, with the matched rule), and a **deny summary** (blocked commands grouped by reason, informational).
 - **[SK-15]** The skill shall accept an optional time window (e.g. `--since 1d`) and forward it to the analysis.
 - **[SK-16]** Before writing any change, the skill shall present the exact edits and require explicit confirmation, and shall apply only the items the user approves.
@@ -228,9 +229,10 @@ These describe how the current implementation satisfies the spec. They are
 - The rules-skill ID convention strips the `watch-` prefix from the rule set
   name (e.g. `watch-git` → `git-block-01`).
 - Decision logging is implemented in `watchdog.py` as a single `_log_event`
-  call after the decision is computed, guarded by `CLAUDEWATCH_LOG`. The UTC
-  timestamp is the only clock in the script, and it is confined to the logging
-  side channel — the decision path remains clock-free and deterministic.
+  call after the decision is computed; it is on by default and `CLAUDEWATCH_LOG`
+  only redirects the path or opts out. The UTC timestamp is the only clock in
+  the script, and it is confined to the logging side channel — the decision path
+  remains clock-free and deterministic.
 - `/ClaudeWatch:learn` reads the log via `scripts/analyze-decisions.py`, a
   separate read-only, stdlib-only tool. The engine remains the only
   decision-making component; the analyzer never evaluates rules.

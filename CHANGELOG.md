@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.0
+
+### Features
+- **Decision logging is on by default.** The engine now writes `~/.claude/claudewatch/decisions.jsonl` with no setup, so `/ClaudeWatch:learn` has data to work from the first time you reach for it. `CLAUDEWATCH_LOG` shifts from an enable switch to an override: set it to a path to log elsewhere, or to `off` (also `0`/`false`/`none`/empty, case-insensitive) to opt out. Disabling it also disables `/ClaudeWatch:learn`, which has nothing to read without the log — the skill now warns loudly when it detects the opt-out, and distinguishes that from the on-but-no-records-yet case (see `SPEC.md` `[LOG-01]`–`[LOG-02]`, `[SK-13]`).
+
+### Other
+- The test harness sets `CLAUDEWATCH_LOG=off` for the suite so rule tests don't append to the real user log; `tests/test-logging.sh` covers default-on-when-unset and the opt-out values, and `tests/test-analyze.sh` covers the disabled-logging guidance. `scripts/analyze-decisions.py` resolves the log path the same way the engine does and reports the disabled vs. no-records-yet states distinctly.
+
 ## 0.9.0
 
 ### Features

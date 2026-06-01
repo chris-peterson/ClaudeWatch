@@ -17,10 +17,11 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 
 1. **Determinism.** Given the same command and the same `rules/` tree, the
    engine must always produce the same *decision*. No clocks, no randomness,
-   no network on the decision path. Decision logging (`CLAUDEWATCH_LOG`, see
-   [LOG-01]–[LOG-04]) is an opt-in side channel: it stamps a timestamp and
-   writes a file *after* the decision is computed, never feeding back into it.
-   Keep it that way — the clock stays in `_log_event`, not in `evaluate_rules`.
+   no network on the decision path. Decision logging (on by default, see
+   [LOG-01]–[LOG-04]; `CLAUDEWATCH_LOG=off` opts out) is a side channel: it
+   stamps a timestamp and writes a file *after* the decision is computed, never
+   feeding back into it. Keep it that way — the clock stays in `_log_event`, not
+   in `evaluate_rules`.
 2. **Exit code is always 0.** A non-zero exit blocks the host (Claude Code)
    from getting a useful decision. All errors are surfaced as `deny` decisions
    with explanatory messages.

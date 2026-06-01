@@ -2,8 +2,8 @@
 """
 analyze-decisions: turn a ClaudeWatch decision log into review proposals.
 
-Reads the JSONL written by watchdog.py when CLAUDEWATCH_LOG is set, groups
-records by command shape, cross-references the current Claude Code allow list,
+Reads the JSONL written by watchdog.py (on by default unless CLAUDEWATCH_LOG is
+off), groups records by command shape, cross-references the current Claude Code allow list,
 and emits a structured proposal the /ClaudeWatch:learn skill renders for
 batch approval.
 
@@ -211,8 +211,9 @@ def analyze(records, allow_prefixes, min_count, max_samples):
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze a ClaudeWatch decision log.")
-    parser.add_argument("--log", default=os.environ.get("CLAUDEWATCH_LOG") or DEFAULT_LOG,
-                        help="path to decisions.jsonl (default: $CLAUDEWATCH_LOG or %(default)s)")
+    parser.add_argument("--log", default=os.environ.get("CLAUDEWATCH_LOG"),
+                        help="path to decisions.jsonl (default: resolved from $CLAUDEWATCH_LOG, "
+                             f"else {DEFAULT_LOG})")
     parser.add_argument("--settings", default=DEFAULT_SETTINGS,
                         help="path to settings.json for the current allow list")
     parser.add_argument("--since", default=None,
@@ -223,8 +224,19 @@ def main():
                         help="max sample commands kept per group (default: 5)")
     args = parser.parse_args()
 
-    if args.log in ("1", "true", "True"):
+    # Resolve the log path the same way the engine does (watchdog.py _log_event):
+    # unset or an "on" token -> default path; an "off" token -> still look at the
+    # default path so the not-found guidance can explain that logging is disabled.
+    logging_disabled = False
+    if args.log is None:
         args.log = DEFAULT_LOG
+    else:
+        token = args.log.strip().lower()
+        if token in ("", "off", "0", "false", "none"):
+            logging_disabled = True
+            args.log = DEFAULT_LOG
+        elif token in ("1", "true", "on", "yes"):
+            args.log = DEFAULT_LOG
 
     cutoff = None
     if args.since:
@@ -237,13 +249,20 @@ def main():
     try:
         records = list(read_records(args.log, cutoff))
     except FileNotFoundError:
-        print(
-            f"analyze-decisions: no decision log at {os.path.expanduser(args.log)}\n"
-            "Enable logging by setting CLAUDEWATCH_LOG in the hook environment, e.g.\n"
-            '  "env": { "CLAUDEWATCH_LOG": "~/.claude/claudewatch/decisions.jsonl" }\n'
-            "in settings.json, then run some sessions before reviewing.",
-            file=sys.stderr,
-        )
+        if logging_disabled:
+            print(
+                "analyze-decisions: logging is disabled (CLAUDEWATCH_LOG is set to off).\n"
+                "Decision logging is on by default; remove the off setting from the hook\n"
+                "environment in settings.json to re-enable it, then run some sessions.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"analyze-decisions: no decision log at {os.path.expanduser(args.log)} yet.\n"
+                "Logging is on by default; this usually means no sessions have run with the\n"
+                "ClaudeWatch hook active. Run some sessions, then review.",
+                file=sys.stderr,
+            )
         sys.exit(2)
 
     allow_prefixes = load_allow_prefixes(args.settings)

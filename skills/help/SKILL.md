@@ -53,11 +53,15 @@ When a Bash invocation matches a rule, the hook emits one of:
 
 ## Reducing prompts (watch → learn → suggest)
 
-Set `CLAUDEWATCH_LOG` in the hook environment and the engine records each
-decision to a JSONL log. `/ClaudeWatch:learn` reads that log and proposes a
-batch of permission changes: promote frequently-allowed commands to your allow
-list, add `except` clauses to noisy ask rules, and surface blocks that may be
-in your way. You vet accumulated prompts once instead of per command.
+The engine records each decision to a JSONL log by default
+(`~/.claude/claudewatch/decisions.jsonl`). `/ClaudeWatch:learn` reads that log
+and proposes a batch of permission changes: promote frequently-allowed commands
+to your allow list, add `except` clauses to noisy ask rules, and surface blocks
+that may be in your way. You vet accumulated prompts once instead of per command.
+
+To log elsewhere, set `CLAUDEWATCH_LOG` to a path in the hook environment. To opt
+out, set it to `off` — but that also disables `/ClaudeWatch:learn`, which has
+nothing to read without the log.
 
 ```json
 { "env": { "CLAUDEWATCH_LOG": "~/.claude/claudewatch/decisions.jsonl" } }

@@ -13,9 +13,10 @@ Supports three tool inputs:
   the on-disk file plus tool_input.old_string -> tool_input.new_string
   substitution (target: file-content rules)
 
-When CLAUDEWATCH_LOG is set, each decision is appended to that path as a JSONL
-record — an opt-in side channel for the /ClaudeWatch:learn workflow that does
-not affect the decision itself.
+Each decision is appended as a JSONL record to ~/.claude/claudewatch/decisions.jsonl
+by default — the side channel the /ClaudeWatch:learn workflow reads. Set
+CLAUDEWATCH_LOG to a path to log elsewhere, or to "off" (also 0/false/none/empty)
+to disable it. Logging never affects the decision itself.
 """
 
 import glob
@@ -241,22 +242,32 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None):
     return blocks, asks
 
 
-def _log_event(data, input_kind, input_text, decision, matched):
-    """Append a decision record to the log when CLAUDEWATCH_LOG is set.
+DEFAULT_LOG_PATH = "~/.claude/claudewatch/decisions.jsonl"
+_LOG_OFF_VALUES = frozenset(("", "off", "0", "false", "none"))
+_LOG_DEFAULT_VALUES = frozenset(("1", "true", "on", "yes"))
 
-    Opt-in side channel for the `/ClaudeWatch:learn` workflow. It never
+
+def _log_event(data, input_kind, input_text, decision, matched):
+    """Append a decision record to the log unless logging is disabled.
+
+    The side channel the `/ClaudeWatch:learn` workflow reads. It never
     influences the decision (which stays a pure function of command + rules)
     and never changes the exit code. A log-write failure is reported to stderr
     and swallowed so the hook still returns its decision.
 
-    CLAUDEWATCH_LOG is the destination path; the literal value "1" selects the
-    default path ~/.claude/claudewatch/decisions.jsonl.
+    Destination resolution (case-insensitive) of CLAUDEWATCH_LOG:
+      - unset, "1"/"true"/"on"/"yes" -> default path ~/.claude/claudewatch/decisions.jsonl
+      - "off"/"0"/"false"/"none"/"" -> logging disabled (this is the opt-out)
+      - anything else -> treated as the destination path
     """
-    dest = os.environ.get("CLAUDEWATCH_LOG")
-    if not dest:
-        return
-    if dest in ("1", "true", "True"):
-        dest = "~/.claude/claudewatch/decisions.jsonl"
+    raw = os.environ.get("CLAUDEWATCH_LOG")
+    if raw is None:
+        dest = DEFAULT_LOG_PATH
+    else:
+        token = raw.strip().lower()
+        if token in _LOG_OFF_VALUES:
+            return
+        dest = DEFAULT_LOG_PATH if token in _LOG_DEFAULT_VALUES else raw
     dest = os.path.expanduser(dest)
 
     from datetime import datetime, timezone

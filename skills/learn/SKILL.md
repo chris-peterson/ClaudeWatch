@@ -17,25 +17,41 @@ each one. It is the replacement for the generic transcript-scanning approach:
 it works from the hook's own decisions, so it knows what ClaudeWatch allowed,
 asked, and blocked — not just what looked read-only.
 
-## 0. Prerequisite: logging must be on
+## 0. Prerequisite: a decision log to learn from
 
-The hook only records when `CLAUDEWATCH_LOG` is set in its environment. Check
-whether a log exists:
+Logging is **on by default** — the hook writes to
+`~/.claude/claudewatch/decisions.jsonl` unless `CLAUDEWATCH_LOG` is set to an
+opt-out value (`off`, `0`, `false`, `none`, or empty). Two states block a learn
+pass; distinguish them before doing anything else.
+
+First, check whether logging has been turned off:
+
+```bash
+echo "CLAUDEWATCH_LOG=[${CLAUDEWATCH_LOG:-<unset>}]"
+```
+
+- **`off` / `0` / `false` / `none` / empty** — logging is **disabled**. Warn the
+  user **loudly** that disabling logging disables this skill: `/ClaudeWatch:learn`
+  has no data to work from and stays useless until logging is re-enabled. To
+  re-enable, remove the opt-out from the `env` block in their `settings.json`
+  (unset it, or set it back to the default path) and restart their sessions:
+
+  ```json
+  { "env": { "CLAUDEWATCH_LOG": "~/.claude/claudewatch/decisions.jsonl" } }
+  ```
+
+  Then stop — there is nothing to learn from until logging is back on and
+  sessions have run.
+
+Otherwise logging is on; check whether the log has any records yet:
 
 ```bash
 ls -la "${CLAUDEWATCH_LOG:-$HOME/.claude/claudewatch/decisions.jsonl}"
 ```
 
-If it does not exist, logging is off. Tell the user to add an `env` block to
-the ClaudeWatch hook environment (user `settings.json`) and restart their
-sessions:
-
-```json
-{ "env": { "CLAUDEWATCH_LOG": "~/.claude/claudewatch/decisions.jsonl" } }
-```
-
-Then stop — there is nothing to learn from until sessions have run with logging
-on.
+If the file does not exist, logging is on but no sessions have run with the hook
+active yet. Tell the user to run some sessions, then stop — there is nothing to
+learn from until then.
 
 ## 1. Run the analyzer
 

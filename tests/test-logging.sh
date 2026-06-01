@@ -63,17 +63,35 @@ else
 fi
 rm -f "$LOGFILE"
 
-echo "--- no log written when CLAUDEWATCH_LOG is unset ---"
-NOLOG=$(mktemp -u /tmp/cw-nolog.XXXXXX.jsonl)
+echo "--- logging is on by default: unset CLAUDEWATCH_LOG writes the default path ---"
+# Sandbox HOME to a tmp dir so the default path (~/.claude/claudewatch/...)
+# resolves there instead of the real user log. env -u drops the harness's
+# exported CLAUDEWATCH_LOG=off so the engine sees it as unset.
+HOMEDIR=$(mktemp -d /tmp/cw-home.XXXXXX)
+DEFAULT_LOG="$HOMEDIR/.claude/claudewatch/decisions.jsonl"
 TOTAL=$((TOTAL + 1))
-# env -u guards against an exported CLAUDEWATCH_LOG leaking in from the parent shell.
 echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' \
-  | env -u CLAUDEWATCH_LOG python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
-if [ ! -e "$NOLOG" ]; then
-  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: no log file created when env unset"
+  | env -u CLAUDEWATCH_LOG HOME="$HOMEDIR" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+if [ -s "$DEFAULT_LOG" ]; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: default-path log written when env unset"
 else
-  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: no log file created when env unset"
-  rm -f "$NOLOG"
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: default-path log written when env unset"
 fi
+rm -rf "$HOMEDIR"
+
+echo "--- opt-out: CLAUDEWATCH_LOG=off writes no log ---"
+for off_value in off 0 false none ""; do
+  HOMEDIR=$(mktemp -d /tmp/cw-off.XXXXXX)
+  DEFAULT_LOG="$HOMEDIR/.claude/claudewatch/decisions.jsonl"
+  TOTAL=$((TOTAL + 1))
+  echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' \
+    | CLAUDEWATCH_LOG="$off_value" HOME="$HOMEDIR" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+  if [ ! -e "$DEFAULT_LOG" ]; then
+    PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: no log written for CLAUDEWATCH_LOG='${off_value}'"
+  else
+    FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: no log written for CLAUDEWATCH_LOG='${off_value}'"
+  fi
+  rm -rf "$HOMEDIR"
+done
 
 print_results

@@ -23,7 +23,7 @@ spot; broader clusters cite the file and its tests.
 | EN-01..EN-13 | Engine lifecycle, IO, tool dispatch, error handling | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.py:335` |
 | EN-05a | No-arg fallback to `../rules` | Covered | `scripts/watchdog.py:343-346` |
-| LOG-01..LOG-04 | Opt-in decision logging side channel | Covered | `scripts/watchdog.py` (`_log_event`, guarded by `CLAUDEWATCH_LOG`) + `tests/test-engine.sh` |
+| LOG-01..LOG-04 | Decision logging side channel (on by default, `CLAUDEWATCH_LOG=off` to opt out) | Covered | `scripts/watchdog.py` (`_log_event`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | RL-01..RL-14 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | OUT-01..OUT-05 | Output decisions, formatting, aggregation, allow-by-default | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |

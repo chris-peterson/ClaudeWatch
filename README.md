@@ -78,7 +78,7 @@ Coverage is preserved: ClaudeWatch's `Write` and `Edit` hooks run the same `targ
 ## Installation
 
 ```bash
-claude plugin marketplace add https://github.com/chris-peterson/claude-marketplace
+claude plugin marketplace add chris-peterson/claude-marketplace
 claude plugin install ClaudeWatch@chris-peterson
 ```
 

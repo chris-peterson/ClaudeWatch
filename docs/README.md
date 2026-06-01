@@ -49,8 +49,8 @@ presents a confirmation dialog --
 ## Installation
 
 ```bash
-claude plugin marketplace add https://github.com/chris-peterson/claude-marketplace
-claude plugin install ClaudeWatch
+claude plugin marketplace add chris-peterson/claude-marketplace
+claude plugin install ClaudeWatch@chris-peterson
 ```
 
 Or load directly for a single session:

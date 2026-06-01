@@ -4,14 +4,9 @@ A Claude Code plugin that enforces command safety rules via a `PreToolUse` hook.
 
 Claude Code's built-in permission system uses naive string matching that [fails for compound commands, heredocs, and flag reordering](https://github.com/anthropics/claude-code/issues/30519). A block rule on `git push --force` won't catch `git push -f`. A block rule on `git commit` won't fire when the command is `git add . && git commit -m "oops"`.
 
-`ClaudeWatch` solves this by intercepting every `Bash` tool call and matching against regex rules loaded from YAML config files. The engine auto-discovers all `*.yml` files in the `rules/` directory and ships four rule sets:
+`ClaudeWatch` solves this by intercepting every `Bash` tool call and matching against regex rules loaded from YAML config files. The engine auto-discovers all `*.yml` files in the `rules/` directory. Each file is a *rule set* — a group of patterns guarding one domain (git, secrets, package installs, and so on) — so adding protection for a new domain means dropping in another YAML file, with no engine change.
 
-| Rule set | What it guards |
-| --- | --- |
-| **watch-files** | rm -rf /, chmod 777, shred, mv /dev/null (block); rm -rf, recursive chmod/chown (ask) |
-| **watch-git** | Force push, branch -D, and other destructive git ops (block); add, commit, push, reset --hard, force-with-lease, and other mutating ops (ask) |
-| **watch-installs** | curl\|sh, global installs, sudo pip/apt (block); npm install, yarn add, pip install, and other dependency changes (ask) |
-| **watch-secrets** | cat SSH keys, cloud credentials, echo secrets (block); cat dotfiles, .env files, env/printenv (ask) |
+The shipped rule sets, and the exact commands each one blocks or asks about, are enumerated on the [default rules](/rules) page, generated directly from the rules YAML.
 
 For each matched command:
 

@@ -142,6 +142,35 @@ def read_records(log_path, cutoff):
             yield rec
 
 
+def summarize_window(records):
+    """Describe the slice of history the proposals are drawn from.
+
+    Returns the distinct-session count and the oldest/newest timestamps with
+    the span between them in days, so the skill can state how much history
+    backs its suggestions (SK-18). Records without a parseable `ts` contribute
+    to the session count but not the span.
+    """
+    sessions = {rec.get("session") for rec in records if rec.get("session")}
+    timestamps = []
+    for rec in records:
+        ts = rec.get("ts")
+        if not ts:
+            continue
+        try:
+            timestamps.append(datetime.fromisoformat(ts))
+        except ValueError:
+            continue
+    oldest = min(timestamps) if timestamps else None
+    newest = max(timestamps) if timestamps else None
+    span_days = round((newest - oldest).total_seconds() / 86400, 2) if oldest else None
+    return {
+        "distinct_sessions": len(sessions),
+        "oldest_ts": oldest.isoformat() if oldest else None,
+        "newest_ts": newest.isoformat() if newest else None,
+        "span_days": span_days,
+    }
+
+
 def analyze(records, allow_prefixes, min_count, max_samples):
     allow_groups = defaultdict(lambda: {"count": 0, "samples": [], "cwds": set(), "pattern": None, "auto": 0})
     ask_groups = defaultdict(lambda: {"count": 0, "samples": [], "reasons": set()})
@@ -272,6 +301,7 @@ def main():
         "records_considered": len(records),
         "since": args.since,
         "min_count": args.min_count,
+        **summarize_window(records),
     }
     print(json.dumps(result, indent=2))
 

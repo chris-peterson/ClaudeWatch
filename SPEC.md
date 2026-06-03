@@ -158,6 +158,8 @@ rather than per command.
 - **[SK-15]** The skill shall accept an optional time window (e.g. `--since 1d`) and forward it to the analysis.
 - **[SK-16]** Before writing any change, the skill shall present the exact edits and require explicit confirmation, and shall apply only the items the user approves.
 - **[SK-17]** The skill shall apply approved allow-list additions to a `settings.json` whose scope (user or project) the user selects, shall route rule changes (`except` additions, demotions) through `/ClaudeWatch:rules`, and shall not modify deny-summary items automatically.
+- **[SK-18]** The analysis shall report the window its proposals are drawn from: the number of decision records considered, the count of distinct sessions among them, and the time span from the oldest to the newest record. The skill shall surface this so the user can weigh how much history backs the suggestions.
+- **[SK-19]** The skill shall offer to reset the decision log after the user has applied their chosen changes, so that the next analysis measures from the post-change baseline rather than re-surfacing already-dispositioned commands. Reset shall **archive** the current log by default — moving it to a fixed user directory (`~/.claude/claudewatch/archive/`, beside the durable log per [LOG-01]) so the prior history is recoverable — and shall support a `--hard` mode that deletes it outright. Where logging is disabled ([LOG-02]) or no log exists, reset shall make no change and shall report why. Reset shall report what it cleared (record count and span).
 
 ## 8. Documentation (DOC)
 

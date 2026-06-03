@@ -23,14 +23,14 @@ EOF
 #   git commit  x3  ask                       -> except_candidate
 #   force push  x2  deny                      -> deny_summary
 cat > "$LOG" <<'EOF'
-{"ts":"2026-05-31T10:00:00+00:00","decision":"allow","tool":"Bash","mode":"auto","command":"gh pr view 1","cwd":"/a"}
+{"ts":"2026-05-31T10:00:00+00:00","session":"s1","decision":"allow","tool":"Bash","mode":"auto","command":"gh pr view 1","cwd":"/a"}
 {"ts":"2026-05-31T10:01:00+00:00","decision":"allow","tool":"Bash","mode":"auto","command":"gh pr view 2","cwd":"/a"}
 {"ts":"2026-05-31T10:02:00+00:00","decision":"allow","tool":"Bash","mode":"auto","command":"gh pr view 3","cwd":"/b"}
 {"ts":"2026-05-31T10:03:00+00:00","decision":"allow","tool":"Bash","mode":"default","command":"gh pr view 4","cwd":"/b"}
 {"ts":"2026-05-31T10:04:00+00:00","decision":"allow","tool":"Bash","command":"jq .x a.json","cwd":"/a"}
 {"ts":"2026-05-31T10:05:00+00:00","decision":"allow","tool":"Bash","command":"jq .y b.json","cwd":"/a"}
 {"ts":"2026-05-31T10:06:00+00:00","decision":"allow","tool":"Bash","command":"jq .z c.json","cwd":"/a"}
-{"ts":"2026-05-31T10:07:00+00:00","decision":"ask","tool":"Bash","command":"git commit -m a","matched":["watch-git — git commit"],"cwd":"/a"}
+{"ts":"2026-05-31T10:07:00+00:00","session":"s2","decision":"ask","tool":"Bash","command":"git commit -m a","matched":["watch-git — git commit"],"cwd":"/a"}
 {"ts":"2026-05-31T10:08:00+00:00","decision":"ask","tool":"Bash","command":"git commit -m b","matched":["watch-git — git commit"],"cwd":"/a"}
 {"ts":"2026-05-31T10:09:00+00:00","decision":"ask","tool":"Bash","command":"git commit -m c","matched":["watch-git — git commit"],"cwd":"/a"}
 {"ts":"2026-05-31T10:10:00+00:00","decision":"deny","tool":"Bash","command":"git push --force origin main","matched":["watch-git — force push"],"cwd":"/a"}
@@ -61,6 +61,12 @@ assert_json "gh pr view shows 3 auto-executed of 4" \
   "any(c['shape']=='gh pr view' and c['auto_executed']==3 for c in d['allow_candidates'])"
 assert_json "by_mode tallies auto and default" \
   "d['by_mode'].get('auto')==3 and d['by_mode'].get('default')==1"
+assert_json "meta reports distinct sessions (s1, s2)" \
+  "d['meta']['distinct_sessions']==2"
+assert_json "meta reports the oldest and newest record ts" \
+  "d['meta']['oldest_ts']=='2026-05-31T10:00:00+00:00' and d['meta']['newest_ts']=='2026-05-31T10:11:00+00:00'"
+assert_json "meta reports the span in days" \
+  "d['meta']['span_days']==0.01"
 assert_json "allow-listed jq is suppressed" \
   "all(c['shape']!='jq' for c in d['allow_candidates'])"
 assert_json "git commit is an except candidate (count 3)" \

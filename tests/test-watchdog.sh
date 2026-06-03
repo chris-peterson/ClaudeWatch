@@ -12,7 +12,7 @@ echo "========================================"
 echo "  claude-watchdog tests"
 echo "========================================"
 
-for test_file in "$SCRIPT_DIR"/test-watch-*.sh "$SCRIPT_DIR"/test-engine.sh "$SCRIPT_DIR"/test-logging.sh "$SCRIPT_DIR"/test-analyze.sh; do
+for test_file in "$SCRIPT_DIR"/test-watch-*.sh "$SCRIPT_DIR"/test-engine.sh "$SCRIPT_DIR"/test-logging.sh "$SCRIPT_DIR"/test-analyze.sh "$SCRIPT_DIR"/test-reset-decisions.sh; do
   echo ""
   if bash "$test_file"; then
     :

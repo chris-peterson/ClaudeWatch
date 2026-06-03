@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.0
+
+### Features
+- **`/ClaudeWatch:learn` reports its window and can reset the log.** The analysis now leads with how much history backs it — record count, distinct sessions, and the span from oldest to newest decision (`meta.distinct_sessions`, `meta.oldest_ts`/`newest_ts`, `meta.span_days`) — so thin windows are visible rather than implied. After changes are applied, the skill offers to reset the log via the new `scripts/reset-decisions.py`, which **archives** the current log to `~/.claude/claudewatch/archive/` by default (recoverable, matching the "block is for no-recovery" ethos) or deletes it with `--hard`. Resetting starts the next pass from the post-change baseline instead of re-surfacing commands you just dispositioned (see `SPEC.md` `[SK-18]`–`[SK-19]`).
+
+### Other
+- `tests/test-analyze.sh` asserts the window fields; new `tests/test-reset-decisions.sh` covers archive, `--hard`, logging-disabled, and missing-log paths. `reset-decisions.py` resolves the log path the same way the engine does.
+
 ## 0.11.0
 
 ### Features

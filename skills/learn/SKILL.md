@@ -68,7 +68,14 @@ recur before it is proposed; `--settings PATH` points at a different
 
 ## 2. Present the three buckets
 
-Render the JSON as three tables. Lead with the one that removes the most
+Open with the window the proposals are drawn from, so the user can weigh how
+much history backs them. Read it from `meta`: `records_considered`,
+`distinct_sessions`, and `span_days` (plus `oldest_ts`/`newest_ts`). State it in
+one line — e.g. *"Based on 1,650 decisions across 23 sessions over 2.1 days
+(2026-06-01 → 2026-06-03)."* A short span or few sessions means the suggestions
+are thin; say so.
+
+Then render the JSON as three tables. Lead with the one that removes the most
 prompts.
 
 - **Allow candidates** — commands ClaudeWatch already allows that are *not*
@@ -117,6 +124,27 @@ for `/ClaudeWatch:rules` (demote block → ask) or a spec discussion — not a
 side effect of a learn pass. A frequently-allowed but consequential command in
 the *allow* bucket (e.g. `terraform apply`) is the inverse signal: a coverage
 gap where a new ask rule may belong.
+
+## 6. Offer to reset the log
+
+Once the approved changes are applied, offer to reset the decision log. This is
+the *adjust, then reset* loop: after you promote commands to the allow list or
+change a rule, the accumulated history keeps re-surfacing those same commands on
+the next pass. Resetting starts the next window from the post-change baseline,
+so the next learn measures only what the new configuration still prompts on.
+
+Reset **archives** by default — it moves the log to
+`~/.claude/claudewatch/archive/decisions-<timestamp>.jsonl`, so prior history is
+recoverable — and reports what it cleared:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/reset-decisions.py"
+```
+
+Pass `--hard` to delete the log outright instead of archiving it. Only offer
+reset after changes are applied — a reset before the user has dispositioned the
+buckets throws away the very data this pass is built on. If the user applied
+nothing, leave the log alone.
 
 ## Auto mode
 

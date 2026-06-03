@@ -36,21 +36,20 @@ echo "--- block: reflog expire/delete ---"
 t "expire"              block '{"tool_name":"Bash","tool_input":{"command":"git reflog expire --expire=now --all"}}'
 t "delete"              block '{"tool_name":"Bash","tool_input":{"command":"git reflog delete HEAD@{2}"}}'
 
-echo "--- ask: add ---"
-t "add file"            ask   '{"tool_name":"Bash","tool_input":{"command":"git add src/main.rs"}}'
-t "add ."               ask   '{"tool_name":"Bash","tool_input":{"command":"git add ."}}'
+echo "--- allow: stage manipulation ---"
+t "add file"            allow '{"tool_name":"Bash","tool_input":{"command":"git add src/main.rs"}}'
+t "add ."               allow '{"tool_name":"Bash","tool_input":{"command":"git add ."}}'
+t "rm file"             allow '{"tool_name":"Bash","tool_input":{"command":"git rm README.md"}}'
+t "rm -r dir"           allow '{"tool_name":"Bash","tool_input":{"command":"git rm -r src/old-module"}}'
+t "rm --cached"         allow '{"tool_name":"Bash","tool_input":{"command":"git rm --cached src/secret.txt"}}'
+t "rm --cached -r"      allow '{"tool_name":"Bash","tool_input":{"command":"git rm --cached -r .claude/skills"}}'
+t "reset --soft"        allow '{"tool_name":"Bash","tool_input":{"command":"git reset --soft HEAD~1"}}'
+t "reset (mixed)"       allow '{"tool_name":"Bash","tool_input":{"command":"git reset HEAD~1"}}'
 
-echo "--- ask: rm ---"
-t "rm file"             ask   '{"tool_name":"Bash","tool_input":{"command":"git rm README.md"}}'
-t "rm -r dir"           ask   '{"tool_name":"Bash","tool_input":{"command":"git rm -r src/old-module"}}'
-t "rm --cached"         ask   '{"tool_name":"Bash","tool_input":{"command":"git rm --cached src/secret.txt"}}'
-t "rm --cached -r"      ask   '{"tool_name":"Bash","tool_input":{"command":"git rm --cached -r .claude/skills"}}'
-
-echo "--- ask: reset ---"
-t "reset --soft"        ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --soft HEAD~1"}}'
-t "reset (mixed)"       ask   '{"tool_name":"Bash","tool_input":{"command":"git reset HEAD~1"}}'
+echo "--- ask: reset --hard (boundary vs allowed non-hard reset) ---"
 t "reset --hard"        ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --hard"}}'
 t "reset --hard HEAD~3" ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --hard HEAD~3"}}'
+t "reset --hard=no"     ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --hard=no"}}'
 
 echo "--- ask: commit ---"
 t "commit -m"           ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"fix: update readme\""}}'
@@ -103,10 +102,12 @@ t "-C path reset --hard"              ask   '{"tool_name":"Bash","tool_input":{"
 t '-C "/with space" reset --hard'     ask   '{"tool_name":"Bash","tool_input":{"command":"git -C \"/tmp/has space\" reset --hard"}}'
 t "-C '/space' push --force-with-lease" ask '{"tool_name":"Bash","tool_input":{"command":"git -C '"'"'/tmp/has space'"'"' push --force-with-lease"}}'
 t "-C path commit -m x"               ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo commit -m hi"}}'
-t "-c key=val add ."                  ask   '{"tool_name":"Bash","tool_input":{"command":"git -c user.name=x add ."}}'
-t "-C path rm file"                   ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo rm README.md"}}'
-t "-C path rm --cached file"          ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo rm --cached secret.txt"}}'
 t "-C path stash"                     ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo stash"}}'
+
+echo "--- allow: stage manipulation with git global flags ---"
+t "-c key=val add ."                  allow '{"tool_name":"Bash","tool_input":{"command":"git -c user.name=x add ."}}'
+t "-C path rm file"                   allow '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo rm README.md"}}'
+t "-C path rm --cached file"          allow '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo rm --cached secret.txt"}}'
 
 echo "--- allow: not git ---"
 t "non-git command"     allow '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'

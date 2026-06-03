@@ -44,30 +44,10 @@ rules:
       ref: https://git-scm.com/docs/git-reflog#Documentation/git-reflog.txt-expire
 
   ask:
-    - name: git add
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+add(\s|$)'
-      reason: stages files for commit
-      ref: https://git-scm.com/docs/git-add
-
-    - name: git rm
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+rm\b(?!.*--cached)'
-      reason: deletes file from disk and stages its removal
-      ref: https://git-scm.com/docs/git-rm
-
-    - name: git rm --cached
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+rm\s.*--cached'
-      reason: removes file from index without deleting from disk
-      ref: https://git-scm.com/docs/git-rm
-
     - name: git reset --hard
       pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+reset\s.*--hard'
       reason: discards uncommitted changes with no recovery
       ref: https://git-scm.com/docs/git-reset#Documentation/git-reset.txt---hard
-
-    - name: git reset
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+reset(?!\s.*--hard)(\s|$)'
-      reason: modifies index or moves HEAD
-      ref: https://git-scm.com/docs/git-reset
 
     - name: git commit
       pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+commit(\s|$)'

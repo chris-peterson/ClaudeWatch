@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.0
+
+### Features
+- **`watch-git` no longer asks on stage manipulation.** The `git add`, `git rm`, `git rm --cached`, and non-hard `git reset` ask rules are removed — staging is recoverable (unstage, re-add, restore from HEAD), so prompting on it is noise on top of the commit prompt. `git reset --hard` keeps its ask: it discards uncommitted working-tree changes, which is beyond stage manipulation. Block rules and the remaining ask rules (`commit`, `stash`, `push`, `--force-with-lease`) are unchanged (see `SPEC.md` `[SH-01]`).
+
 ## 0.10.0
 
 ### Features

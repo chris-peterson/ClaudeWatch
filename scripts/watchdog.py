@@ -17,6 +17,12 @@ Each decision is appended as a JSONL record to ~/.claude/claudewatch/decisions.j
 by default — the side channel the /ClaudeWatch:learn workflow reads. Set
 CLAUDEWATCH_LOG to a path to log elsewhere, or to "off" (also 0/false/none/empty)
 to disable it. Logging never affects the decision itself.
+
+The permission-prompt reason reads `<rule>: <reason>`, where the reason prose
+is a clickable OSC 8 terminal hyperlink to the rule's `ref` — so the verbose
+URL stays out of the line. Set CLAUDEWATCH_HYPERLINKS to "off" (also
+0/false/none/empty) to keep the plain `— <url>` form instead. The logged
+reasons stay plain text regardless.
 """
 
 import glob
@@ -154,11 +160,70 @@ def parse_rules_yml(path):
     return result
 
 
-def _message(label, rule):
-    parts = [label, rule["reason"]]
-    if rule.get("ref"):
-        parts.append(rule["ref"])
-    return " — ".join(parts)
+def _violation(rule):
+    """A matched violation as structured data.
+
+    `prefix` is the rule's `name` (the rule-set name is redundant once the
+    reason links to the ref, so it's dropped); `reason` is the human prose;
+    `ref` is the doc URL (or "" when absent). Keeping them apart lets the
+    prompt make the *prose* the hyperlink while the log stays plain
+    (`_message_plain`).
+    """
+    return {"prefix": rule.get("name") or "", "reason": rule["reason"], "ref": rule.get("ref") or ""}
+
+
+def _error_violation(text):
+    """A configuration/load error surfaced as a deny: no prefix, no ref."""
+    return {"prefix": "", "reason": text, "ref": ""}
+
+
+def _message_plain(v):
+    """Canonical one-line message: `<prefix>: <reason>[ — <ref>]`.
+
+    This is what gets written to the decision log, so the `/ClaudeWatch:learn`
+    side channel always reads plain text — never escape sequences.
+    """
+    head = f"{v['prefix']}: {v['reason']}" if v["prefix"] else v["reason"]
+    return f"{head} — {v['ref']}" if v["ref"] else head
+
+
+_OSC8 = "\x1b]8;;"
+_ST = "\x1b\\"
+
+
+def _hyperlink(url, text):
+    """Wrap `text` in an OSC 8 terminal hyperlink pointing at `url`."""
+    return f"{_OSC8}{url}{_ST}{text}{_OSC8}{_ST}"
+
+
+_HYPERLINKS_OFF_VALUES = frozenset(("off", "0", "false", "none", ""))
+
+
+def _hyperlinks_enabled():
+    """Whether the displayed reason renders refs as terminal hyperlinks.
+
+    On by default. Set CLAUDEWATCH_HYPERLINKS to off/0/false/none/empty
+    (case-insensitive) to fall back to the plain `— <url>` form — for
+    terminals without OSC 8 support or anyone who prefers the bare URL.
+    """
+    raw = os.environ.get("CLAUDEWATCH_HYPERLINKS")
+    if raw is None:
+        return True
+    return raw.strip().lower() not in _HYPERLINKS_OFF_VALUES
+
+
+def _message_display(v, hyperlinks):
+    """The reason line shown in the permission prompt.
+
+    With hyperlinks on and a ref present, the reason prose itself becomes the
+    clickable link to the ref — so it reads `<prefix>: <prose>` with the prose
+    clickable — keeping the verbose URL out of the line. Otherwise it matches
+    the plain log form.
+    """
+    if hyperlinks and v["ref"]:
+        linked = _hyperlink(v["ref"], v["reason"])
+        return f"{v['prefix']}: {linked}" if v["prefix"] else linked
+    return _message_plain(v)
 
 
 def _rule_target(rule):
@@ -172,14 +237,14 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None):
     against. file_extension is the lowercase extension (including the dot) of
     the target file, used to filter rule sets for file-content inputs.
 
-    Returns (blocks, asks) — lists of violation message strings.
+    Returns (blocks, asks) — lists of violation dicts (see `_violation`).
     """
     blocks = []
     asks = []
     label = config.get("name") or "unknown"
 
     def _block(reason):
-        blocks.append(reason)
+        blocks.append(_error_violation(reason))
 
     if input_kind == "bash":
         filt = config.get("filter")
@@ -211,7 +276,7 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None):
             continue
         try:
             if re.search(rule["pattern"], input_text):
-                _block(_message(label, rule))
+                blocks.append(_violation(rule))
         except re.error as e:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid regex: {e}")
 
@@ -235,7 +300,7 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None):
                     except re.error as e:
                         _block(f"{label} — rule {rule.get('name', '?')!r} has invalid 'except' regex: {e}")
                         continue
-                asks.append(_message(label, rule))
+                asks.append(_violation(rule))
         except re.error as e:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid regex: {e}")
 
@@ -380,25 +445,25 @@ def main():
         try:
             config = parse_rules_yml(rule_file)
         except Exception as e:
-            all_blocks.append(f"watchdog: failed to load rules: {e}")
+            all_blocks.append(_error_violation(f"watchdog: failed to load rules: {e}"))
             continue
         blocks, asks = evaluate_rules(config, input_kind, input_text, file_extension)
         all_blocks.extend(blocks)
         all_asks.extend(asks)
 
     if all_blocks:
-        decision, matched = "deny", all_blocks
+        decision, chosen = "deny", all_blocks
     elif all_asks:
-        decision, matched = "ask", all_asks
+        decision, chosen = "ask", all_asks
     else:
-        decision, matched = "allow", []
+        decision, chosen = "allow", []
 
-    _log_event(data, input_kind, input_text, decision, matched)
+    # Log the canonical plain text; render hyperlinks only in the prompt.
+    _log_event(data, input_kind, input_text, decision, [_message_plain(v) for v in chosen])
 
-    if decision == "deny":
-        _emit("deny", "\n".join(all_blocks))
-    elif decision == "ask":
-        _emit("ask", "\n".join(all_asks))
+    if decision != "allow":
+        hyperlinks = _hyperlinks_enabled()
+        _emit(decision, "\n".join(_message_display(v, hyperlinks) for v in chosen))
 
     sys.exit(0)
 

@@ -43,8 +43,10 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 - **Make adding a rule set frictionless.** Drop a `watch-*.yml` file, add a
   test file, regenerate docs. No registration, no manifest, no engine change.
 - **Rules are documentation.** Every rule has a `reason` and (almost always) a
-  `ref` URL. The user-facing message is `<set> — <reason> — <ref>`. If you
-  can't articulate why a rule exists, don't add it.
+  `ref` URL. The canonical message is `<rule>: <reason> — <ref>` (logged
+  verbatim; the rule-set name is omitted since the `ref` link supplies it); in
+  the prompt the `<reason>` prose itself is the clickable link to `<ref>` (see
+  `[OUT-06]`). If you can't articulate why a rule exists, don't add it.
 - **Block is for "no recovery"; ask is for "permanent but recoverable".**
   `git push --force` blocks (overwrites remote history). `git commit` asks
   (you can amend or reset). When in doubt, prefer `ask` — block rules are

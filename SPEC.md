@@ -107,10 +107,11 @@ Rules are the matchable units within a rule set.
 The engine emits at most one decision per invocation.
 
 - **[OUT-01]** When emitting a decision, the engine shall write a single JSON object to stdout matching the Claude Code `hookSpecificOutput` schema with `hookEventName: "PreToolUse"` and `permissionDecision` set to `"deny"` or `"ask"`.
-- **[OUT-02]** When emitting a decision, the engine shall format each violation as `<rule-set-name> — <reason>` (with ` — <ref>` appended when `ref` is present).
+- **[OUT-02]** The engine shall format each violation canonically as `<rule-name>: <reason>` (just `<reason>` when the rule has no name), with ` — <ref>` appended when `ref` is present. The rule-set name is omitted — the `ref` link supplies that context. This canonical form is what the decision log records (`[LOG-03]`); the displayed reason may render it differently per `[OUT-06]`.
 - **[OUT-03]** When any block rule matches in any rule set, the engine shall emit a single `deny` decision aggregating all block reasons, separated by newlines.
 - **[OUT-04]** When no block rule matches and at least one ask rule matches in any rule set, the engine shall emit a single `ask` decision aggregating all ask reasons, separated by newlines.
 - **[OUT-05]** When no rule matches, the engine shall produce no stdout output (allow-by-default).
+- **[OUT-06]** In the `permissionDecisionReason` shown in the prompt — but not in the logged reasons (`[LOG-03]`) — when a violation carries a `ref`, the engine shall render the `<reason>` prose itself as an OSC 8 terminal hyperlink targeting the `ref` (so the line reads `<prefix>: <reason>` with the prose clickable), and shall omit the inline ` — <ref>` URL. Setting `CLAUDEWATCH_HYPERLINKS` (case-insensitively) to `off`/`0`/`false`/`none`/empty shall fall back to the canonical plain ` — <ref>` form; any other value, or unset, enables hyperlinks. Violations without a `ref` render identically in both modes.
 
 ## 5. Hook Wiring (HK)
 

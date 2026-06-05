@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.0
+
+### Features
+- **Permission prompts link the reason prose instead of printing the ref URL.** When an ask/block rule fires, the displayed reason reads `<rule>: <reason>` where the `<reason>` prose itself is a clickable OSC 8 terminal hyperlink to the rule's `ref` — so `git push --force: overwrites shared remote history` links to the docs, with the verbose URL dropped from the line. The rule-set name is omitted; the `ref` link supplies that context. Set `CLAUDEWATCH_HYPERLINKS` to `off` (also `0`/`false`/`none`/empty) to keep the plain `— <url>` form — for terminals without OSC 8 support or anyone who prefers the bare link. The decision log still records the canonical plain reason, so `/ClaudeWatch:learn` reads the same text as before (see `SPEC.md` `[OUT-02]`, `[OUT-06]`).
+
+### Other
+- New `tests/test-output.sh` covers the prose hyperlinking, the `CLAUDEWATCH_HYPERLINKS` opt-out, no-ref rules, and the plain-log guarantee.
+
 ## 0.12.0
 
 ### Features

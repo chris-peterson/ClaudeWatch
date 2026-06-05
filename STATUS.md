@@ -26,7 +26,7 @@ spot; broader clusters cite the file and its tests.
 | LOG-01..LOG-04 | Decision logging side channel (on by default, `CLAUDEWATCH_LOG=off` to opt out) | Covered | `scripts/watchdog.py` (`_log_event`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | RL-01..RL-14 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
-| OUT-01..OUT-05 | Output decisions, formatting, aggregation, allow-by-default | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
+| OUT-01..OUT-06 | Output decisions, formatting, aggregation, allow-by-default, ref hyperlinks (`CLAUDEWATCH_HYPERLINKS`) | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
 | HK-01 | PreToolUse hooks for Bash/Write/Edit | Covered | `hooks/hooks.json` |
 | HK-02 | SessionStart hook (no-op placeholder) | Covered | `hooks/hooks.json`, `hooks/cli-freshness.sh` |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |

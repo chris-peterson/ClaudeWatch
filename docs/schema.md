@@ -36,13 +36,15 @@ Identity of the rule set. Used as the label prefix in block/ask messages shown t
 name: watch-git
 ```
 
-When a rule fires, the message format is:
+When a rule fires, the canonical message format is:
 
-```
-<name> — <reason> — <ref>
+```text
+<rule>: <reason> — <ref>
 ```
 
-For example: `watch-git — overwrites shared remote history — https://git-scm.com/docs/git-push#...`
+For example: `git push --force: overwrites shared remote history — https://git-scm.com/docs/git-push#...`
+
+The rule-set name (`watch-git`) is left out — the `ref` link supplies that context. In the permission prompt the `<reason>` prose itself is a clickable terminal hyperlink (OSC 8) to the ref, and the verbose URL is dropped — so the line reads `git push --force: overwrites shared remote history` with the prose linking to the docs. Set `CLAUDEWATCH_HYPERLINKS=off` to keep the plain `— <ref>` form — for terminals without hyperlink support or anyone who prefers the bare link. The decision log always records the canonical plain form.
 
 ### `filter` (optional)
 

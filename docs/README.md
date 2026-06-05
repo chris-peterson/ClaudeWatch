@@ -6,7 +6,7 @@ Claude Code's built-in permission system uses naive string matching that [fails 
 
 `ClaudeWatch` solves this by intercepting every `Bash` tool call and matching against regex rules loaded from YAML config files. The engine auto-discovers all `*.yml` files in the `rules/` directory. Each file is a *rule set* — a group of patterns guarding one domain (git, secrets, package installs, and so on) — so adding protection for a new domain means dropping in another YAML file, with no engine change.
 
-The shipped rule sets, and the exact commands each one blocks or asks about, are enumerated on the [default rules](/rules) page, generated directly from the rules YAML.
+The shipped rule sets, and the exact commands each one blocks or asks about, are enumerated on the [rules](/rules) page, generated directly from the rules YAML.
 
 For each matched command:
 
@@ -14,7 +14,7 @@ For each matched command:
 - **Ask** — mutating operations require user confirmation
 
 > [!TIP]
-> See the [default rules](/rules) for the full list of protected commands.
+> See the [rules](/rules) for the full list of protected commands.
 
 ## Example
 
@@ -62,7 +62,7 @@ claude --plugin-dir ./ClaudeWatch
 
 ## Customization
 
-Rules are defined in YAML files under `rules/`. See the [default rules](/rules) reference.
+Rules are defined in YAML files under `rules/`. See the [rules](/rules) reference.
 
 > [!NOTE]
 > Use the `/ClaudeWatch:rules` skill to interactively view and edit rules.

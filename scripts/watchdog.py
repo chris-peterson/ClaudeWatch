@@ -18,11 +18,14 @@ by default — the side channel the /ClaudeWatch:learn workflow reads. Set
 CLAUDEWATCH_LOG to a path to log elsewhere, or to "off" (also 0/false/none/empty)
 to disable it. Logging never affects the decision itself.
 
-The permission-prompt reason reads `<rule>: <reason>`, where the reason prose
-is a clickable OSC 8 terminal hyperlink to the rule's `ref` — so the verbose
-URL stays out of the line. Set CLAUDEWATCH_HYPERLINKS to "off" (also
-0/false/none/empty) to keep the plain `— <url>` form instead. The logged
-reasons stay plain text regardless.
+The ask-prompt reason reads `<rule>: <reason>`, where the reason prose is a
+clickable OSC 8 terminal hyperlink to the rule's `ref` — so the verbose URL
+stays out of the line. Set CLAUDEWATCH_HYPERLINKS to "off" (also
+0/false/none/empty) to keep the plain `— <url>` form instead. Deny messages
+always use the plain `— <url>` form: Claude Code renders them through its error
+path, which strips OSC 8 without linking it. Deny messages also append the
+`[plugin:ClaudeWatch]` source tag that Claude Code shows on ask prompts but
+omits on deny errors. The logged reasons stay plain text regardless — no tag.
 """
 
 import glob
@@ -189,6 +192,10 @@ def _message_plain(v):
 
 _OSC8 = "\x1b]8;;"
 _ST = "\x1b\\"
+
+# Source attribution Claude Code shows on ask prompts but omits on deny errors;
+# appended to deny reasons so the user always sees which plugin made the call.
+_PLUGIN_TAG = "[plugin:ClaudeWatch]"
 
 
 def _hyperlink(url, text):
@@ -462,8 +469,17 @@ def main():
     _log_event(data, input_kind, input_text, decision, [_message_plain(v) for v in chosen])
 
     if decision != "allow":
-        hyperlinks = _hyperlinks_enabled()
-        _emit(decision, "\n".join(_message_display(v, hyperlinks) for v in chosen))
+        # Only the ask prompt renders OSC 8: Claude Code's error renderer (the
+        # deny path) strips the escape without making it clickable, which would
+        # drop the ref entirely. So deny keeps the plain `— <url>` form.
+        hyperlinks = decision == "ask" and _hyperlinks_enabled()
+        reason = "\n".join(_message_display(v, hyperlinks) for v in chosen)
+        # Claude Code tags ask prompts with the source plugin but leaves deny
+        # errors unattributed, so append the tag ourselves on the deny path to
+        # match — the user should always see which plugin made the call.
+        if decision == "deny":
+            reason += f" {_PLUGIN_TAG}"
+        _emit(decision, reason)
 
     sys.exit(0)
 

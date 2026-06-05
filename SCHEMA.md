@@ -44,7 +44,7 @@ When a rule fires, the canonical message format is:
 
 For example: `git push --force: overwrites shared remote history — https://git-scm.com/docs/git-push#...`
 
-The rule-set name (`watch-git`) is left out — the `ref` link supplies that context. In the permission prompt the `<reason>` prose itself is a clickable terminal hyperlink (OSC 8) to the ref, and the verbose URL is dropped — so the line reads `git push --force: overwrites shared remote history` with the prose linking to the docs. Set `CLAUDEWATCH_HYPERLINKS=off` to keep the plain `— <ref>` form — for terminals without hyperlink support or anyone who prefers the bare link. The decision log always records the canonical plain form.
+The rule-set name (`watch-git`) is left out — the `ref` link supplies that context. In an **ask** prompt the `<reason>` prose itself is a clickable terminal hyperlink (OSC 8) to the ref, and the verbose URL is dropped — so the line reads `git commit: creates a permanent commit` with the prose linking to the docs. Set `CLAUDEWATCH_HYPERLINKS=off` to keep the plain `— <ref>` form — for terminals without hyperlink support or anyone who prefers the bare link. A **deny** message always uses the plain `— <ref>` form (Claude Code renders it through its error path, which strips OSC 8 without linking it — so `git push --force` shows the visible URL), and the decision log always records the canonical plain form.
 
 ### `filter` (optional)
 

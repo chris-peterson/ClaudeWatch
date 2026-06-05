@@ -134,5 +134,6 @@ fixes).
 2. `SPEC.md` — the contract
 3. `scripts/watchdog.py` — the engine (under 250 lines)
 4. `rules/watch-git.yml` — the canonical rule-set example
-5. `tests/test-watch-git.sh` — the test pattern
-6. This file — for "how to think about adding things"
+5. `SCHEMA.md` — the YAML rule format reference (for rule authors)
+6. `tests/test-watch-git.sh` — the test pattern
+7. This file — for "how to think about adding things"

@@ -1,9 +1,11 @@
 #!/bin/bash
-# Permission-prompt output formatting. The displayed reason reads
+# Permission-prompt output formatting. The ask-prompt reason reads
 # `<rule>: <reason>`, where the reason prose itself is a clickable OSC 8
 # hyperlink to the rule's ref (on by default; CLAUDEWATCH_HYPERLINKS opts
-# out). The decision and the logged reasons stay plain text — only the
-# prompt string changes.
+# out). Deny messages always use the plain `— <url>` form, since the host
+# renders them through its error path, which strips OSC 8 without linking
+# it. The decision and the logged reasons stay plain text — only the prompt
+# string changes.
 source "$(cd "$(dirname "$0")" && pwd)/harness.sh"
 
 echo "=== output formatting (ref → terminal hyperlink) ==="
@@ -94,9 +96,14 @@ else
   FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: multi: reasons are newline-joined (got $multi_lines lines)"
 fi
 
-echo "--- deny path renders the hyperlink too (not ask-only) ---"
+echo "--- deny path uses the plain — url form (host strips OSC 8 on errors) ---"
 run_test "$TMPDIR_OUT/watch-fmt.yml" "block rule denies" block "$BOOM"
-assert_reason "deny reason links the prose"  "-u CLAUDEWATCH_HYPERLINKS" "$BOOM" "${OSC8}https://example.com/boom${ST}detonates everything" yes
+assert_reason "deny reason has no escape sequence"  "-u CLAUDEWATCH_HYPERLINKS" "$BOOM" "$OSC8"                                  no
+assert_reason "deny reason shows the bare url"      "-u CLAUDEWATCH_HYPERLINKS" "$BOOM" "danger: detonates everything — https://example.com/boom" yes
+
+echo "--- deny path appends the [plugin:ClaudeWatch] source tag (ask gets it from the host) ---"
+assert_reason "deny reason ends with the source tag" "-u CLAUDEWATCH_HYPERLINKS" "$BOOM" "https://example.com/boom [plugin:ClaudeWatch]" yes
+assert_reason "ask reason does not add the source tag" "-u CLAUDEWATCH_HYPERLINKS" "$NEEDS_REF" "[plugin:ClaudeWatch]" no
 
 echo "--- logged reasons stay plain text even with hyperlinks on ---"
 LOGF=$(mktemp /tmp/cw-fmtlog.XXXXXX.jsonl)
@@ -109,6 +116,18 @@ else
   FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: logged matched reasons are plain"
 fi
 rm -f "$LOGF"
+
+# The deny display tag is a presentation detail; the log keeps the canonical form.
+DENYLOG=$(mktemp /tmp/cw-denylog.XXXXXX.jsonl)
+echo "$BOOM" \
+  | env -u CLAUDEWATCH_HYPERLINKS CLAUDEWATCH_LOG="$DENYLOG" python3 "$HOOK" "$TMPDIR_OUT/watch-fmt.yml" >/dev/null 2>&1 || true
+TOTAL=$((TOTAL + 1))
+if python3 -c 'import json,sys; rec=json.loads(open(sys.argv[1]).read().splitlines()[-1]); m=rec.get("matched",[]); sys.exit(0 if m and all("[plugin:ClaudeWatch]" not in x for x in m) else 1)' "$DENYLOG"; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: logged deny reason omits the source tag"
+else
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: logged deny reason omits the source tag"
+fi
+rm -f "$DENYLOG"
 
 rm -rf "$TMPDIR_OUT"
 

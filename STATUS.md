@@ -26,7 +26,7 @@ spot; broader clusters cite the file and its tests.
 | LOG-01..LOG-04 | Decision logging side channel (on by default, `CLAUDEWATCH_LOG=off` to opt out) | Covered | `scripts/watchdog.py` (`_log_event`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | RL-01..RL-14 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
-| OUT-01..OUT-06 | Output decisions, formatting, aggregation, allow-by-default, ref hyperlinks (`CLAUDEWATCH_HYPERLINKS`) | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
+| OUT-01..OUT-07 | Output decisions, formatting, aggregation, allow-by-default, ref hyperlinks (`CLAUDEWATCH_HYPERLINKS`), deny source tag | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
 | HK-01 | PreToolUse hooks for Bash/Write/Edit | Covered | `hooks/hooks.json` |
 | HK-02 | SessionStart hook (no-op placeholder) | Covered | `hooks/hooks.json`, `hooks/cli-freshness.sh` |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |
@@ -34,7 +34,7 @@ spot; broader clusters cite the file and its tests.
 | SK-01 | `/ClaudeWatch:help` overview | Covered | `skills/help/SKILL.md` |
 | SK-02..SK-12 | `/ClaudeWatch:rules` interactive editor | Covered | `skills/rules/SKILL.md` |
 | SK-13..SK-17 | `/ClaudeWatch:learn` decision-log analysis | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` |
-| DOC-01, DOC-02, DOC-04 | Docsify site, `just docs` regen, YAML schema reference | Covered | `docs/`, `build/gen-rules-doc.py`, `justfile` |
+| DOC-01, DOC-02, DOC-04, DOC-05 | Docsify site, `just docs` regen (rules + prompts pages), YAML schema reference | Covered | `docs/`, `SCHEMA.md`, `build/gen-rules-doc.py`, `justfile` |
 | DIST-01 | Expose install metadata in manifest | Covered | `.claude-plugin/plugin.json` (name, version, description, repository, license) — hosting/marketplace mechanism is out of scope per SPEC.md |
 | DIST-02 | `.claude-plugin/plugin.json` manifest | Covered | `.claude-plugin/plugin.json` |
 | DIST-03 | Runnable via `claude --plugin-dir .` | Covered | `justfile` (`just try`) |

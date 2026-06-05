@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.1
+
+### Fixes
+- **Deny prompts show the ref URL again.** Claude Code renders a deny reason through its error path, which strips the OSC 8 escape introduced in 0.13.0 without making it clickable — so a blocked `git push --force` displayed `overwrites shared remote history` with no way to reach the docs. Deny decisions now always use the plain `<rule>: <reason> — <url>` form so the `ref` is visible and copyable; ask prompts keep the clickable hyperlink (the host renders OSC 8 there). `CLAUDEWATCH_HYPERLINKS` still controls the ask path; deny is plain regardless (see `SPEC.md` `[OUT-06]`).
+- **Deny messages carry the `[plugin:ClaudeWatch]` source tag.** Claude Code annotates ask prompts with the originating plugin but leaves deny errors unattributed, so a blocked command didn't show which plugin made the call. Deny reasons now append the same ` [plugin:ClaudeWatch]` tag the host shows on ask prompts; the decision log keeps the canonical untagged form (see `SPEC.md` `[OUT-07]`).
+
 ## 0.13.0
 
 ### Features

@@ -70,6 +70,6 @@ nothing to read without the log.
 ## Docs
 
 - Reference site: https://chris-peterson.github.io/ClaudeWatch/
-- YAML schema: https://chris-peterson.github.io/ClaudeWatch/#/schema
-- Default rules: https://chris-peterson.github.io/ClaudeWatch/#/rules
+- Rules: https://chris-peterson.github.io/ClaudeWatch/#/rules
+- YAML schema (for rule authors): https://github.com/chris-peterson/ClaudeWatch/blob/main/SCHEMA.md
 - Source: https://github.com/chris-peterson/ClaudeWatch

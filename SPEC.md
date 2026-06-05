@@ -111,7 +111,8 @@ The engine emits at most one decision per invocation.
 - **[OUT-03]** When any block rule matches in any rule set, the engine shall emit a single `deny` decision aggregating all block reasons, separated by newlines.
 - **[OUT-04]** When no block rule matches and at least one ask rule matches in any rule set, the engine shall emit a single `ask` decision aggregating all ask reasons, separated by newlines.
 - **[OUT-05]** When no rule matches, the engine shall produce no stdout output (allow-by-default).
-- **[OUT-06]** In the `permissionDecisionReason` shown in the prompt — but not in the logged reasons (`[LOG-03]`) — when a violation carries a `ref`, the engine shall render the `<reason>` prose itself as an OSC 8 terminal hyperlink targeting the `ref` (so the line reads `<prefix>: <reason>` with the prose clickable), and shall omit the inline ` — <ref>` URL. Setting `CLAUDEWATCH_HYPERLINKS` (case-insensitively) to `off`/`0`/`false`/`none`/empty shall fall back to the canonical plain ` — <ref>` form; any other value, or unset, enables hyperlinks. Violations without a `ref` render identically in both modes.
+- **[OUT-06]** In the `permissionDecisionReason` of an **ask** decision — but not in the logged reasons (`[LOG-03]`) — when a violation carries a `ref`, the engine shall render the `<reason>` prose itself as an OSC 8 terminal hyperlink targeting the `ref` (so the line reads `<prefix>: <reason>` with the prose clickable), and shall omit the inline ` — <ref>` URL. Setting `CLAUDEWATCH_HYPERLINKS` (case-insensitively) to `off`/`0`/`false`/`none`/empty shall fall back to the canonical plain ` — <ref>` form; any other value, or unset, enables hyperlinks. **Deny** decisions shall always use the canonical plain ` — <ref>` form regardless of `CLAUDEWATCH_HYPERLINKS`: Claude Code renders a deny reason through its error path, which strips the OSC 8 escape without making it clickable, so an inline URL is the only way the `ref` reaches the user. Violations without a `ref` render identically in all modes.
+- **[OUT-07]** A **deny** decision's `permissionDecisionReason` shall end with the ` [plugin:ClaudeWatch]` source tag — but the logged reasons (`[LOG-03]`) shall not. Claude Code annotates ask prompts with the originating plugin but leaves deny errors unattributed, so the engine appends the tag itself on the deny path to keep the source visible. Ask decisions shall not carry the tag (the host supplies it).
 
 ## 5. Hook Wiring (HK)
 
@@ -167,6 +168,7 @@ rather than per command.
 - **[DOC-01]** The plugin shall ship a Docsify documentation site under `docs/`.
 - **[DOC-02]** `just docs` shall regenerate the rules-reference page from the YAML rule files.
 - **[DOC-04]** The documentation shall include a YAML schema reference covering top-level fields and rule fields.
+- **[DOC-05]** `just docs` shall regenerate a prompts page, linked from the docs-site sidebar, approximating the Claude Code permission prompt each rule produces — block rules as an outright rejection, ask rules as a confirmation prompt — with the reason prose linking to the rule's `ref`.
 
 ## 9. Distribution (DIST)
 

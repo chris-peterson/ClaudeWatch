@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Keep plugin.json in sync with plugin.yml. Install with `just install-hooks`.
+set -euo pipefail
+
+if git diff --cached --name-only | grep -qx 'plugin.yml'; then
+  python3 scripts/gen-plugin-json.py
+  git add .claude-plugin/plugin.json
+fi

@@ -1,0 +1,44 @@
+# Canonical descriptor for the ClaudeWatch plugin — edit here, never plugin.json.
+# Projects into .claude-plugin/plugin.json (via scripts/gen-plugin-json.py) and
+# the marketplace SPA (the suite: block). Schema: suite/plugin.schema.md.
+
+name: ClaudeWatch
+version: 0.13.2
+description: PreToolUse hook that enforces command safety rules via 'claude-watchdog'
+author: chris-peterson
+repository: https://github.com/chris-peterson/ClaudeWatch
+icon: docs/logo.svg
+license: MIT
+keywords: [claude, watch, safety, permissions, guardrail, hook, watchdog, installs, git-guardian]
+
+# → marketplace.json entry
+marketplace:
+  category: security
+  homepage: https://chris-peterson.github.io/ClaudeWatch/#/
+
+# → marketplace SPA; keys mirror the SPA's PLUGINS object.
+suite:
+  ac: "--guard"
+  group: stay safe
+  passive: true
+  gloss: The lookout posted on watch.
+  pitch: "Screens every command before it runs — blocks the genuinely dangerous, asks before the rest, and stops you rubber-stamping the safe ones."
+  what: "Screens every shell command — and the code Claude writes to disk — before it runs, matching real patterns rather than naive prefixes, so reordered flags and chained commands don't slip past. Blocks the genuinely dangerous; asks before anything that changes state."
+  cmds:
+    - ["/ClaudeWatch:rules", "See and edit the rule sets that guard your commands"]
+    - ["/ClaudeWatch:learn", "Tune the rules from what's been prompting you"]
+  examples:
+    - label: Block
+      ac: "--red"
+      frames:
+        - { t: claude, text: "Tidying history — I'll force-push the rebase." }
+        - { t: watch, cmd: "git push --force", err: "watch-git — overwrites shared remote history", link: "https://git-scm.com/docs/git-push#Documentation/git-push.txt--f" }
+    - label: Ask
+      ac: "--orange"
+      frames:
+        - { t: claude, text: "Clearing the scratch directories." }
+        - { t: ask, cmd: "rm -rf .playwright-mcp", reason: "watch-files — recursively deletes directories", link: "https://man7.org/linux/man-pages/man1/rm.1.html" }
+  session:
+    - { t: claude, text: "Wrapping up — I'll force-push the rebase, then clear the scratch dirs." }
+    - { t: watch, cmd: "git push --force", err: "watch-git — overwrites shared remote history", link: "https://git-scm.com/docs/git-push#Documentation/git-push.txt--f" }
+    - { t: ask, cmd: "rm -rf .playwright-mcp", reason: "watch-files — recursively deletes directories", link: "https://man7.org/linux/man-pages/man1/rm.1.html" }

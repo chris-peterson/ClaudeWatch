@@ -1,6 +1,6 @@
 {
   "name": "ClaudeWatch",
-  "version": "0.13.1",
+  "version": "0.13.2",
   "description": "PreToolUse hook that enforces command safety rules via 'claude-watchdog'",
   "author": {
     "name": "chris-peterson"
@@ -8,5 +8,15 @@
   "repository": "https://github.com/chris-peterson/ClaudeWatch",
   "icon": "docs/logo.svg",
   "license": "MIT",
-  "keywords": ["claude", "watch", "safety", "permissions", "guardrail", "hook", "watchdog", "installs", "git-guardian"]
+  "keywords": [
+    "claude",
+    "watch",
+    "safety",
+    "permissions",
+    "guardrail",
+    "hook",
+    "watchdog",
+    "installs",
+    "git-guardian"
+  ]
 }

@@ -28,10 +28,12 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 3. **Single coalesced decision per invocation.** Multiple matching rules
    across multiple rule sets aggregate into one `deny` (preferred) or one
    `ask`. Never emit more than one decision.
-4. **No third-party Python dependencies at runtime.** The engine ships with a
-   minimal pure-Python YAML parser specifically so the hook works in any
-   environment Claude Code can run in. PyYAML is *not* an acceptable
-   dependency.
+4. **The engine ships self-contained.** `scripts/watchdog.py` and everything on
+   the decision path use only the Python standard library (with a minimal
+   built-in YAML parser), so the plugin installs cleanly and evaluates rules
+   fast in any environment Claude Code runs in — no pip step on the hot path.
+   Build- and release-time tooling that never runs on the decision path (e.g.
+   `scripts/gen-plugin-json.py`) may use PyYAML; it runs only in dev and CI.
 5. **Allow-by-default.** When no rule matches, the engine produces no stdout
    output. Silence is allow.
 
@@ -103,14 +105,27 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
   Gap Resolution Protocol (see the spec-driven recipe), don't silently change
   the implementation.
 
+## plugin.yml is canonical
+
+`plugin.yml` (repo root) is the single source of truth for the plugin's
+descriptor. `.claude-plugin/plugin.json` is **generated** from it by
+[`scripts/gen-plugin-json.py`](scripts/gen-plugin-json.py) (`just plugin-json`) — don't hand-edit
+`plugin.json`. The `suite:` block also feeds the bridge.ai marketplace SPA.
+A pre-commit hook (`just install-hooks`) regenerates `plugin.json` whenever
+`plugin.yml` is staged, so the two never drift in source control.
+
 ## Releasing
 
-Releases are cut by bumping `version` in `.claude-plugin/plugin.json` and adding
-a matching `CHANGELOG.md` section, then merging to `main`. This project does
-**not** use git tags or GitHub releases — don't create them, and don't check for
-them to determine release state. The version in `plugin.json` is the source of
-truth; the next release is `current + 1` (minor bump for features, patch for
-fixes).
+Releases are cut by bumping `version` in `plugin.yml` and adding a matching
+`CHANGELOG.md` section on a branch, then merging to `main` and tagging the merge
+commit `v<version>`. `main` is always the latest released state; the version in
+`plugin.yml` is the source of truth, and the next release is `current + 1`
+(minor bump for features, patch for fixes).
+
+The `v*` tag triggers `.github/workflows/release.yml`, which verifies
+`plugin.json` is in sync with `plugin.yml` (a stale commit fails the build) and
+notifies the bridge.ai marketplace to rebuild its catalog via
+`repository_dispatch`.
 
 ## Known constraints (do not paper over)
 

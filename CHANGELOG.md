@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.2
+
+### Other
+- **`plugin.yml` is now the canonical descriptor.** `.claude-plugin/plugin.json` is generated from it by `scripts/gen-plugin-json.py` (`just plugin-json`), with a pre-commit hook (`just install-hooks`) keeping the two in sync. `version` is authoritative in `plugin.yml`. The `suite:` block also feeds the bridge.ai marketplace catalog.
+- **Tag-based release publishing.** Releasing now tags the merge commit `v<version>`; `.github/workflows/release.yml` verifies `plugin.json` is in sync and notifies the bridge.ai marketplace to rebuild via `repository_dispatch`. This supersedes the former tag-free, main-only model.
+
 ## 0.13.1
 
 ### Fixes

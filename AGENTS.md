@@ -114,6 +114,19 @@ descriptor. `.claude-plugin/plugin.json` is **generated** from it by
 A pre-commit hook (`just install-hooks`) regenerates `plugin.json` whenever
 `plugin.yml` is staged, so the two never drift in source control.
 
+This is a **git** hook, not a Claude Code project hook, on purpose. The
+no-drift property is a property of the *commit*, so it has to hold no matter
+how `plugin.yml` was edited — a human in an editor, a rebase, or a scripted/CI
+bump — none of which fire a Claude `Write`/`Edit` hook. A
+Claude hook would only cover the case where Claude itself made the edit, which
+is the wrong boundary. The hard guard is CI's `gen-plugin-json.py --check`
+(`release.yml`), which catches a stale `plugin.json` regardless of who
+committed it; the git hook is the local convenience that keeps you from
+committing one in the first place. The rule of thumb: an *agent nudge* (like
+the dev-time `remind-rules-index.py` reminder above) is a fine fit for a Claude
+hook; a *correctness invariant that must hold regardless of editor* belongs at
+the commit/CI boundary.
+
 ## Releasing
 
 Releases are cut by bumping `version` in `plugin.yml` and adding a matching

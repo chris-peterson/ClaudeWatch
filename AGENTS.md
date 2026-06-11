@@ -119,26 +119,36 @@ no-drift property is a property of the *commit*, so it has to hold no matter
 how `plugin.yml` was edited — a human in an editor, a rebase, or a scripted/CI
 bump — none of which fire a Claude `Write`/`Edit` hook. A
 Claude hook would only cover the case where Claude itself made the edit, which
-is the wrong boundary. The hard guard is CI's `gen-plugin-json.py --check`
-(`release.yml`), which catches a stale `plugin.json` regardless of who
-committed it; the git hook is the local convenience that keeps you from
-committing one in the first place. The rule of thumb: an *agent nudge* (like
+is the wrong boundary. The release workflow regenerates `plugin.json` from
+`plugin.yml` when it cuts a release (`release.yml`), so the shipped descriptor
+always matches its source; the git hook is the local convenience that keeps
+`main` in sync between releases. The rule of thumb: an *agent nudge* (like
 the dev-time `remind-rules-index.py` reminder above) is a fine fit for a Claude
 hook; a *correctness invariant that must hold regardless of editor* belongs at
 the commit/CI boundary.
 
 ## Releasing
 
-Releases are cut by bumping `version` in `plugin.yml` and adding a matching
-`CHANGELOG.md` section on a branch, then merging to `main` and tagging the merge
-commit `v<version>`. `main` is always the latest released state; the version in
-`plugin.yml` is the source of truth, and the next release is `current + 1`
-(minor bump for features, patch for fixes).
+A release is cut by **creating a GitHub Release** with tag `v<version>` and the
+release notes in the body — that's the only manual step. The next release is
+`current + 1` (minor bump for features, patch for fixes).
 
-The `v*` tag triggers `.github/workflows/release.yml`, which verifies
-`plugin.json` is in sync with `plugin.yml` (a stale commit fails the build) and
-notifies the bridge.ai marketplace to rebuild its catalog via
-`repository_dispatch`.
+Publishing the Release triggers `.github/workflows/release.yml`, which:
+
+1. derives the version from the tag (`v0.13.3` → `0.13.3`),
+2. runs the test suite — a red gate stops the release before anything lands,
+3. writes the version into `plugin.yml`, regenerates `plugin.json`, and
+   proxies the release notes into a new `CHANGELOG.md` section,
+4. commits and pushes that to `main`, and
+5. notifies the bridge.ai marketplace to rebuild its catalog via
+   `repository_dispatch`.
+
+`main` is always the latest released state, and `version` in `plugin.yml`
+stays the source of truth — but it's now *written by* the release from the tag
+rather than hand-edited. The chris-peterson marketplace tracks ClaudeWatch as
+an unpinned git source (default-branch HEAD), so step 4's push to `main` is the
+moment consumers see the update; the tag and the marketplace notify are not
+what `claude plugin update` reads.
 
 ## Known constraints (do not paper over)
 

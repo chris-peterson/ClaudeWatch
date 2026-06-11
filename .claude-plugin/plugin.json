@@ -1,6 +1,6 @@
 {
   "name": "ClaudeWatch",
-  "version": "0.13.2",
+  "version": "0.13.3",
   "description": "PreToolUse hook that enforces command safety rules via 'claude-watchdog'",
   "author": {
     "name": "chris-peterson"

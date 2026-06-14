@@ -26,6 +26,8 @@ jobs:
         with:
           python-version: '3.x'
 
+      - run: pip install pyyaml
+
       - run: python3 build/gen-rules-doc.py
 
       - uses: actions/upload-pages-artifact@v4

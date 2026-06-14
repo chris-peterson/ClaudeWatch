@@ -16,35 +16,15 @@ For each matched command:
 > [!TIP]
 > See the [rules](/rules) for the full list of protected commands.
 
-## Example
+## In action
 
-The default configuration asks to confirm `git push`, but blocks `git push -f|--force`:
+ClaudeWatch blocks the genuinely dangerous and asks before anything that changes state — here, a force-push is blocked outright and a recursive delete pauses for confirmation:
 
-`❯ git push --force`
+<div class="cw-session" data-cw-session="session"></div>
 
-```text
-⏺ Bash(git push --force)
-  ⎿  PreToolUse:Bash hook returned blocking error
-  ⎿  watch-git: overwrites shared remote history — https://git-scm.com/docs/git-push#Documentation/git-push.txt--f
-```
+Each rule set guards one domain. Browse them side by side:
 
-`❯ git push`
-
-presents a confirmation dialog --
-
-```text
- Bash command
-
-   git push
-   Push to origin/main
-
- This command requires approval
-
- Do you want to proceed?
- ❯ 1. Yes
-   2. Yes, and don't ask again for: git push:*
-   3. No
-```
+<div class="cw-session" data-cw-session="examples"></div>
 
 ## Installation
 

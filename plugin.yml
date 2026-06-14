@@ -21,6 +21,9 @@ suite:
   ac: "--guard"
   group: stay safe
   passive: true
+  # The plugin's docs site renders the live session preview, so the hub hands
+  # its drill-in off to the spoke rather than showing the in-hub detail view.
+  spoke: true
   gloss: The lookout posted on watch.
   pitch: "Screens every command before it runs — blocks the genuinely dangerous, asks before the rest, and stops you rubber-stamping the safe ones."
   what: "Screens every shell command — and the code Claude writes to disk — before it runs, matching real patterns rather than naive prefixes, so reordered flags and chained commands don't slip past. Blocks the genuinely dangerous; asks before anything that changes state."

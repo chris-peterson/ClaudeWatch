@@ -18,11 +18,13 @@ For each matched command:
 
 ## In action
 
-ClaudeWatch blocks the genuinely dangerous and asks before anything that changes state — here, a force-push is blocked outright and a recursive delete pauses for confirmation:
+ClaudeWatch works on its own — it screens every command, and the code Claude writes to disk, blocking the genuinely dangerous and asking before anything that changes state. Here a force-push is blocked outright and a recursive delete pauses for confirmation:
 
 <div class="cw-session" data-cw-session="session"></div>
 
-Each rule set guards one domain. Browse them side by side:
+## The skills
+
+Most of the time ClaudeWatch stays out of the way. When you want to look under the hood — see what's guarding your commands, or tune the rules from what's been prompting you — two skills help:
 
 <div class="cw-session" data-cw-session="examples"></div>
 

@@ -30,17 +30,21 @@ suite:
   cmds:
     - ["/ClaudeWatch:rules", "See and edit the rule sets that guard your commands"]
     - ["/ClaudeWatch:learn", "Tune the rules from what's been prompting you"]
+  # The automatic block/ask flow is the primary interaction (see session: below);
+  # these examples are anchored on the two skills, for when you look under the hood.
   examples:
-    - label: Block
-      ac: "--red"
+    - label: "/ClaudeWatch:rules"
+      ac: "--purple"
       frames:
-        - { t: claude, text: "Tidying history — I'll force-push the rebase." }
-        - { t: watch, cmd: "git push --force", err: "watch-git — overwrites shared remote history", link: "https://git-scm.com/docs/git-push#Documentation/git-push.txt--f" }
-    - label: Ask
-      ac: "--orange"
+        - { t: you, text: "/ClaudeWatch:rules" }
+        - { t: claude, text: "watch-git blocks git push --force and asks before git push and git commit. Add a rule, edit one, or move it to except?" }
+        - { t: status, text: "previews the change, then writes it back to rules/watch-git.yml" }
+    - label: "/ClaudeWatch:learn"
+      ac: "--cyan"
       frames:
-        - { t: claude, text: "Clearing the scratch directories." }
-        - { t: ask, cmd: "rm -rf .playwright-mcp", reason: "watch-files — recursively deletes directories", link: "https://man7.org/linux/man-pages/man1/rm.1.html" }
+        - { t: you, text: "/ClaudeWatch:learn" }
+        - { t: claude, text: "You've confirmed rm -rf node_modules 9 times this week — add an except so it stops asking?" }
+        - { t: status, text: "proposes the except clause for watch-files from your decision log" }
   session:
     - { t: claude, text: "Wrapping up — I'll force-push the rebase, then clear the scratch dirs." }
     - { t: watch, cmd: "git push --force", err: "watch-git — overwrites shared remote history", link: "https://git-scm.com/docs/git-push#Documentation/git-push.txt--f" }

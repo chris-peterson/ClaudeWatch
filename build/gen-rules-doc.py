@@ -168,9 +168,9 @@ def write_file(site_dir, name, content):
 
 def write_suite_json(site_dir):
     """Emit the plugin.yml suite: block as suite.json at the site root. The
-    shared session player (chris-peterson.github.io/js/session-player.js) fetches
-    it to hydrate the .cw-session mount points on the docs pages — same source
-    the marketplace SPA reads, so the hub teaser and the docs live preview never
+    shared session player (chris-peterson.github.io/claude-marketplace/session-player.js)
+    fetches it to hydrate the .cw-session mount points on the docs pages — same
+    source the marketplace SPA reads, so the hub and the docs live preview never
     drift."""
     spec = yaml.safe_load(open(PLUGIN_YML).read())
     suite = (spec or {}).get("suite")

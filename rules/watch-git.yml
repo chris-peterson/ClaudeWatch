@@ -13,11 +13,6 @@ rules:
       reason: discards all working tree changes with no recovery
       ref: https://git-scm.com/docs/git-checkout
 
-    - name: git checkout -- <file>
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+checkout\s+--\s'
-      reason: discards working tree changes to specified files with no recovery
-      ref: https://git-scm.com/docs/git-checkout
-
     - name: git restore .
       pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+restore\s+\.\s*$'
       reason: discards all unstaged changes with no recovery
@@ -44,6 +39,11 @@ rules:
       ref: https://git-scm.com/docs/git-reflog#Documentation/git-reflog.txt-expire
 
   ask:
+    - name: git checkout -- <file>
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+checkout\s+--\s'
+      reason: discards working tree changes to specified files with no recovery
+      ref: https://git-scm.com/docs/git-checkout
+
     - name: git reset --hard
       pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+reset\s.*--hard'
       reason: discards uncommitted changes with no recovery

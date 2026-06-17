@@ -13,9 +13,6 @@ t "-f"                  block '{"tool_name":"Bash","tool_input":{"command":"git 
 echo "--- block: checkout . ---"
 t "checkout ."          block '{"tool_name":"Bash","tool_input":{"command":"git checkout ."}}'
 
-echo "--- block: checkout -- ---"
-t "checkout -- file"    block '{"tool_name":"Bash","tool_input":{"command":"git checkout -- src/main.rs"}}'
-
 echo "--- block: restore . ---"
 t "restore ."           block '{"tool_name":"Bash","tool_input":{"command":"git restore ."}}'
 
@@ -45,6 +42,10 @@ t "rm --cached"         allow '{"tool_name":"Bash","tool_input":{"command":"git 
 t "rm --cached -r"      allow '{"tool_name":"Bash","tool_input":{"command":"git rm --cached -r .claude/skills"}}'
 t "reset --soft"        allow '{"tool_name":"Bash","tool_input":{"command":"git reset --soft HEAD~1"}}'
 t "reset (mixed)"       allow '{"tool_name":"Bash","tool_input":{"command":"git reset HEAD~1"}}'
+
+echo "--- ask: checkout -- <file> ---"
+t "checkout -- file"    ask   '{"tool_name":"Bash","tool_input":{"command":"git checkout -- src/main.rs"}}'
+t "checkout -- ."       ask   '{"tool_name":"Bash","tool_input":{"command":"git checkout -- ."}}'
 
 echo "--- ask: reset --hard (boundary vs allowed non-hard reset) ---"
 t "reset --hard"        ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --hard"}}'
@@ -87,7 +88,6 @@ t "-P push --force"                   block '{"tool_name":"Bash","tool_input":{"
 t "-C path clean -f"                  block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo clean -f"}}'
 t "-C path branch -D"                 block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo branch -D feature"}}'
 t "-C path checkout ."                block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo checkout ."}}'
-t "-C path checkout -- file"          block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo checkout -- src/main.rs"}}'
 t "-C path restore ."                 block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo restore ."}}'
 t "-C path stash drop"                block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo stash drop"}}'
 t "-C path reflog expire"             block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo reflog expire --all"}}'
@@ -96,6 +96,7 @@ echo "--- block: quoted values containing spaces ---"
 t '-C "/path with spaces" push --force'   block '{"tool_name":"Bash","tool_input":{"command":"git -C \"/tmp/has space\" push --force"}}'
 t '-c "key=val w/ space" push --force'    block '{"tool_name":"Bash","tool_input":{"command":"git -c \"http.extraHeader=Authorization x\" push --force"}}'
 echo "--- ask: with git global flags between git and subcommand ---"
+t "-C path checkout -- file"          ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo checkout -- src/main.rs"}}'
 t "-C path push"                      ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo push"}}'
 t "-C path push --force-with-lease"   ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo push --force-with-lease"}}'
 t "-C path reset --hard"              ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo reset --hard"}}'

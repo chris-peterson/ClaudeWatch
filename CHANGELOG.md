@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.13.4
+
+### Fixes
+- `git checkout -- <file>` now prompts instead of being blocked outright. Reverting a specific file's working-tree changes is a routine, recoverable operation, and the hard block stood in the way of deliberate single-file reverts. It now asks for confirmation — like `git reset --hard`, the sibling "discards changes with no recovery" op — while `git checkout .` (which discards *all* working-tree changes) stays a block.
+
 ## 0.13.3
 
 Switch to a proper release process

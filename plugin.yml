@@ -3,7 +3,7 @@
 # the marketplace SPA (the suite: block). Schema: suite/plugin.schema.md.
 
 name: ClaudeWatch
-version: 0.13.3
+version: 0.13.4
 description: PreToolUse hook that enforces command safety rules via 'claude-watchdog'
 author: chris-peterson
 repository: https://github.com/chris-peterson/ClaudeWatch

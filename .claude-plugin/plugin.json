@@ -1,7 +1,7 @@
 {
   "name": "ClaudeWatch",
   "version": "0.13.4",
-  "description": "PreToolUse hook that enforces command safety rules via 'claude-watchdog'",
+  "description": "PreToolUse hook that screens shell commands and the code Claude writes to disk for safety, via 'claude-watchdog'",
   "author": {
     "name": "chris-peterson"
   },

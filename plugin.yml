@@ -4,7 +4,7 @@
 
 name: ClaudeWatch
 version: 0.13.4
-description: PreToolUse hook that enforces command safety rules via 'claude-watchdog'
+description: PreToolUse hook that screens shell commands and the code Claude writes to disk for safety, via 'claude-watchdog'
 author: chris-peterson
 repository: https://github.com/chris-peterson/ClaudeWatch
 icon: docs/logo.svg
@@ -18,12 +18,10 @@ marketplace:
 
 # → marketplace SPA; keys mirror the SPA's PLUGINS object.
 suite:
-  ac: "--guard"
-  group: stay safe
-  passive: true
-  # The plugin's docs site renders the live session preview, so the hub hands
-  # its drill-in off to the spoke rather than showing the in-hub detail view.
-  spoke: true
+  group: safety
+  # Activated by the agent (the PreToolUse hook screens what the agent runs) and
+  # the user (the /ClaudeWatch:learn and :rules skills).
+  activations: [agent, user]
   gloss: The lookout posted on watch.
   pitch: "Screens every command before it runs — blocks the genuinely dangerous, asks before the rest, and stops you rubber-stamping the safe ones."
   what: "Screens every shell command — and the code Claude writes to disk — before it runs, matching real patterns rather than naive prefixes, so reordered flags and chained commands don't slip past. Blocks the genuinely dangerous; asks before anything that changes state."

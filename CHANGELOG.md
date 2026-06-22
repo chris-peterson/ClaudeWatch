@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.15.0
+
+## Privacy hardening for the decision log
+
+The `/ClaudeWatch:learn` decision log now records the **command shape** (the
+program plus its leading subcommand tokens, e.g. `git push`, `aws s3 cp`)
+instead of the full command. Inline secrets — bearer tokens, `-p<password>`,
+credentials in URLs — no longer reach the plaintext log. The shape is all
+`/ClaudeWatch:learn` groups by, so the workflow is unchanged.
+
+### Changes
+- **Command-shape logging** (LOG-03): Bash decisions record the shape, not the
+  raw command, keeping inline secrets out of the durable log.
+- **Owner-only permissions** (LOG-05): the log and its directory are restricted
+  to `0600`/`0700`, applied on every write so a pre-existing wider mode is corrected.
+- **Schema-versioned log** (LOG-06): a `{"schema":2}` header is written; on the
+  first write after this upgrade, a pre-shape log (which held raw commands) is
+  discarded and a fresh shape-only log started, so plaintext history doesn't
+  carry forward.
+- **Analyzer fix**: allow-list suppression keys on the command shape rather than
+  the raw command, so a `VAR=…; echo …` command is no longer wrongly re-proposed
+  as an allow candidate.
+
+No action needed — an existing log is replaced automatically on the next
+decision after upgrade.
+
 ## 0.14.0
 
 ### Fixes

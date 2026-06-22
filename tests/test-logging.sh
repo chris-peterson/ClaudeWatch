@@ -27,15 +27,75 @@ log_decision_test "allow decision is logged" allow '{"tool_name":"Bash","tool_in
 log_decision_test "ask decision is logged"   ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"x\""}}'
 log_decision_test "deny decision is logged"  deny  '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}'
 
-echo "--- logged record carries the command verbatim ---"
+echo "--- logged record carries the command shape, not the raw command (LOG-03) ---"
 LOGFILE=$(mktemp /tmp/cw-cmd.XXXXXX.jsonl)
-echo '{"tool_name":"Bash","tool_input":{"command":"ls -la /etc"}}' \
+echo '{"tool_name":"Bash","tool_input":{"command":"git push --force https://user:s3cr3t-token@host/repo"}}' \
   | CLAUDEWATCH_LOG="$LOGFILE" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
 TOTAL=$((TOTAL + 1))
-if python3 -c 'import json,sys; sys.exit(0 if json.loads(open(sys.argv[1]).read().splitlines()[-1]).get("command")=="ls -la /etc" else 1)' "$LOGFILE" 2>/dev/null; then
-  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: command recorded in log"
+# The record stores command_shape="git push", carries no raw `command` field, and
+# the inline credential never appears anywhere in the serialized line.
+if python3 -c '
+import json, sys
+line = open(sys.argv[1]).read().splitlines()[-1]
+rec = json.loads(line)
+ok = rec.get("command_shape") == "git push" and "command" not in rec and "s3cr3t-token" not in line
+sys.exit(0 if ok else 1)
+' "$LOGFILE" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: shape recorded, raw command and inline secret kept out of the log"
 else
-  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: command recorded in log"
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: shape recorded, raw command and inline secret kept out of the log"
+fi
+rm -f "$LOGFILE"
+
+echo "--- log file and dir are owner-only (LOG-05) ---"
+HOMEDIR=$(mktemp -d /tmp/cw-perms.XXXXXX)
+DEFAULT_LOG="$HOMEDIR/.claude/claudewatch/decisions.jsonl"
+TOTAL=$((TOTAL + 1))
+echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' \
+  | env -u CLAUDEWATCH_LOG HOME="$HOMEDIR" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+# Read the mode via Python — portable across BSD/macOS and GNU stat flag differences.
+FILE_MODE=$(python3 -c 'import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])' "$DEFAULT_LOG" 2>/dev/null || true)
+DIR_MODE=$(python3 -c 'import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])' "$(dirname "$DEFAULT_LOG")" 2>/dev/null || true)
+if [ "$FILE_MODE" = "600" ] && [ "$DIR_MODE" = "700" ]; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: log file mode 0600, dir mode 0700"
+else
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: log file mode 0600, dir mode 0700 (got file=$FILE_MODE dir=$DIR_MODE)"
+fi
+rm -rf "$HOMEDIR"
+
+echo "--- a fresh log opens with a schema header (LOG-06) ---"
+LOGFILE=$(mktemp -u /tmp/cw-schema.XXXXXX.jsonl)
+echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' \
+  | CLAUDEWATCH_LOG="$LOGFILE" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+TOTAL=$((TOTAL + 1))
+if python3 -c 'import json,sys; sys.exit(0 if json.loads(open(sys.argv[1]).read().splitlines()[0])=={"schema":2} else 1)' "$LOGFILE" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: log opens with a {\"schema\":2} header"
+else
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: log opens with a {\"schema\":2} header"
+fi
+rm -f "$LOGFILE"
+
+echo "--- a pre-schema (raw-command) log is discarded on next write (LOG-06) ---"
+LOGFILE=$(mktemp /tmp/cw-migrate.XXXXXX.jsonl)
+# Simulate a v1 log: no header, one raw-command record carrying an inline secret.
+printf '%s\n' '{"ts":"2026-01-01T00:00:00+00:00","decision":"allow","tool":"Bash","command":"curl -H \"Authorization: Bearer sk-leaked\""}' > "$LOGFILE"
+echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' \
+  | CLAUDEWATCH_LOG="$LOGFILE" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+TOTAL=$((TOTAL + 1))
+# After the write the log is a fresh v2: header line, only the new shape-only
+# record, and the old raw command's secret is gone.
+if python3 -c '
+import json, sys
+lines = open(sys.argv[1]).read().splitlines()
+ok = (json.loads(lines[0]) == {"schema": 2}
+      and len(lines) == 2
+      and json.loads(lines[1]).get("command_shape") == "ls"
+      and "sk-leaked" not in "\n".join(lines))
+sys.exit(0 if ok else 1)
+' "$LOGFILE" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: pre-schema log discarded, secret gone, fresh shape-only log"
+else
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: pre-schema log discarded, secret gone, fresh shape-only log"
 fi
 rm -f "$LOGFILE"
 

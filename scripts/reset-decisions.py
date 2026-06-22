@@ -52,6 +52,8 @@ def summarize(path):
             line = line.strip()
             if not line:
                 continue
+            if line.startswith('{"schema":'):
+                continue  # the log's schema header ([LOG-06]), not a decision record
             count += 1
             # Cheap ts pull without a full JSON parse per line; the field is
             # always first in the record (watchdog writes it first).

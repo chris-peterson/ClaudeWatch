@@ -21,8 +21,11 @@ asked, and blocked — not just what looked read-only.
 
 Logging is **on by default** — the hook writes to
 `~/.claude/claudewatch/decisions.jsonl` unless `CLAUDEWATCH_LOG` is set to an
-opt-out value (`off`, `0`, `false`, `none`, or empty). Two states block a learn
-pass; distinguish them before doing anything else.
+opt-out value (`off`, `0`, `false`, `none`, or empty). Each `Bash` record stores
+the command *shape* (`git push`, not the full command with its arguments), never
+the raw command, so inline secrets stay out of the plaintext log; the file is
+owner-only (`0600`). Two states block a learn pass; distinguish them before doing
+anything else.
 
 First, check whether logging has been turned off:
 

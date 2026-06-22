@@ -353,6 +353,69 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None):
 DEFAULT_LOG_PATH = "~/.claude/claudewatch/decisions.jsonl"
 _LOG_OFF_VALUES = frozenset(("", "off", "0", "false", "none"))
 _LOG_DEFAULT_VALUES = frozenset(("1", "true", "on", "yes"))
+# Log schema version, written as the header line `{"schema": N}` ([LOG-06]).
+# 1 = pre-shape format (recorded the raw command string); 2 = command-shape
+# format ([LOG-03]). A log whose header is missing or older is discarded on the
+# next write so raw commands from before an upgrade are not carried forward.
+LOG_SCHEMA_VERSION = 2
+
+
+def _log_schema_of(dest):
+    """Return the schema version from the log's header line, or None if absent."""
+    try:
+        with open(dest) as f:
+            first = f.readline()
+    except OSError:
+        return None
+    try:
+        return json.loads(first).get("schema")
+    except (ValueError, AttributeError):
+        return None
+
+# Tools whose first argument is a subcommand worth keeping in the shape, so
+# `git push` and `git status` group separately rather than collapsing to `git`.
+SUBCOMMAND_TOOLS = frozenset((
+    "git", "gh", "glab", "npm", "npx", "yarn", "pnpm", "pip", "pip3", "cargo",
+    "go", "docker", "kubectl", "just", "make", "brew", "terraform", "bundle",
+    "rake", "dotnet", "aws", "gcloud", "az", "systemctl", "apt", "apt-get",
+    "uv", "poetry", "deno", "bun",
+))
+# A subcommand token is a bare lowercase word (e.g. `pr`, `view`, `commit`).
+# Stopping at the first flag, path, or value keeps the shape free of secrets and
+# keeps the learn skill's suggested allow pattern as narrow as the real commands.
+_SUBCOMMAND_LIKE = re.compile(r"^[a-z][a-z0-9-]*$")
+_MAX_SHAPE_TOKENS = 4
+
+
+def command_shape(command):
+    """Reduce a bash command to a stable, secret-free grouping prefix.
+
+    Skips leading `VAR=value` assignments and `sudo`, then keeps the program and
+    (for known subcommand tools) its leading subcommand tokens, stopping at the
+    first flag, path, or value. Returns `(shape, allow_pattern)`. This is what
+    `[LOG-03]` records in place of the raw command, and what `/ClaudeWatch:learn`
+    groups by — defined here so the engine (which writes the log) and the
+    analyzer (which reads it) share one definition. Applying it to an already-
+    reduced shape is idempotent, so the analyzer can re-derive the pattern from a
+    logged shape.
+    """
+    tokens = command.strip().split()
+    i = 0
+    while i < len(tokens) and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[i]) or tokens[i] == "sudo"):
+        i += 1
+    if i >= len(tokens):
+        return command.strip(), f"Bash({command.strip()})"
+
+    prog = os.path.basename(tokens[i])
+    shape_tokens = [prog]
+    if prog in SUBCOMMAND_TOOLS:
+        j = i + 1
+        while j < len(tokens) and len(shape_tokens) < _MAX_SHAPE_TOKENS and _SUBCOMMAND_LIKE.match(tokens[j]):
+            shape_tokens.append(tokens[j])
+            j += 1
+
+    shape = " ".join(shape_tokens)
+    return shape, f"Bash({shape}:*)"
 
 
 def _log_event(data, input_kind, input_text, decision, matched):
@@ -390,7 +453,11 @@ def _log_event(data, input_kind, input_text, decision, matched):
         "matched": matched,
     }
     if input_kind == "bash":
-        entry["command"] = input_text
+        # Log the shape, not the raw command: a command can carry inline secrets
+        # (credentials in flags, URLs, or VAR=value prefixes), and the durable log
+        # is plaintext ([LOG-03]). The shape drops everything past the program and
+        # its subcommand tokens, so no secret survives into the log.
+        entry["command_shape"] = command_shape(input_text)[0]
     else:
         tool_input = data.get("tool_input", {}) or {}
         entry["path"] = tool_input.get("file_path")
@@ -398,9 +465,28 @@ def _log_event(data, input_kind, input_text, decision, matched):
     try:
         parent = os.path.dirname(dest)
         if parent:
-            os.makedirs(parent, exist_ok=True)
+            os.makedirs(parent, mode=0o700, exist_ok=True)
+        # Start a fresh, versioned log when none exists or the existing one is from
+        # an older schema ([LOG-06]). A pre-shape log holds raw commands that may
+        # carry inline secrets, so discard rather than carry it across an upgrade.
+        write_header = not os.path.exists(dest)
+        if not write_header and _log_schema_of(dest) != LOG_SCHEMA_VERSION:
+            had_content = os.path.getsize(dest) > 0
+            os.remove(dest)
+            write_header = True
+            if had_content:
+                print(f"watchdog: cleared a pre-schema-{LOG_SCHEMA_VERSION} decision log "
+                      f"(it recorded raw commands); starting a fresh shape-only log at {dest}",
+                      file=sys.stderr)
         with open(dest, "a") as f:
+            if write_header:
+                f.write(json.dumps({"schema": LOG_SCHEMA_VERSION}, separators=(",", ":")) + "\n")
             f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+        # Owner-only access ([LOG-05]). Applied every write so a pre-existing
+        # wider mode (e.g. a 0644 log from before this was enforced) is corrected.
+        os.chmod(dest, 0o600)
+        if parent:
+            os.chmod(parent, 0o700)
     except OSError as e:
         print(f"watchdog: failed to write decision log to {dest}: {e}", file=sys.stderr)
 

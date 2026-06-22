@@ -31,26 +31,18 @@ import sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
+# `command_shape` is defined in the engine (it writes the shape to the log per
+# [LOG-03]); the analyzer imports it so the reducer has one definition. Applying
+# it to an already-logged shape is idempotent, so it also re-derives the allow
+# pattern from a logged shape and reduces any legacy raw-command records.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from watchdog import command_shape  # noqa: E402
+
 
 DEFAULT_LOG = "~/.claude/claudewatch/decisions.jsonl"
 DEFAULT_SETTINGS = "~/.claude/settings.json"
 
-# Tools whose first argument is a subcommand worth keeping in the command shape,
-# so `git push` and `git status` group separately rather than collapsing to `git`.
-SUBCOMMAND_TOOLS = {
-    "git", "gh", "glab", "npm", "npx", "yarn", "pnpm", "pip", "pip3", "cargo",
-    "go", "docker", "kubectl", "just", "make", "brew", "terraform", "bundle",
-    "rake", "dotnet", "aws", "gcloud", "az", "systemctl", "apt", "apt-get",
-    "uv", "poetry", "deno", "bun",
-}
-
 DURATION_UNITS = {"m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
-
-# A subcommand token is a bare lowercase word (e.g. `pr`, `view`, `commit`).
-# Stopping at the first flag, path, or value keeps shapes specific — so a
-# suggested allow pattern stays as narrow as the commands actually run.
-SUBCOMMAND_LIKE = re.compile(r"^[a-z][a-z0-9-]*$")
-MAX_SHAPE_TOKENS = 4
 
 
 def parse_duration(text):
@@ -91,31 +83,6 @@ def is_already_allowed(command, allow_prefixes):
     return False
 
 
-def command_shape(command):
-    """Reduce a command to a stable grouping prefix and a suggested allow pattern.
-
-    Skips leading `VAR=value` assignments and `sudo`, then keeps the program and
-    (for known subcommand tools) the subcommand. Returns (shape, allow_pattern).
-    """
-    tokens = command.strip().split()
-    i = 0
-    while i < len(tokens) and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[i]) or tokens[i] == "sudo"):
-        i += 1
-    if i >= len(tokens):
-        return command.strip(), f"Bash({command.strip()})"
-
-    prog = os.path.basename(tokens[i])
-    shape_tokens = [prog]
-    if prog in SUBCOMMAND_TOOLS:
-        j = i + 1
-        while j < len(tokens) and len(shape_tokens) < MAX_SHAPE_TOKENS and SUBCOMMAND_LIKE.match(tokens[j]):
-            shape_tokens.append(tokens[j])
-            j += 1
-
-    shape = " ".join(shape_tokens)
-    return shape, f"Bash({shape}:*)"
-
-
 def read_records(log_path, cutoff):
     """Yield decision records from the log, optionally filtered to ts >= cutoff."""
     path = os.path.expanduser(log_path)
@@ -130,6 +97,8 @@ def read_records(log_path, cutoff):
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if "schema" in rec and "decision" not in rec:
+                continue  # the log's schema header ([LOG-06]), not a decision record
             if cutoff is not None:
                 ts = rec.get("ts")
                 if ts:
@@ -180,13 +149,21 @@ def analyze(records, allow_prefixes, min_count, max_samples):
     for rec in records:
         by_mode[rec.get("mode") or "unspecified"] += 1
         decision = rec.get("decision")
-        command = rec.get("command")
-        if not command:
+        # Current records log the shape directly ([LOG-03]); legacy records (from
+        # before that change) carry a raw `command`. Reduce either to a shape, so
+        # the analyzer never surfaces a raw command — even out of an old log.
+        src = rec.get("command_shape") or rec.get("command")
+        if not src:
             continue  # file-content (Write/Edit) records have no command to group
-        shape, pattern = command_shape(command)
+        shape, pattern = command_shape(src)
 
         if decision == "allow":
-            if is_already_allowed(command, allow_prefixes):
+            # Suppress on the shape, not the raw src: grouping keys on the shape
+            # (which drops leading VAR=value/sudo), so the already-allowed check
+            # must too — else a command like `FOO=1 echo …` shapes to `echo` but
+            # its raw form doesn't start with the `echo` prefix and gets wrongly
+            # re-proposed despite `Bash(echo *)` already allowing it.
+            if is_already_allowed(shape, allow_prefixes):
                 continue
             g = allow_groups[shape]
             g["count"] += 1
@@ -195,21 +172,21 @@ def analyze(records, allow_prefixes, min_count, max_samples):
                 g["auto"] += 1
             if rec.get("cwd"):
                 g["cwds"].add(rec["cwd"])
-            if len(g["samples"]) < max_samples and command not in g["samples"]:
-                g["samples"].append(command)
+            if len(g["samples"]) < max_samples and shape not in g["samples"]:
+                g["samples"].append(shape)
         elif decision == "ask":
             g = ask_groups[shape]
             g["count"] += 1
             for reason in rec.get("matched", []):
                 g["reasons"].add(reason)
-            if len(g["samples"]) < max_samples and command not in g["samples"]:
-                g["samples"].append(command)
+            if len(g["samples"]) < max_samples and shape not in g["samples"]:
+                g["samples"].append(shape)
         elif decision == "deny":
             for reason in rec.get("matched", []) or ["(unattributed)"]:
                 g = deny_groups[reason]
                 g["count"] += 1
-                if len(g["samples"]) < max_samples and command not in g["samples"]:
-                    g["samples"].append(command)
+                if len(g["samples"]) < max_samples and shape not in g["samples"]:
+                    g["samples"].append(shape)
 
     allow_candidates = [
         {"shape": shape, "suggested_allow": g["pattern"], "count": g["count"],

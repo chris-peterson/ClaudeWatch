@@ -13,8 +13,9 @@ echo "=== decision log reset ==="
 
 make_log() {
   cat > "$1" <<'EOF'
-{"ts":"2026-05-31T10:00:00+00:00","session":"s1","decision":"allow","tool":"Bash","command":"ls"}
-{"ts":"2026-05-31T10:05:00+00:00","session":"s2","decision":"ask","tool":"Bash","command":"git commit -m x","matched":["watch-git — git commit"]}
+{"schema":2}
+{"ts":"2026-05-31T10:00:00+00:00","session":"s1","decision":"allow","tool":"Bash","command_shape":"ls"}
+{"ts":"2026-05-31T10:05:00+00:00","session":"s2","decision":"ask","tool":"Bash","command_shape":"git commit","matched":["watch-git — git commit"]}
 EOF
 }
 
@@ -31,9 +32,10 @@ OUT=$(python3 "$RESET" --log "$LOG" 2>&1); RC=$?
 check "$RC" 0 "archive exits zero"
 [ -f "$LOG" ]; check "$?" 1 "original log is gone"
 ls "$TMP"/archive/decisions-*.jsonl >/dev/null 2>&1; check "$?" 0 "an archive copy exists"
-ARCHIVED=$(cat "$TMP"/archive/decisions-*.jsonl | wc -l | tr -d ' ')
+# Count decision records (the archived file also carries the schema header line).
+ARCHIVED=$(grep -c '"decision"' "$TMP"/archive/decisions-*.jsonl | tr -d ' ')
 check "$ARCHIVED" 2 "archive preserves both records"
-check_grep "2 records" "$OUT" "reports record count and span"
+check_grep "2 records" "$OUT" "reports record count and span (header excluded)"
 rm -rf "$TMP"
 
 echo "--- --hard deletes the log ---"

@@ -17,24 +17,29 @@ cat > "$SETTINGS" <<'EOF'
 {"permissions":{"allow":["Bash(jq:*)"]}}
 EOF
 
-# Synthetic log:
+# Synthetic log. Records carry the current `command_shape` field ([LOG-03]); the
+# fourth `gh pr view` record keeps the legacy raw `command` field to prove the
+# analyzer still reduces pre-change logs via its fallback path.
 #   gh pr view  x4  allow, not allow-listed   -> allow_candidate
 #   jq          x3  allow, allow-listed       -> suppressed
 #   git commit  x3  ask                       -> except_candidate
 #   force push  x2  deny                      -> deny_summary
 cat > "$LOG" <<'EOF'
-{"ts":"2026-05-31T10:00:00+00:00","session":"s1","decision":"allow","tool":"Bash","mode":"auto","command":"gh pr view 1","cwd":"/a"}
-{"ts":"2026-05-31T10:01:00+00:00","decision":"allow","tool":"Bash","mode":"auto","command":"gh pr view 2","cwd":"/a"}
-{"ts":"2026-05-31T10:02:00+00:00","decision":"allow","tool":"Bash","mode":"auto","command":"gh pr view 3","cwd":"/b"}
+{"schema":2}
+{"ts":"2026-05-31T10:00:00+00:00","session":"s1","decision":"allow","tool":"Bash","mode":"auto","command_shape":"gh pr view","cwd":"/a"}
+{"ts":"2026-05-31T10:01:00+00:00","decision":"allow","tool":"Bash","mode":"auto","command_shape":"gh pr view","cwd":"/a"}
+{"ts":"2026-05-31T10:02:00+00:00","decision":"allow","tool":"Bash","mode":"auto","command_shape":"gh pr view","cwd":"/b"}
 {"ts":"2026-05-31T10:03:00+00:00","decision":"allow","tool":"Bash","mode":"default","command":"gh pr view 4","cwd":"/b"}
-{"ts":"2026-05-31T10:04:00+00:00","decision":"allow","tool":"Bash","command":"jq .x a.json","cwd":"/a"}
-{"ts":"2026-05-31T10:05:00+00:00","decision":"allow","tool":"Bash","command":"jq .y b.json","cwd":"/a"}
-{"ts":"2026-05-31T10:06:00+00:00","decision":"allow","tool":"Bash","command":"jq .z c.json","cwd":"/a"}
-{"ts":"2026-05-31T10:07:00+00:00","session":"s2","decision":"ask","tool":"Bash","command":"git commit -m a","matched":["watch-git — git commit"],"cwd":"/a"}
-{"ts":"2026-05-31T10:08:00+00:00","decision":"ask","tool":"Bash","command":"git commit -m b","matched":["watch-git — git commit"],"cwd":"/a"}
-{"ts":"2026-05-31T10:09:00+00:00","decision":"ask","tool":"Bash","command":"git commit -m c","matched":["watch-git — git commit"],"cwd":"/a"}
-{"ts":"2026-05-31T10:10:00+00:00","decision":"deny","tool":"Bash","command":"git push --force origin main","matched":["watch-git — force push"],"cwd":"/a"}
-{"ts":"2026-05-31T10:11:00+00:00","decision":"deny","tool":"Bash","command":"git push --force origin dev","matched":["watch-git — force push"],"cwd":"/a"}
+{"ts":"2026-05-31T10:04:00+00:00","decision":"allow","tool":"Bash","command_shape":"jq","cwd":"/a"}
+{"ts":"2026-05-31T10:05:00+00:00","decision":"allow","tool":"Bash","command_shape":"jq","cwd":"/a"}
+{"ts":"2026-05-31T10:06:00+00:00","decision":"allow","tool":"Bash","command_shape":"jq","cwd":"/a"}
+{"ts":"2026-05-31T10:06:30+00:00","decision":"allow","tool":"Bash","command":"OUT=/tmp/x jq .a f.json","cwd":"/a"}
+{"ts":"2026-05-31T10:06:40+00:00","decision":"allow","tool":"Bash","command":"OUT=/tmp/y jq .b g.json","cwd":"/a"}
+{"ts":"2026-05-31T10:07:00+00:00","session":"s2","decision":"ask","tool":"Bash","command_shape":"git commit","matched":["watch-git — git commit"],"cwd":"/a"}
+{"ts":"2026-05-31T10:08:00+00:00","decision":"ask","tool":"Bash","command_shape":"git commit","matched":["watch-git — git commit"],"cwd":"/a"}
+{"ts":"2026-05-31T10:09:00+00:00","decision":"ask","tool":"Bash","command_shape":"git commit","matched":["watch-git — git commit"],"cwd":"/a"}
+{"ts":"2026-05-31T10:10:00+00:00","decision":"deny","tool":"Bash","command_shape":"git push","matched":["watch-git — force push"],"cwd":"/a"}
+{"ts":"2026-05-31T10:11:00+00:00","decision":"deny","tool":"Bash","command_shape":"git push","matched":["watch-git — force push"],"cwd":"/a"}
 EOF
 
 assert_json() {
@@ -61,13 +66,17 @@ assert_json "gh pr view shows 3 auto-executed of 4" \
   "any(c['shape']=='gh pr view' and c['auto_executed']==3 for c in d['allow_candidates'])"
 assert_json "by_mode tallies auto and default" \
   "d['by_mode'].get('auto')==3 and d['by_mode'].get('default')==1"
+assert_json "schema header is skipped (14 records, not counted in by_mode)" \
+  "d['meta']['records_considered']==14 and d['by_mode'].get('unspecified')==10"
 assert_json "meta reports distinct sessions (s1, s2)" \
   "d['meta']['distinct_sessions']==2"
 assert_json "meta reports the oldest and newest record ts" \
   "d['meta']['oldest_ts']=='2026-05-31T10:00:00+00:00' and d['meta']['newest_ts']=='2026-05-31T10:11:00+00:00'"
 assert_json "meta reports the span in days" \
   "d['meta']['span_days']==0.01"
-assert_json "allow-listed jq is suppressed" \
+# jq is allow-listed; the two `OUT=… jq …` records shape to `jq` after the leading
+# VAR= is stripped, so suppression must key on the shape, not the raw command.
+assert_json "allow-listed jq is suppressed, including VAR=-prefixed variants" \
   "all(c['shape']!='jq' for c in d['allow_candidates'])"
 assert_json "git commit is an except candidate (count 3)" \
   "any(c['shape']=='git commit' and c['count']==3 for c in d['except_candidates'])"

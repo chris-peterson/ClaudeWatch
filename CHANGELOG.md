@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.0
+
+### Fixes
+- **Piped and chained commands no longer bypass the `ask` tier.** Claude Code does not honor a `PreToolUse` hook's `ask` decision for a *compound* command (a pipe or chain like `git push --force-with-lease 2>&1 | tail`) whose segments each match a host `allow` rule — it auto-approves the pipeline before the prompt surfaces, so a guarded ask-tier command (`commit`, `push`, `push --force-with-lease`, `stash`, `env`, …) ran unprompted whenever it was piped. A `deny` is honored regardless. The engine now escalates an `ask` to a `deny` when a Bash command is compound — it contains an unquoted shell control operator (pipe, `;`, newline, `&&`, `$(`, or backtick) — with a message to re-run the guarded command on its own to get the prompt. Operators inside quoted spans (a pipe in a commit message, a `;` in a `python3 -c "…"` argument) are stripped first, so they don't false-trigger. The escalation only ever tightens `ask`→`deny` and is bash-only; bare commands prompt as before (see `SPEC.md` `[OUT-08]`). Closes #14.
+
 ## 0.13.4
 
 ### Fixes

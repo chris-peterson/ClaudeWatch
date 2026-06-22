@@ -44,7 +44,9 @@ t "unzip non-nupkg"        allow '{"tool_name":"Bash","tool_input":{"command":"u
 t "tar non-nupkg"          allow '{"tool_name":"Bash","tool_input":{"command":"tar -xf release.tar.gz"}}'
 t "nuget restore"          allow '{"tool_name":"Bash","tool_input":{"command":"nuget restore MySolution.sln"}}'
 t "unzip; then .nupkg"     allow '{"tool_name":"Bash","tool_input":{"command":"unzip foo.zip; echo done.nupkg"}}'
-t "unzip && curl .nupkg"   ask   '{"tool_name":"Bash","tool_input":{"command":"unzip foo.zip && curl https://example.com/Foo.nupkg -o pkg.nupkg"}}'
+# Compound command: the curl-.nupkg ask is escalated to a block (engine-level,
+# see test-engine.sh). The bare ask cases above keep rule-match coverage.
+t "unzip && curl .nupkg (compound → block)" block '{"tool_name":"Bash","tool_input":{"command":"unzip foo.zip && curl https://example.com/Foo.nupkg -o pkg.nupkg"}}'
 t "ls"                     allow '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'
 t "Write tool"             allow '{"tool_name":"Write","tool_input":{"file_path":"Program.cs","content":"class Program {}"}}'
 

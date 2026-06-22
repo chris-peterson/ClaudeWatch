@@ -45,6 +45,8 @@ ClaudeWatch's regex matching reaches anywhere in the command string and into the
 
 Broadening the allowlist is safe because a hook decision outranks an `allow` rule: ClaudeWatch's `ask` and `deny` still fire even when your allowlist would otherwise let the command through. The allow rule only takes effect where ClaudeWatch stays silent — a silent hook defers to Claude Code's normal permission flow rather than auto-approving.
 
+One nuance for compound commands. Claude Code does not honor a hook `ask` for a piped or chained command (e.g. `git push --force-with-lease 2>&1 | tail`) whose segments each match an allow rule — it auto-approves the pipeline before the prompt surfaces, so the confirm is skipped. A `deny`, by contrast, is honored through a pipe. So that an `ask`-tier command isn't silently bypassed when piped, ClaudeWatch escalates an `ask` to a `deny` whenever the command is compound, with a message to re-run the guarded command on its own to get the prompt. Bare commands prompt normally; the escalation only changes the piped/chained form.
+
 `watch-aws` leans on this. Unlike the interpreter sets — which stay silent on most commands and only block destructive variants — it *asks* on most `aws` commands and stays silent only on read-only ops (`get-`/`list-`/`describe-`/`head-`, `s3 ls`). `Bash(aws *)` is what makes those reads frictionless; without it they still hit Claude Code's default prompt. Mutations still prompt and destructive ops (`delete-`, `terminate-`, `s3 rm`, …) are still blocked, because the hook's decision wins over the allow rule.
 
 ### Discovering what to allow (`/ClaudeWatch:learn`)

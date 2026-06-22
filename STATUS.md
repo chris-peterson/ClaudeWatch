@@ -4,9 +4,9 @@ Tracking status of the requirements declared in [SPEC.md](SPEC.md). Updated
 whenever an audit (`/spec-audit`) is run, when implementation lands, or when
 the spec is revised.
 
-**Last audit:** 2026-05-31
+**Last audit:** 2026-06-22
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 82/82 normative requirements (100%) + 3 deferred (FUT-01..FUT-03).
+**Coverage:** 83/83 normative requirements (100%) + 3 deferred (FUT-01..FUT-03).
 FUT-04 is a deferred-discussion note on rule-edit durability across upgrades,
 not a numbered target.
 
@@ -26,7 +26,7 @@ spot; broader clusters cite the file and its tests.
 | LOG-01..LOG-04 | Decision logging side channel (on by default, `CLAUDEWATCH_LOG=off` to opt out) | Covered | `scripts/watchdog.py` (`_log_event`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | RL-01..RL-14 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
-| OUT-01..OUT-07 | Output decisions, formatting, aggregation, allow-by-default, ref hyperlinks (`CLAUDEWATCH_HYPERLINKS`), deny source tag | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
+| OUT-01..OUT-08 | Output decisions, formatting, aggregation, allow-by-default, ref hyperlinks (`CLAUDEWATCH_HYPERLINKS`), deny source tag, compound-command ask→deny escalation | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
 | HK-01 | PreToolUse hooks for Bash/Write/Edit | Covered | `hooks/hooks.json` |
 | HK-02 | SessionStart hook (no-op placeholder) | Covered | `hooks/hooks.json`, `hooks/cli-freshness.sh` |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |
@@ -48,6 +48,10 @@ spot; broader clusters cite the file and its tests.
 | FUT-03 | Multi-line YAML strings / anchors | Deferred | Not needed by current rules |
 
 ## Audit history
+
+### 2026-06-22 — Coverage refresh (spec-status)
+
+STATUS.md updated: +1 ID (OUT-08, compound-command ask→deny escalation), normative count 82 → 83. Shipped alongside the [OUT-08] engine change for issue #14.
 
 ### 2026-05-31 — Coverage reconciliation
 

@@ -43,8 +43,10 @@ echo "--- ask: env / printenv ---"
 t "env"                   ask   '{"tool_name":"Bash","tool_input":{"command":"env"}}'
 t "env -i"                ask   '{"tool_name":"Bash","tool_input":{"command":"env -i bash"}}'
 t "printenv"              ask   '{"tool_name":"Bash","tool_input":{"command":"printenv"}}'
-t "&& env"                ask   '{"tool_name":"Bash","tool_input":{"command":"cd /tmp && env"}}'
-t '$(env)'                ask   '{"tool_name":"Bash","tool_input":{"command":"echo $(env | wc -l)"}}'
+# Compound commands: the env ask is escalated to a block (engine-level, see
+# test-engine.sh). The bare env/printenv asks above keep rule-match coverage.
+t "&& env (compound → block)"  block '{"tool_name":"Bash","tool_input":{"command":"cd /tmp && env"}}'
+t '$(env) (compound → block)'  block '{"tool_name":"Bash","tool_input":{"command":"echo $(env | wc -l)"}}'
 
 echo "--- allow: env-as-substring false positives ---"
 t "comment w/ data-env"   allow '{"tool_name":"Bash","tool_input":{"command":"# Get the data-env around each occurrence\ngrep -B3 -A2 getty_dsa_es_7 docs/usage-report.md | head -25"}}'

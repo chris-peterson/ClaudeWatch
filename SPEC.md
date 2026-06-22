@@ -109,10 +109,11 @@ The engine emits at most one decision per invocation.
 - **[OUT-01]** When emitting a decision, the engine shall write a single JSON object to stdout matching the Claude Code `hookSpecificOutput` schema with `hookEventName: "PreToolUse"` and `permissionDecision` set to `"deny"` or `"ask"`.
 - **[OUT-02]** The engine shall format each violation canonically as `<rule-name>: <reason>` (just `<reason>` when the rule has no name), with ` — <ref>` appended when `ref` is present. The rule-set name is omitted — the `ref` link supplies that context. This canonical form is what the decision log records (`[LOG-03]`); the displayed reason may render it differently per `[OUT-06]`.
 - **[OUT-03]** When any block rule matches in any rule set, the engine shall emit a single `deny` decision aggregating all block reasons, separated by newlines.
-- **[OUT-04]** When no block rule matches and at least one ask rule matches in any rule set, the engine shall emit a single `ask` decision aggregating all ask reasons, separated by newlines.
+- **[OUT-04]** When no block rule matches and at least one ask rule matches in any rule set, the engine shall emit a single `ask` decision aggregating all ask reasons, separated by newlines — subject to the compound-command escalation in [OUT-08].
 - **[OUT-05]** When no rule matches, the engine shall produce no stdout output (allow-by-default).
 - **[OUT-06]** In the `permissionDecisionReason` of an **ask** decision — but not in the logged reasons (`[LOG-03]`) — when a violation carries a `ref`, the engine shall render the `<reason>` prose itself as an OSC 8 terminal hyperlink targeting the `ref` (so the line reads `<prefix>: <reason>` with the prose clickable), and shall omit the inline ` — <ref>` URL. Setting `CLAUDEWATCH_HYPERLINKS` (case-insensitively) to `off`/`0`/`false`/`none`/empty shall fall back to the canonical plain ` — <ref>` form; any other value, or unset, enables hyperlinks. **Deny** decisions shall always use the canonical plain ` — <ref>` form regardless of `CLAUDEWATCH_HYPERLINKS`: Claude Code renders a deny reason through its error path, which strips the OSC 8 escape without making it clickable, so an inline URL is the only way the `ref` reaches the user. Violations without a `ref` render identically in all modes.
 - **[OUT-07]** A **deny** decision's `permissionDecisionReason` shall end with the ` [plugin:ClaudeWatch]` source tag — but the logged reasons (`[LOG-03]`) shall not. Claude Code annotates ask prompts with the originating plugin but leaves deny errors unattributed, so the engine appends the tag itself on the deny path to keep the source visible. Ask decisions shall not carry the tag (the host supplies it).
+- **[OUT-08]** When the coalesced decision for a `Bash` input is `ask` and the command is *compound* — it contains a shell control operator (`|`, `;`, newline, `&&`, `$(`, or backtick) outside any single- or double-quoted span — the engine shall escalate the decision to `deny` and prepend a note stating the ask was escalated because a piped or chained command can be auto-approved segment-by-segment by the host allow list (skipping the confirmation) and that the guarded command should be run on its own to be prompted. Rationale: Claude Code does not honor a `PreToolUse` hook's `ask` for a compound command whose segments each match a host `allow` rule — it auto-approves the pipeline before the prompt surfaces — so an un-escalated `ask` is silently bypassed; a `deny` is honored through the pipe. The escalation applies only to an `ask` decision (a `deny` already survives, and `allow`/no-match stays silent per [OUT-05]) and only to `Bash` inputs (`Write`/`Edit` are single operations, not shell pipelines). Operators inside quoted spans are string data, not command boundaries, and shall not trigger escalation.
 
 ## 5. Hook Wiring (HK)
 
@@ -241,6 +242,15 @@ These describe how the current implementation satisfies the spec. They are
 - `/ClaudeWatch:learn` reads the log via `scripts/analyze-decisions.py`, a
   separate read-only, stdlib-only tool. The engine remains the only
   decision-making component; the analyzer never evaluates rules.
+- The compound-command detection ([OUT-08]) strips quoted spans with a simple
+  regex before scanning for shell operators. It does not parse escaped quotes
+  (`\"`) or `$'…'`, so an operator hidden behind such quoting may go undetected.
+  This is safe by construction: the escalation only ever tightens an `ask` into
+  a `deny`, so a missed compound form degrades to the existing `ask` (the
+  pre-escalation behavior), never to something weaker. The `block`/`ask`
+  pattern matching itself runs on the full, unstripped command, so quote
+  stripping does not affect which rules fire — only whether a matched `ask` is
+  escalated.
 
 ## 13. Future / Deferred (FUT)
 

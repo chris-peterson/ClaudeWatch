@@ -237,6 +237,42 @@ def _rule_target(rule):
     return rule.get("target") or "bash"
 
 
+# Quoted spans (single- or double-quoted) carry string data, not shell syntax,
+# so they are stripped before scanning for control operators — an operator
+# inside a string literal (a pipe in a commit message, a semicolon in a sed
+# program) is not a command boundary.
+_QUOTED_SPAN = re.compile(r"'[^']*'|\"[^\"]*\"")
+# Shell control operators that chain multiple commands: pipe `|` (covers `||`
+# and `|&`), sequence `;` / newline, logical `&&`, and command substitution
+# `$(` / backtick. A lone `&` is intentionally absent — it appears in
+# redirections like `2>&1` and matching it would mis-flag a single command.
+_SHELL_COMPOUND = re.compile(r"\||;|\n|&&|\$\(|`")
+
+
+def _is_compound_command(command):
+    """Whether a bash command chains multiple commands via a shell operator.
+
+    The host's allow list can approve each segment of a compound command
+    independently and auto-approve the whole, which pre-empts this hook's
+    `ask` (a `deny` is honored regardless). Detecting the compound shape lets
+    the engine escalate `ask` -> `deny` so the confirmation is not silently
+    skipped (see `main`). This detection only ever *tightens* `ask` into
+    `deny`; missing a compound form degrades to the existing `ask`, never
+    weaker, so the simple quote-stripping (which does not handle escaped
+    quotes) stays safe.
+    """
+    return bool(_SHELL_COMPOUND.search(_QUOTED_SPAN.sub("", command)))
+
+
+def _compound_escalation():
+    """The note prepended when an `ask` is escalated to `deny` for a compound command."""
+    return {
+        "prefix": "compound command",
+        "reason": "escalated to block — a piped or chained command can be auto-approved segment-by-segment by the host allow list, which skips this confirmation; run the guarded command on its own to be prompted",
+        "ref": "",
+    }
+
+
 def evaluate_rules(config, input_kind, input_text, file_extension=None):
     """Evaluate a single rule set against an input.
 
@@ -464,6 +500,13 @@ def main():
         decision, chosen = "ask", all_asks
     else:
         decision, chosen = "allow", []
+
+    # A compound bash command (pipe, chain, sequence, substitution) can be
+    # auto-approved by the host segment-by-segment, which pre-empts an `ask`. A
+    # `deny` is honored regardless, so escalate `ask` -> `deny` and tell the
+    # user to re-run the guarded command on its own. Bare commands keep `ask`.
+    if decision == "ask" and input_kind == "bash" and _is_compound_command(input_text):
+        decision, chosen = "deny", [_compound_escalation()] + chosen
 
     # Log the canonical plain text; render hyperlinks only in the prompt.
     _log_event(data, input_kind, input_text, decision, [_message_plain(v) for v in chosen])

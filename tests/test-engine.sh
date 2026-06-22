@@ -244,4 +244,20 @@ run_test "$RULES_DIR" "secret ask (dir)"    ask   '{"tool_name":"Bash","tool_inp
 run_test "$RULES_DIR" "file except (dir)"    allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf ~/.cache/pip"}}'
 run_test "$RULES_DIR" "safe cmd (dir)"      allow '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'
 
+echo ""
+echo "=== compound-command ask escalation ==="
+# A piped/chained bash command whose segments each match a host allow rule can be
+# auto-approved by Claude Code, pre-empting the hook's ask (deny is still honored).
+# The engine escalates an ask to a deny when the bash command is compound, since
+# deny survives the pipe. Operators inside quotes are not shell operators and must
+# not escalate, so a guarded command bare or with a quoted operator still prompts.
+run_test "$RULES_DIR" "bare ask prompts"                    ask   '{"tool_name":"Bash","tool_input":{"command":"git stash list"}}'
+run_test "$RULES_DIR" "piped ask escalates to block"        block '{"tool_name":"Bash","tool_input":{"command":"git stash list | tail -4"}}'
+run_test "$RULES_DIR" "chained ask (&&) escalates to block" block '{"tool_name":"Bash","tool_input":{"command":"git add . && git commit -m \"wip\""}}'
+run_test "$RULES_DIR" "sequenced ask (;) escalates to block" block '{"tool_name":"Bash","tool_input":{"command":"git commit -m wip; echo done"}}'
+run_test "$RULES_DIR" "quoted operators in commit msg stay ask" ask '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"wip | cleanup; done\""}}'
+run_test "$RULES_DIR" "cmd-subst inside quotes stays ask"   ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"$(printf done)\""}}'
+run_test "$RULES_DIR" "block through pipe unaffected"       block '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main | tail -4"}}'
+run_test "$RULES_DIR" "allow through pipe stays silent"     allow '{"tool_name":"Bash","tool_input":{"command":"ls -la | tail -4"}}'
+
 print_results

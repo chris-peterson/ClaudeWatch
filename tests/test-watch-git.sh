@@ -55,7 +55,10 @@ t "reset --hard=no"     ask   '{"tool_name":"Bash","tool_input":{"command":"git 
 echo "--- ask: commit ---"
 t "commit -m"           ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"fix: update readme\""}}'
 t "heredoc commit"      ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"$(cat <<'"'"'EOF'"'"'\nfix\nEOF\n)\""}}'
-t "add && commit"       ask   '{"tool_name":"Bash","tool_input":{"command":"git add . && git commit -m \"test\""}}'
+# Compound command: the commit ask is escalated to a block (a host allow list
+# could auto-approve `git add` + `git commit` segment-by-segment, skipping the
+# confirm). See the compound-command escalation tests in test-engine.sh.
+t "add && commit (compound → block)" block '{"tool_name":"Bash","tool_input":{"command":"git add . && git commit -m \"test\""}}'
 
 echo "--- ask: stash ---"
 t "stash"               ask   '{"tool_name":"Bash","tool_input":{"command":"git stash"}}'

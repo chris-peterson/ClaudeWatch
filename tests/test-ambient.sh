@@ -25,7 +25,8 @@ check() {
 }
 
 check "emits the plugin header" "# Ambient rules from the ClaudeWatch plugin"
-check "emits the compound-command guidance heading" "Run guarded commands on their own"
+check "emits the compound-command guidance heading" "Before you pipe or chain, check the lead command"
+check "frames the trigger reflex" "Reaching for \`| tail\`"
 check "names the escalation behavior" "from an \`ask\` prompt to a hard block"
 
 echo ""

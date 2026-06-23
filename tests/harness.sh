@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOOK="$SCRIPT_DIR/../scripts/watchdog.py"
-RULES_DIR="$SCRIPT_DIR/../rules"
+RULES_DIR="$SCRIPT_DIR/../watches"
 
 # Logging is on by default and writes to the real ~/.claude/claudewatch log.
 # Disable it for the suite so rule tests don't pollute it; the logging tests

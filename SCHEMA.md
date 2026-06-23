@@ -154,7 +154,7 @@ Using `except` on a `block` rule emits a warning and is ignored — block rules 
 
 ## Hook wiring
 
-Two `PreToolUse` hooks point the engine at the `rules/` directory — one for `Bash`, one for `Write|Edit`. The engine auto-discovers all `*.yml` files, evaluates every rule set, and returns a single coalesced decision:
+Two `PreToolUse` hooks point the engine at the `watches/` directory — one for `Bash`, one for `Write|Edit`. The engine auto-discovers all `*.yml` files, evaluates every rule set, and returns a single coalesced decision:
 
 ```json
 {
@@ -165,7 +165,7 @@ Two `PreToolUse` hooks point the engine at the `rules/` directory — one for `B
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/rules"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches"
           }
         ]
       },
@@ -174,7 +174,7 @@ Two `PreToolUse` hooks point the engine at the `rules/` directory — one for `B
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/rules"
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches"
           }
         ]
       }
@@ -236,7 +236,7 @@ Tool invocations other than `Bash`, `Write`, `Edit` (and empty payloads) are sil
 
 To create a new rule set (e.g. `watch-docker`):
 
-1. Create `rules/watch-docker.yml`:
+1. Create `watches/watch-docker.yml`:
 
 ```yaml
 name: watch-docker
@@ -259,4 +259,4 @@ rules:
 
 2. Add tests to `tests/test-watchdog.sh` (follow the existing pattern).
 
-The engine auto-discovers all `*.yml` files in `rules/`, so no changes to `hooks.json` are needed. To disable a rule set without deleting it, rename it to `*.yml.disabled`.
+The engine auto-discovers all `*.yml` files in `watches/`, so no changes to `hooks.json` are needed. To disable a rule set without deleting it, rename it to `*.yml.disabled`.

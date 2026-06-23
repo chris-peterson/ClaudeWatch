@@ -1,7 +1,7 @@
 #!/bin/bash
 source "$(cd "$(dirname "$0")" && pwd)/harness.sh"
 
-RULES="$SCRIPT_DIR/../rules/watch-git.yml"
+RULES="$SCRIPT_DIR/../watches/watch-git.yml"
 t() { run_test "$RULES" "$@"; }
 
 echo "=== watch-git ==="

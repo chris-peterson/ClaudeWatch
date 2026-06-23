@@ -15,7 +15,7 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 
 ## Core contracts (don't break these)
 
-1. **Determinism.** Given the same command and the same `rules/` tree, the
+1. **Determinism.** Given the same command and the same `watches/` tree, the
    engine must always produce the same *decision*. No clocks, no randomness,
    no network on the decision path. Decision logging (on by default, see
    [LOG-01]–[LOG-04]; `CLAUDEWATCH_LOG=off` opts out) is a side channel: it
@@ -41,7 +41,7 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 
 - **The engine is generic; the rules are domain-specific.** Treat
   `scripts/watchdog.py` as a stable library. New safety domains are new YAML
-  files in `rules/`, not new code.
+  files in `watches/`, not new code.
 - **Make adding a rule set frictionless.** Drop a `watch-*.yml` file, add a
   test file, regenerate docs. No registration, no manifest, no engine change.
 - **Rules are documentation.** Every rule has a `reason` and (almost always) a
@@ -74,7 +74,7 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
   concrete reason — the simplicity is a feature.
 - Tests are bash scripts that pipe JSON to the engine and assert decisions.
   Keep them readable and self-contained — `tests/test-watch-<name>.sh` mirrors
-  `rules/watch-<name>.yml`.
+  `watches/watch-<name>.yml`.
 - Docs are generated from rules YAML by `build/gen-rules-doc.py`. Don't
   hand-edit `docs/_site` content for rule references; edit the YAML and run
   `just docs`.
@@ -87,7 +87,7 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 - **Engine changes** — Update `scripts/watchdog.py` and `tests/test-engine.sh`
   in the same change. The engine has a small surface; every behavior should
   be exercised by a test.
-- **New or changed rule set** — Add/edit `rules/watch-<name>.yml` and
+- **New or changed rule set** — Add/edit `watches/watch-<name>.yml` and
   `tests/test-watch-<name>.sh`. No `hooks.json` change needed (auto-discovery).
   A rule set is described in three hand-maintained indexes that drift
   independently — update whichever the change affects:
@@ -98,7 +98,7 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
   The `docs/_site` reference is generated, not hand-maintained — run `just docs`.
   A dev-time PostToolUse hook (`.claude/settings.json` →
   `.claude/hooks/remind-rules-index.py`) emits this same checklist after any
-  `rules/watch-*.yml` Write/Edit so it isn't forgotten; it is not part of the
+  `watches/watch-*.yml` Write/Edit so it isn't forgotten; it is not part of the
   shipped plugin.
 - **Spec changes** — Update `SPEC.md` first. If a code change reveals a spec
   problem (ambiguity, missing requirement), **note it** and resolve via the
@@ -171,7 +171,7 @@ what `claude plugin update` reads.
 1. `README.md` — the elevator pitch and install path
 2. `SPEC.md` — the contract
 3. `scripts/watchdog.py` — the engine (under 250 lines)
-4. `rules/watch-git.yml` — the canonical rule-set example
+4. `watches/watch-git.yml` — the canonical rule-set example
 5. `SCHEMA.md` — the YAML rule format reference (for rule authors)
 6. `tests/test-watch-git.sh` — the test pattern
 7. This file — for "how to think about adding things"

@@ -48,7 +48,7 @@ post-edit file content).
 - **[EN-04]** If stdin is not valid JSON, then the engine shall produce no output and exit 0.
 - **[EN-04a]** If stdin is not valid JSON, then the engine shall write the parse error to stderr before exiting so the failure is visible in transcripts.
 - **[EN-05]** The engine shall accept a rules path as its first CLI argument.
-- **[EN-05a]** Where the engine is invoked without a rules-path argument, it shall use the directory `../rules` relative to the engine script.
+- **[EN-05a]** Where the engine is invoked without a rules-path argument, it shall use the directory `../watches` relative to the engine script.
 - **[EN-06]** When the rules path is a directory, the engine shall evaluate every `*.yml` file in that directory.
 - **[EN-07]** When the rules path is a single file, the engine shall evaluate only that file.
 - **[EN-08]** If the rules path does not exist, then the engine shall emit a `deny` decision with a "rules not found" reason that names the path.
@@ -119,13 +119,14 @@ The engine emits at most one decision per invocation.
 
 ## 5. Hook Wiring (HK)
 
-- **[HK-01]** The plugin shall register `PreToolUse` hooks that invoke the engine against the plugin's rules directory for the `Bash`, `Write`, and `Edit` tools. Matchers may be combined via regex alternation (e.g. `matcher: "Write|Edit"`).
+- **[HK-01]** The plugin shall register `PreToolUse` hooks that invoke the engine against the plugin's `watches/` directory for the `Bash`, `Write`, and `Edit` tools. Matchers may be combined via regex alternation (e.g. `matcher: "Write|Edit"`).
 - **[HK-02]** The plugin shall register a `SessionStart` hook for plugin-update self-checks. (Currently a no-op placeholder — see [FUT-01].)
 - **[HK-03]** The plugin shall declare its hooks in `hooks/hooks.json`.
+- **[HK-04]** The plugin shall register a `SessionStart` hook that emits ambient guidance into the session context advising that a consequential command be run as its own Bash call rather than piped or chained, so the compound-command escalation ([OUT-08]) is avoided before it triggers. The guidance shall be sourced from `rules/*.md` so it can be edited without changing the hook.
 
 ## 6. Extensibility (EXT)
 
-- **[EXT-01]** Where a new `*.yml` file is added to the rules directory, the engine shall auto-discover it on the next invocation without any configuration change to `hooks.json`.
+- **[EXT-01]** Where a new `*.yml` file is added to the `watches/` directory, the engine shall auto-discover it on the next invocation without any configuration change to `hooks.json`.
 - **[EXT-02]** Where a rule set is renamed from `*.yml` to `*.yml.disabled`, the engine shall stop loading it on the next invocation.
 - **[EXT-03]** New rule sets shall not require code changes to the engine.
 
@@ -147,9 +148,9 @@ without leaving the session.
 - **[SK-06]** Before writing edits, the skill shall scan for duplicate patterns, shadowing patterns, and cross-section conflicts (same pattern in both block and ask) and shall report any findings to the user.
 - **[SK-07]** Before writing edits, the skill shall present a preview of the updated rule tables and shall require explicit confirmation (`yes` / `edit` / `abort`) from the user.
 - **[SK-08]** When applying edits, the skill shall write only modified rule set files and shall preserve the standard YAML format.
-- **[SK-09]** When the user issues `disable <name>`, the skill shall rename `rules/<name>.yml` to `rules/<name>.yml.disabled`.
-- **[SK-10]** When the user issues `enable <name>`, the skill shall rename `rules/<name>.yml.disabled` to `rules/<name>.yml`.
-- **[SK-11]** When the user issues `new`, the skill shall create a new `rules/watch-<name>.yml` (the name shall start with `watch-`) with the standard YAML format.
+- **[SK-09]** When the user issues `disable <name>`, the skill shall rename `watches/<name>.yml` to `watches/<name>.yml.disabled`.
+- **[SK-10]** When the user issues `enable <name>`, the skill shall rename `watches/<name>.yml.disabled` to `watches/<name>.yml`.
+- **[SK-11]** When the user issues `new`, the skill shall create a new `watches/watch-<name>.yml` (the name shall start with `watch-`) with the standard YAML format.
 - **[SK-12]** After applying changes, the skill shall run `tests/test-watchdog.sh` and shall report any failures.
 
 ### `/ClaudeWatch:learn`
@@ -228,12 +229,20 @@ These describe how the current implementation satisfies the spec. They are
   pure-Python YAML parser (no PyYAML dependency). The parser supports inline
   list syntax (`['.ps1', '.psm1']`) for the top-level `extensions` field.
 - The hook command line is
-  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/rules`,
+  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches`,
   invoked from two `PreToolUse` matchers: `Bash` and `Write|Edit`.
 - The SessionStart hook (`hooks/cli-freshness.sh`) is intentionally a no-op
   placeholder for future plugin-update self-checks; ClaudeWatch does not
   install a CLI shim, so the freshness-check pattern used by sibling plugins
   (`beacon`, `tack`, `logbook`) does not apply here.
+- The ambient-guidance emission ([HK-04]) is a second SessionStart hook,
+  `hooks/emit-rules.sh`, which prints a `# Ambient rules from the ClaudeWatch
+  plugin` header followed by each `rules/*.md` file to stdout. Claude Code
+  adds SessionStart stdout to context on startup, resume, and compaction, so
+  the guidance persists across a compaction. This mirrors the `emit-rules.sh`
+  pattern in sibling plugins (`beacon`, `anchor`), which also keep their
+  ambient markdown under `rules/`. The YAML rule sets the engine evaluates
+  live in a separate `watches/` directory ([HK-01]), so the two never collide.
 - The rules-skill ID convention strips the `watch-` prefix from the rule set
   name (e.g. `watch-git` → `git-block-01`).
 - Decision logging is implemented in `watchdog.py` as a single `_log_event`
@@ -259,5 +268,5 @@ These describe how the current implementation satisfies the spec. They are
 - **[FUT-01]** Where a plugin-update self-check is implemented, the SessionStart hook shall verify `watchdog.py` emits the expected `hookSpecificOutput.permissionDecision` schema.
 - **[FUT-02]** Where the user adds a custom rule set via `/ClaudeWatch:rules new`, the skill should offer to scaffold a matching test file in `tests/`.
 - **[FUT-03]** Where multi-line YAML strings or nested anchors are required, the parser may switch to PyYAML; currently the minimal parser does not support these constructs.
-- **[FUT-04]** Where the user customizes rules on an installed plugin via `/ClaudeWatch:rules` (including the `except` and demotion edits proposed by `/ClaudeWatch:learn`, which route through that skill), those edits shall survive plugin version upgrades. The skill writes to `${CLAUDE_PLUGIN_ROOT}/rules`, which for an installed plugin resolves to the version-scoped cache directory (e.g. `~/.claude/plugins/cache/chris-peterson/ClaudeWatch/0.8.0/rules/`); an upgrade installs a fresh version directory with its own shipped rules and the hook reads from the new root, orphaning prior edits. The decision log ([LOG-01]) already shows the durable shape: it lives in a fixed user directory (`~/.claude/claudewatch/`) outside the cache and so persists across upgrades. The gap closes by giving rule customizations the same treatment — a user rules directory alongside it (`~/.claude/claudewatch/rules/`) that the engine loads in addition to the shipped set (user rules winning on conflict), or a migration step on upgrade. Until then, only allow-list outputs of `/ClaudeWatch:learn` (written to `settings.json`) are durable on an installed plugin; rule edits are not. Edits made when running from a working copy via `claude --plugin-dir .` (per [DIST-03]) are already durable because `${CLAUDE_PLUGIN_ROOT}` is the git-tracked checkout, not the cache.
+- **[FUT-04]** Where the user customizes rules on an installed plugin via `/ClaudeWatch:rules` (including the `except` and demotion edits proposed by `/ClaudeWatch:learn`, which route through that skill), those edits shall survive plugin version upgrades. The skill writes to `${CLAUDE_PLUGIN_ROOT}/watches`, which for an installed plugin resolves to the version-scoped cache directory (e.g. `~/.claude/plugins/cache/chris-peterson/ClaudeWatch/0.8.0/watches/`); an upgrade installs a fresh version directory with its own shipped rules and the hook reads from the new root, orphaning prior edits. The decision log ([LOG-01]) already shows the durable shape: it lives in a fixed user directory (`~/.claude/claudewatch/`) outside the cache and so persists across upgrades. The gap closes by giving rule customizations the same treatment — a user rules directory alongside it (`~/.claude/claudewatch/watches/`) that the engine loads in addition to the shipped set (user rules winning on conflict), or a migration step on upgrade. Until then, only allow-list outputs of `/ClaudeWatch:learn` (written to `settings.json`) are durable on an installed plugin; rule edits are not. Edits made when running from a working copy via `claude --plugin-dir .` (per [DIST-03]) are already durable because `${CLAUDE_PLUGIN_ROOT}` is the git-tracked checkout, not the cache.
 - **[FUT-05]** Where the user designates specific repositories as trusted for otherwise-prompted git operations (e.g. a personal knowledge repo or a dashboard repo where unattended `commit`/`push` is acceptable), the engine should suppress `watch-git`'s `ask` decisions for commands targeting those repos while still applying them everywhere else. This is *repo-scoped* allow configuration, distinct from the command-shape allow-list in `settings.json` (which blanket-allows a command in every directory) and from `except` (which exempts a command *variant*, not a *location*). The trusted set keys on the resolved target repo — the `git -C <path>` argument when present, otherwise the invocation's working directory — matched by path prefix or by remote URL. Determinism (core contract #1) holds because the target repo is a pure function of the hook input (the command string plus the cwd Claude Code already passes), with no clock or network on the decision path. The configuration must survive plugin upgrades, so it lives in the durable user directory described in [FUT-04] (`~/.claude/claudewatch/`), not in the version-scoped cache. Open questions: whether the match key is filesystem path, remote URL, or both (a path moves; a remote is stable but absent for never-pushed repos); whether trust is scoped per rule set (`watch-git` only) or is a general repo-scoped allow applying to any rule; and whether `push --force`-class **block** rules are ever in scope (likely not — "no recovery" should not be repo-waivable).

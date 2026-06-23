@@ -17,7 +17,7 @@ current working directory.
 
 ### 2. Discover rule sets
 
-List YAML files in `$PLUGIN_ROOT/rules/`. Each file is a rule set
+List YAML files in `$PLUGIN_ROOT/watches/`. Each file is a rule set
 (e.g. `watch-git.yml`, `watch-installs.yml`).
 
 Also check for disabled rule sets — files ending in `.yml.disabled` in the
@@ -31,7 +31,7 @@ For each **enabled** rule set, present rules in two tables. Use the rule set
 short name from the YAML `name` field (e.g. `watch-git` → `git`), and NN is
 zero-padded (e.g. `git-block-01`, `installs-ask-03`):
 
-**watch-git** (`rules/watch-git.yml`)
+**watch-git** (`watches/watch-git.yml`)
 
 **🚫 block** — rejected outright:
 
@@ -49,7 +49,7 @@ After listing all enabled rule sets, if any **disabled** rule sets exist, list
 them:
 
 **Disabled rule sets:**
-- `watch-foo` (`rules/watch-foo.yml.disabled`)
+- `watch-foo` (`watches/watch-foo.yml.disabled`)
 
 ### 4. Check for `--list` flag
 
@@ -77,12 +77,12 @@ to, (3) a reason (why the rule exists), (4) an optional `ref` (docs URL), and
 (5) whether it should block or ask. Derive a Python `re.search()` regex from
 the command description, following the style of existing patterns.
 
-For `disable <name>`: rename `rules/<name>.yml` to `rules/<name>.yml.disabled`.
+For `disable <name>`: rename `watches/<name>.yml` to `watches/<name>.yml.disabled`.
 The engine only loads `*.yml` files, so this effectively turns off the rule set
 without deleting it.
 
-For `enable <name>`: rename `rules/<name>.yml.disabled` back to
-`rules/<name>.yml`.
+For `enable <name>`: rename `watches/<name>.yml.disabled` back to
+`watches/<name>.yml`.
 
 For `new`: guide the user through creating a custom rule set:
 
@@ -96,7 +96,7 @@ For `new`: guide the user through creating a custom rule set:
    - `reason` — why the rule exists
    - `ref` — optional docs URL
    - `block` or `ask`
-4. Write the file to `rules/watch-<name>.yml` using the standard YAML format.
+4. Write the file to `watches/watch-<name>.yml` using the standard YAML format.
 
 Accept one command per turn. Loop back to the prompt after each operation
 until the user enters `done` or presses Enter with no input.

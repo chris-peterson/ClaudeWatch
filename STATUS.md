@@ -22,7 +22,7 @@ spot; broader clusters cite the file and its tests.
 |----|-------------|--------|----------|
 | EN-01..EN-13 | Engine lifecycle, IO, tool dispatch, error handling | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.py:335` |
-| EN-05a | No-arg fallback to `../rules` | Covered | `scripts/watchdog.py:343-346` |
+| EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py:343-346` |
 | LOG-01..LOG-06 | Decision logging side channel: on by default (`CLAUDEWATCH_LOG=off` to opt out), records the command shape rather than the raw command, owner-only perms (0600/0700), schema-versioned header that discards pre-shape logs on upgrade | Covered | `scripts/watchdog.py` (`_log_event`, `command_shape`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | RL-01..RL-14 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
@@ -30,6 +30,7 @@ spot; broader clusters cite the file and its tests.
 | HK-01 | PreToolUse hooks for Bash/Write/Edit | Covered | `hooks/hooks.json` |
 | HK-02 | SessionStart hook (no-op placeholder) | Covered | `hooks/hooks.json`, `hooks/cli-freshness.sh` |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |
+| HK-04 | SessionStart ambient guidance emission | Covered | `hooks/emit-rules.sh`, `rules/*.md`, `tests/test-ambient.sh` |
 | EXT-01..EXT-03 | Auto-discovery, disable-by-rename, no-code-change | Covered | `scripts/watchdog.py`, `tests/test-engine.sh` |
 | SK-01 | `/ClaudeWatch:help` overview | Covered | `skills/help/SKILL.md` |
 | SK-02..SK-12 | `/ClaudeWatch:rules` interactive editor | Covered | `skills/rules/SKILL.md` |
@@ -38,9 +39,9 @@ spot; broader clusters cite the file and its tests.
 | DIST-01 | Expose install metadata in manifest | Covered | `.claude-plugin/plugin.json` (name, version, description, repository, license) — hosting/marketplace mechanism is out of scope per SPEC.md |
 | DIST-02 | `.claude-plugin/plugin.json` manifest | Covered | `.claude-plugin/plugin.json` |
 | DIST-03 | Runnable via `claude --plugin-dir .` | Covered | `justfile` (`just try`) |
-| SH-01 | Shipped rule sets (enumerated) | Covered | `rules/*.yml` + per-set `tests/test-watch-*.sh` |
-| SH-02 | Filter regex on bash-target rule sets | Covered | All shipped `rules/*.yml` declaring `target: bash` rules |
-| SH-03 | `ref` URLs on rules | Covered | All shipped `rules/*.yml` |
+| SH-01 | Shipped rule sets (enumerated) | Covered | `watches/*.yml` + per-set `tests/test-watch-*.sh` |
+| SH-02 | Filter regex on bash-target rule sets | Covered | All shipped `watches/*.yml` declaring `target: bash` rules |
+| SH-03 | `ref` URLs on rules | Covered | All shipped `watches/*.yml` |
 | SH-04 | Per-set test files | Covered | `tests/test-watch-*.sh` |
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just docs-preview` | Covered | `justfile` + `tests/` |
 | FUT-01 | SessionStart self-check | Deferred | `hooks/cli-freshness.sh` is intentional no-op |
@@ -95,7 +96,7 @@ applied this session:
   - Added SH-04a (shell-command boundaries on full-token rules). (Later folded
     into the SH-04 prose; SH-04a is no longer a separate ID.)
   - Added EN-04a (stderr logging on JSON parse failure).
-  - Added EN-05a (explicit no-arg fallback to `../rules`).
+  - Added EN-05a (explicit no-arg fallback to `../watches`).
   - SK-05 expanded to enumerate all 7 edit operations including `<id>:allow`
     and `<id>:ask`.
 

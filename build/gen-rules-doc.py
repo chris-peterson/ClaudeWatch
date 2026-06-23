@@ -182,7 +182,7 @@ def write_suite_json(site_dir):
 def main():
     parse_rules_yml = load_parser()
 
-    rules_dir = os.path.join(ROOT_DIR, "rules")
+    rules_dir = os.path.join(ROOT_DIR, "watches")
     docs_dir = os.path.join(ROOT_DIR, "docs")
     site_dir = os.path.join(docs_dir, "_site")
 
@@ -221,7 +221,7 @@ def main():
         "",
         "# Rules",
         "",
-        "Generated from rule files in `rules/`.",
+        "Generated from rule files in `watches/`.",
         "",
         "> [!TIP]",
         "> Use the `/ClaudeWatch:rules` skill to interactively customize or extend these rules.",
@@ -236,7 +236,7 @@ def main():
         "# Prompts",
         "",
         "How each rule surfaces in Claude Code — an approximation, generated "
-        "from the rule files in `rules/`. An **ask** rule pauses for your "
+        "from the rule files in `watches/`. An **ask** rule pauses for your "
         "confirmation before the command runs, with the reason linking to the "
         "rule's reference. A **block** rule rejects the command outright: Claude "
         "Code never prompts, and the rejected tool result shows the reason, the "

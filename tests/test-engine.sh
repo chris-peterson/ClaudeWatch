@@ -110,9 +110,9 @@ rm -rf "$TMPDIR_TESTS"
 
 echo ""
 echo "=== cross-ruleset isolation ==="
-run_test "$SCRIPT_DIR/../rules/watch-git.yml" "npm install (git rules)" allow \
+run_test "$SCRIPT_DIR/../watches/watch-git.yml" "npm install (git rules)" allow \
   '{"tool_name":"Bash","tool_input":{"command":"npm install lodash"}}'
-run_test "$SCRIPT_DIR/../rules/watch-installs.yml" "git push (install rules)" allow \
+run_test "$SCRIPT_DIR/../watches/watch-installs.yml" "git push (install rules)" allow \
   '{"tool_name":"Bash","tool_input":{"command":"git push origin main"}}'
 
 echo ""

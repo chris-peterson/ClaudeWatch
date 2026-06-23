@@ -36,7 +36,7 @@ suite:
       frames:
         - { t: you, text: "/ClaudeWatch:rules" }
         - { t: claude, text: "watch-git blocks git push --force and asks before git push and git commit. Add a rule, edit one, or move it to except?" }
-        - { t: status, text: "previews the change, then writes it back to rules/watch-git.yml" }
+        - { t: status, text: "previews the change, then writes it back to watches/watch-git.yml" }
     - label: "/ClaudeWatch:learn"
       ac: "--cyan"
       frames:

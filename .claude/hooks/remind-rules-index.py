@@ -3,7 +3,7 @@
 
 Each shipped rule set is described in several hand-maintained places that drift
 independently (README table, SPEC.md [SH-01], help-skill table). This hook fires
-after a Write/Edit to a `rules/watch-*.yml` source file and injects a reminder
+after a Write/Edit to a `watches/watch-*.yml` source file and injects a reminder
 listing those places so a rule-set change doesn't silently leave them stale.
 
 This guards development of ClaudeWatch itself — it is NOT part of the shipped
@@ -21,7 +21,7 @@ except (json.JSONDecodeError, ValueError):
 path = (data.get("tool_input") or {}).get("file_path", "") or ""
 
 # Fire only on rule-set source files — not *.yml.disabled, not test files.
-if not re.search(r"rules/watch-[^/]+\.yml$", path):
+if not re.search(r"watches/watch-[^/]+\.yml$", path):
     sys.exit(0)
 
 reminder = (

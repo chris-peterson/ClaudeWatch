@@ -29,9 +29,9 @@ rules miss.
 | `watch-ruby` | Ruby destructive primitives (`FileUtils.rm_rf`, `Marshal.load`, `YAML.load`, `system`/`exec`, backtick exec with interpolation, `eval`, `instance_eval`) — inline (`ruby -e`) and in `.rb` files |
 | `watch-secrets` | SSH keys, cloud credentials, echoed env vars, dotfile reads |
 
-Rules live in `rules/*.yml`. Disable a set by renaming to `*.yml.disabled`.
-Add a set by dropping a new `watch-*.yml` file in the same directory — the
-engine auto-discovers it.
+Rule sets live in `watches/*.yml`. Disable a set by renaming to
+`*.yml.disabled`. Add a set by dropping a new `watch-*.yml` file in the same
+directory — the engine auto-discovers it.
 
 ## Commands
 

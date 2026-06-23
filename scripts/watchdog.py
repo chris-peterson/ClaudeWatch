@@ -548,7 +548,7 @@ def main():
     if len(sys.argv) > 1:
         target = sys.argv[1]
     else:
-        target = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "rules")
+        target = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "watches")
 
     def _emit(decision, reason):
         print(json.dumps({

@@ -11,7 +11,5 @@
 # expected hookSpecificOutput.permissionDecision schema — the kind of
 # regression that shipped silently in 0.2.0 and would have been caught
 # by a session-start probe).
-#
-# See ai-sdlc/src/recipes/ai-cli-tool.md (Architecture Rule 11).
 
 exit 0

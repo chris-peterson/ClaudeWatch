@@ -3,7 +3,7 @@
 # the marketplace SPA (the suite: block). Schema: suite/plugin.schema.md.
 
 name: ClaudeWatch
-version: 0.15.0
+version: 0.15.1
 description: PreToolUse hook that screens shell commands and the code Claude writes to disk for safety, via 'claude-watchdog'
 author: chris-peterson
 repository: https://github.com/chris-peterson/ClaudeWatch

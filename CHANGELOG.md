@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.3
+
+### Fixes
+
+- Git branch-delete guards now track how recoverable each delete is. Force-deleting a *local* branch (`git branch -D`) was a hard block, but it's recoverable from the reflog, so it now prompts instead of blocking. Deleting a *remote* branch (`git push --delete`, `-d`, or the `:branch` colon refspec) now prompts with an accurate reason — the remote keeps no reflog — instead of falling through to the generic push prompt's misleading "publishes commits" message. Force-push stays the one git operation blocked outright.
+
 ## 0.15.2
 
 ### Fixes

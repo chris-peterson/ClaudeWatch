@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.2
+
+### Fixes
+- **Ambient rule reframed around the pipe/chain reflex.** The session-start nudge now leads with the actionable habit — run a guarded command (commit, push, install, destructive op) on its own rather than folding it into a pipe or `&&` chain — instead of opening with the escalation mechanics.
+- **Dropped a private-repo reference from the `cli-freshness.sh` comment.** The SessionStart hook's comment pointed at a private repo path; ClaudeWatch is public and the comment already explains why the hook is a no-op, so the pointer is removed.
+
 ## 0.15.1
 
 **Full Changelog**: https://github.com/chris-peterson/ClaudeWatch/compare/v0.15.0...v0.15.1

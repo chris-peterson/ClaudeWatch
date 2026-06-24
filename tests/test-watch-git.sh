@@ -21,10 +21,6 @@ t "-f"                  block '{"tool_name":"Bash","tool_input":{"command":"git 
 t "-xdf"                block '{"tool_name":"Bash","tool_input":{"command":"git clean -xdf"}}'
 t "-n (dry run)"        allow '{"tool_name":"Bash","tool_input":{"command":"git clean -n"}}'
 
-echo "--- block: branch -D ---"
-t "-D"                  block '{"tool_name":"Bash","tool_input":{"command":"git branch -D unmerged-feature"}}'
-t "-d (lowercase)"      allow '{"tool_name":"Bash","tool_input":{"command":"git branch -d merged-feature"}}'
-
 echo "--- block: stash drop/clear ---"
 t "drop"                block '{"tool_name":"Bash","tool_input":{"command":"git stash drop stash@{0}"}}'
 t "clear"               block '{"tool_name":"Bash","tool_input":{"command":"git stash clear"}}'
@@ -64,12 +60,22 @@ echo "--- ask: stash ---"
 t "stash"               ask   '{"tool_name":"Bash","tool_input":{"command":"git stash"}}'
 t "stash pop"           ask   '{"tool_name":"Bash","tool_input":{"command":"git stash pop"}}'
 
+echo "--- ask: branch -D (recoverable via reflog) ---"
+t "-D"                  ask   '{"tool_name":"Bash","tool_input":{"command":"git branch -D unmerged-feature"}}'
+t "-d (lowercase)"      allow '{"tool_name":"Bash","tool_input":{"command":"git branch -d merged-feature"}}'
+
 echo "--- ask: push ---"
 t "push"                ask   '{"tool_name":"Bash","tool_input":{"command":"git push"}}'
 t "push origin"         ask   '{"tool_name":"Bash","tool_input":{"command":"git push origin feature-branch"}}'
 t "push -u"             ask   '{"tool_name":"Bash","tool_input":{"command":"git push -u origin main"}}'
 t "push -u (f in name)" ask  '{"tool_name":"Bash","tool_input":{"command":"git push -u origin x-of-tag"}}'
 t "--force-with-lease"  ask   '{"tool_name":"Bash","tool_input":{"command":"git push --force-with-lease origin feature"}}'
+t "push src:dst (normal refspec)" ask '{"tool_name":"Bash","tool_input":{"command":"git push origin main:main"}}'
+
+echo "--- ask: push --delete (remote branch delete) ---"
+t "--delete"            ask   '{"tool_name":"Bash","tool_input":{"command":"git push origin --delete docs-pages-preview"}}'
+t "-d (short)"          ask   '{"tool_name":"Bash","tool_input":{"command":"git push -d origin feature"}}'
+t ":branch (colon refspec)" ask '{"tool_name":"Bash","tool_input":{"command":"git push origin :feature"}}'
 
 echo "--- allow: safe operations ---"
 t "status"              allow '{"tool_name":"Bash","tool_input":{"command":"git status"}}'
@@ -89,7 +95,6 @@ t "--git-dir=PATH push --force"       block '{"tool_name":"Bash","tool_input":{"
 t "--git-dir PATH push --force"       block '{"tool_name":"Bash","tool_input":{"command":"git --git-dir /tmp/repo/.git push --force origin main"}}'
 t "-P push --force"                   block '{"tool_name":"Bash","tool_input":{"command":"git -P push --force origin main"}}'
 t "-C path clean -f"                  block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo clean -f"}}'
-t "-C path branch -D"                 block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo branch -D feature"}}'
 t "-C path checkout ."                block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo checkout ."}}'
 t "-C path restore ."                 block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo restore ."}}'
 t "-C path stash drop"                block '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo stash drop"}}'
@@ -102,6 +107,8 @@ echo "--- ask: with git global flags between git and subcommand ---"
 t "-C path checkout -- file"          ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo checkout -- src/main.rs"}}'
 t "-C path push"                      ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo push"}}'
 t "-C path push --force-with-lease"   ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo push --force-with-lease"}}'
+t "-C path branch -D"                 ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo branch -D feature"}}'
+t "-C path push --delete"             ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo push origin --delete feature"}}'
 t "-C path reset --hard"              ask   '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo reset --hard"}}'
 t '-C "/with space" reset --hard'     ask   '{"tool_name":"Bash","tool_input":{"command":"git -C \"/tmp/has space\" reset --hard"}}'
 t "-C '/space' push --force-with-lease" ask '{"tool_name":"Bash","tool_input":{"command":"git -C '"'"'/tmp/has space'"'"' push --force-with-lease"}}'

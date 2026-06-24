@@ -23,11 +23,6 @@ rules:
       reason: deletes untracked files with no recovery
       ref: https://git-scm.com/docs/git-clean#Documentation/git-clean.txt--f
 
-    - name: git branch -D
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+branch\s.*(?<=\s)-[a-zA-Z]*D'
-      reason: force-deletes branch regardless of merge status
-      ref: https://git-scm.com/docs/git-branch#Documentation/git-branch.txt--D
-
     - name: git stash drop/clear
       pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+stash\s+(drop|clear)'
       reason: discards stashed changes with no recovery
@@ -64,7 +59,17 @@ rules:
       reason: rewrites remote history with stale-ref protection
       ref: https://git-scm.com/docs/git-push#Documentation/git-push.txt---no-force-with-lease
 
+    - name: git push --delete
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push\s.*(--delete\b|(?<=\s)-d\b|(?<=\s):\S)'
+      reason: deletes the remote branch — the remote keeps no reflog, so recovery needs a local copy of the commits
+      ref: https://git-scm.com/docs/git-push#Documentation/git-push.txt---delete
+
     - name: git push
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push(?!\s.*--force-with-lease)(\s|$)'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push(?!\s.*(?:--force-with-lease|--delete\b|(?<=\s)-d\b|(?<=\s):\S))(\s|$)'
       reason: publishes commits to the shared remote
       ref: https://git-scm.com/docs/git-push
+
+    - name: git branch -D
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+branch\s.*(?<=\s)-[a-zA-Z]*D'
+      reason: force-deletes a branch regardless of merge status (recoverable via reflog)
+      ref: https://git-scm.com/docs/git-branch#Documentation/git-branch.txt--D

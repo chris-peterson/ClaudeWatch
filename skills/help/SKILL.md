@@ -21,7 +21,7 @@ rules miss.
 | `watch-bash` | Shell-script destructive primitives in `.sh`/`.bash`/`.zsh` file content (`rm -rf /`, `curl\|sh`, `dd of=/dev/sd*`, `mkfs`, `shred`, `chmod 777`, `chown -R`) — bash-target coverage lives in `watch-files` |
 | `watch-dotnet` | .NET decompilers, `.nupkg` downloads/extraction, `nuget install` — nudges toward SourceLink |
 | `watch-files` | `rm -rf /`, `chmod 777`, shred, recursive chmod/chown |
-| `watch-git` | Destructive (force push, branch -D) and mutating (commit, push, reset --hard, force-with-lease) git ops — stage-only ops (add, rm, non-hard reset) allowed |
+| `watch-git` | No-recovery (force push) and recoverable mutating (commit, push, push --delete, reset --hard, branch -D, force-with-lease) git ops — stage-only ops (add, rm, non-hard reset) allowed |
 | `watch-installs` | `curl \| sh`, global installs, sudo pip/apt, npm/yarn/pip dependency changes |
 | `watch-node` | Node/JS destructive primitives (`fs.rmSync`, `child_process.exec`, `new Function`, `vm.runInThisContext`, `eval`) — inline (`node -e`/`bun`/`deno`/`tsx`) and in `.js`/`.mjs`/`.cjs`/`.ts`/`.mts`/`.cts` files |
 | `watch-pwsh` | PowerShell destructive primitives (`Format-Volume`, `Restart-Computer`, `IWR \| iex`, `Remove-Item -Recurse -Force`) — inline and in `.ps1`/`.psm1`/`.psd1` files |

@@ -79,7 +79,9 @@ jobs:
           }
           $rc = $LASTEXITCODE
           if ($rc -eq 0) { Write-Error "expected non-zero exit, got 0"; exit 1 }
-          if ([string]::IsNullOrEmpty($stdout)) { Write-Host "OK: no fabricated decision, rc=$rc" }
+          # The probe above intentionally left $LASTEXITCODE non-zero; reset it
+          # with an explicit `exit 0` so the leaked code doesn't fail the step.
+          if ([string]::IsNullOrEmpty($stdout)) { Write-Host "OK: no fabricated decision, rc=$rc"; exit 0 }
           else { Write-Error "launcher fabricated output: $stdout"; exit 1 }
 
       # Bash launcher path (Git Bash, which windows-latest provides). The full

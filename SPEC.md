@@ -20,6 +20,7 @@ Requirement IDs use `[XX-NN]`. Categories:
 - **OUT** — Output decisions
 - **LOG** — Decision logging (on by default, opt-out side channel)
 - **HK** — Hook wiring
+- **PL** — Platforms (supported OSes, interpreter resolution)
 - **EXT** — Extensibility
 - **SK** — Skills (`/ClaudeWatch:help`, `/ClaudeWatch:rules`, `/ClaudeWatch:learn`)
 - **DOC** — Documentation
@@ -69,7 +70,7 @@ whether or not logging is enabled.
 - **[LOG-02]** Where `CLAUDEWATCH_LOG` is set to `off`, `0`, `false`, `none`, or the empty string (case-insensitive), the engine shall write no log, and its decision and exit behavior shall be unchanged. This is the opt-out.
 - **[LOG-03]** Each log record shall include the decision (`allow`/`ask`/`deny`), the matched rule reasons, a UTC timestamp, and the `session_id`, `cwd`, and active `permission_mode` from the hook input. For a `Bash` input the record shall include the *command shape* (field `command_shape`) — the program name plus its leading subcommand tokens, with any leading `VAR=value` assignments and `sudo` dropped and the token run stopping at the first flag, path, or value (e.g. `git push --force origin main` → `git push`, `SECRET=… mysql -p… db` → `mysql`) — rather than the raw command string. The shape is what `/ClaudeWatch:learn` groups by ([SK-14]); recording it rather than the full command keeps inline secrets (credentials in flags, URLs, or assignments) out of the durable, plaintext log. For a `Write`/`Edit` input the record shall include the target file path rather than the file content.
 - **[LOG-04]** Logging shall not influence the decision and shall not change the process exit code. If a log write fails, then the engine shall report the failure to stderr and otherwise continue, still emitting its decision.
-- **[LOG-05]** The engine shall restrict the decision log to owner-only access — file mode `0600` and its parent directory mode `0700` — applied on each write so a pre-existing wider mode is corrected, so that the plaintext log is not readable by other accounts on the host. A failure to set the mode shall be handled as a log-write failure per [LOG-04].
+- **[LOG-05]** The engine shall restrict the decision log to owner-only access — file mode `0600` and its parent directory mode `0700` — applied on each write so a pre-existing wider mode is corrected, so that the plaintext log is not readable by other accounts on the host. A failure to set the mode shall be handled as a log-write failure per [LOG-04]. On Windows, `os.chmod` honors only the read-only bit, so the POSIX owner-only guarantee is not enforced there; the log is written but its access is governed by the inherited NTFS ACL rather than mode `0600`. This is a documented platform limitation ([PL-04]) — the engine applies the same `chmod` call on every platform and does not implement a Windows ACL equivalent on the decision path, since that would add OS branching to the otherwise generic engine.
 - **[LOG-06]** The log shall begin with a header line `{"schema": N}` declaring the log's schema version, distinct from the per-input records of [LOG-01]. The current version is `2` (records store the command shape per [LOG-03]); version `1` is the pre-shape format that recorded the raw command string. On write, where the existing log has no header or declares a version other than the current one, the engine shall discard the existing log and start a fresh one with the current header, so that a log written under an earlier schema — which may contain raw commands with inline secrets — is not carried forward across an upgrade. Consumers of the log (the analyzer [SK-13] and the reset tool [SK-19]) shall ignore the header line. The discard applies to the active log only; archived logs ([SK-19]) are user-retained and left untouched.
 
 ## 2. Rule Sets (RS)
@@ -123,6 +124,22 @@ The engine emits at most one decision per invocation.
 - **[HK-02]** The plugin shall register a `SessionStart` hook for plugin-update self-checks. (Currently a no-op placeholder — see [FUT-01].)
 - **[HK-03]** The plugin shall declare its hooks in `hooks/hooks.json`.
 - **[HK-04]** The plugin shall register a `SessionStart` hook that emits ambient guidance into the session context advising that a consequential command be run as its own Bash call rather than piped or chained, so the compound-command escalation ([OUT-08]) is avoided before it triggers. The guidance shall be sourced from `rules/*.md` so it can be edited without changing the hook.
+- **[HK-05]** Each hook command shall be invoked through a portable launcher script under `hooks/` rather than naming an interpreter directly on the hook command line, so that interpreter resolution ([PL-02]) is a property of the launcher and a hook entry never bakes in a platform-specific interpreter name. The `PreToolUse` hooks shall launch the engine via the launcher; the `SessionStart` hooks shall be the shell scripts under `hooks/` directly.
+- **[HK-06]** A launcher shall be provided for each shell Claude Code may dispatch a command hook through ([PL-01a]): `hooks/run-watchdog.sh` for the POSIX-shell path (`sh -c` on macOS/Linux, Git Bash on Windows) and `hooks/run-watchdog.ps1` for the PowerShell path (native Windows with no Git Bash). Both perform the same interpreter resolution ([PL-02]) and the same fail-loud behavior ([PL-03]).
+
+## 5a. Platforms (PL)
+
+ClaudeWatch's engine is portable Python; the platform surface lives entirely in
+the *wiring* (the hook launchers), keeping the engine generic and stdlib-only
+on the decision path. These requirements state which platforms are supported
+and how an interpreter is resolved on each.
+
+- **[PL-01]** The plugin shall support macOS, Linux, and Windows as host platforms for Claude Code, including **genuine native Windows** (PowerShell/cmd, not only WSL or Git Bash). Under WSL the host is Linux and is already covered by the Linux path; the native-Windows requirement is the one that closes the gap.
+- **[PL-01a]** *(Open — resolved by CI.)* Claude Code dispatches a shell-form command hook through `sh -c` on macOS/Linux, **Git Bash on Windows, or PowerShell when Git Bash isn't installed** (per the Claude Code hooks reference). Whether a vanilla native-Windows Claude Code install routes the plugin's hook through Git Bash or PowerShell cannot be verified from a non-Windows development host. Rather than assert it, the plugin ships a launcher for **both** paths ([HK-06]) and the CI suite exercises each on a `windows-latest` runner (`.github/workflows/ci.yml`); the runner is the evidence for which path resolves an interpreter and produces a decision. When the dispatch behavior is confirmed, this requirement records the answer and the unused launcher path can be reconsidered.
+- **[PL-02]** Each hook launcher shall resolve a Python interpreter at run time by probing, in order, `python3`, then `python`, then the `py` launcher, and shall invoke the first one found. On a standard native-Windows Python install `py` (the `py.exe` launcher) and `python` are reliably present while `python3` is not; on macOS/Linux `python3` is the convention. If none resolves, the launcher shall fail loudly to stderr with a message naming the interpreters it tried, rather than silently producing no decision. (A `PreToolUse` hook that fails to launch produces no decision, which the host reads as allow-by-default — so the absence of an interpreter must be a visible error, not a silent no-op.)
+- **[PL-03]** A launcher shall not embed a fallback decision. When the interpreter cannot be resolved or the engine cannot run, the launcher surfaces the failure on stderr and exits without emitting a decision; it shall not fabricate an `allow`, `ask`, or `deny` in place of the engine's output.
+- **[PL-04]** The decision log's owner-only access guarantee ([LOG-05]) is enforced via POSIX file modes and therefore holds on macOS and Linux. On Windows the guarantee is **degraded**: `chmod` honors only the read-only bit and the file's access is governed by the inherited NTFS ACL. This limitation is documented rather than worked around on the decision path; a Windows ACL equivalent is out of scope for the initial port.
+- **[PL-05]** The shipped rule patterns ([SH-01]) match the command or file-content string regardless of host OS. Several target Unix-native destructive primitives (`rm -rf /`, `dd of=/dev/sd*`, `mkfs`, `~/.ssh`, `~/.aws/credentials`); these are correct on Windows but rarely fire for a user working in PowerShell or cmd. `watch-pwsh` is the set aimed at the Windows command surface. Adding Windows-native destructive patterns is additive and out of scope here.
 
 ## 6. Extensibility (EXT)
 
@@ -228,9 +245,25 @@ These describe how the current implementation satisfies the spec. They are
 - The engine is a single Python script at `scripts/watchdog.py` with a minimal
   pure-Python YAML parser (no PyYAML dependency). The parser supports inline
   list syntax (`['.ps1', '.psm1']`) for the top-level `extensions` field.
-- The hook command line is
-  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches`,
-  invoked from two `PreToolUse` matchers: `Bash` and `Write|Edit`.
+- The two `PreToolUse` matchers (`Bash` and `Write|Edit`) both invoke
+  `bash ${CLAUDE_PLUGIN_ROOT}/hooks/run-watchdog.sh` in shell form (no `shell`
+  field, so the host applies its default per-platform shell selection: `sh -c`
+  on macOS/Linux, Git Bash on Windows, PowerShell when Git Bash isn't
+  installed). `run-watchdog.sh` probes `python3` → `python` → `py` ([PL-02]) and
+  `exec`s the first found against
+  `${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches`;
+  `run-watchdog.ps1` is the PowerShell-path counterpart, probing the same order
+  and piping stdin through to the engine. Both fail loudly with no fabricated
+  decision when no interpreter resolves ([PL-03]). The interpreter probe lives
+  in the launchers, not in `hooks.json`, so a hook entry never names a
+  platform-specific interpreter.
+- Native-Windows hook dispatch (Git Bash vs PowerShell) cannot be verified from
+  a macOS/Linux dev host, so `.github/workflows/ci.yml` runs the suite on
+  `ubuntu-latest` and, on a `windows-latest` runner, exercises both launchers
+  (`.sh` via the runner's Git Bash, `.ps1` via PowerShell) plus the engine
+  directly under `python`/`py` — confirming interpreter resolution, a
+  `PreToolUse` decision, the loud-failure path, and the `SessionStart` scripts'
+  emission. The Windows CI run is the evidence for [PL-01a].
 - The SessionStart hook (`hooks/cli-freshness.sh`) is intentionally a no-op
   placeholder for future plugin-update self-checks; ClaudeWatch does not
   install a CLI shim, so the freshness-check pattern used by sibling plugins

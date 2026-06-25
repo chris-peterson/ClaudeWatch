@@ -61,7 +61,7 @@ Deciding *which* patterns to add to the allowlist is itself the chore. The engin
 { "env": { "CLAUDEWATCH_LOG": "~/.claude/claudewatch/decisions.jsonl" } }
 ```
 
-For a `Bash` decision the log records the command *shape* — the program plus its leading subcommand tokens (`git push`, `aws s3 cp`), stopping at the first flag, path, or value — rather than the full command, which keeps inline secrets (credentials in flags, URLs, or `VAR=value` prefixes) out of the plaintext log. The shape is what `/ClaudeWatch:learn` groups by, so nothing is lost for the workflow. The log file and its directory are owner-only (`0600`/`0700`).
+For a `Bash` decision the log records the command *shape* — the program plus its leading subcommand tokens (`git push`, `aws s3 cp`), stopping at the first flag, path, or value — rather than the full command, which keeps inline secrets (credentials in flags, URLs, or `VAR=value` prefixes) out of the plaintext log. The shape is what `/ClaudeWatch:learn` groups by, so nothing is lost for the workflow. The log file and its directory are owner-only (`0600`/`0700`) on macOS and Linux; on Windows this guarantee is degraded (see Platforms).
 
 Then `/ClaudeWatch:learn` aggregates the log into a batch proposal: frequently-allowed commands that aren't in your allowlist yet (promote them), ask rules you keep approving (add an `except`), and blocks that may be in your way. `scripts/analyze-decisions.py` does the read-only analysis; the skill drives the per-item approval. Because it works from the hook's own decisions rather than scanning transcripts heuristically, it distinguishes allowed / asked / blocked instead of guessing what looks read-only. You vet a window's worth of prompts once instead of one at a time. The proposal leads with the window it covers (records, sessions, span) so you can weigh it, and once you've applied changes the skill offers to reset the log (`scripts/reset-decisions.py`, archives by default) so the next pass measures from the new baseline rather than re-surfacing what you just handled.
 
@@ -88,6 +88,10 @@ Coverage is preserved: ClaudeWatch's `Write` and `Edit` hooks run the same `targ
 claude plugin marketplace add chris-peterson/claude-marketplace
 claude plugin install ClaudeWatch@chris-peterson
 ```
+
+### Platforms
+
+Supported on macOS, Linux, and Windows, including native Windows (PowerShell/cmd). The `PreToolUse` hooks run through a launcher that resolves a Python interpreter by probing `python3`, `python`, then the `py` launcher, so a vanilla install needs no PATH surgery. Both a bash launcher (`hooks/run-watchdog.sh`, used by `sh` on Unix and Git Bash on Windows) and a PowerShell launcher (`hooks/run-watchdog.ps1`, the native-Windows-without-Git-Bash path) ship; a `windows-latest` CI job exercises each. The decision log's owner-only file permission is enforced on macOS and Linux but degraded on Windows, where `chmod` honors only the read-only bit. See the Platforms section in [`SPEC.md`](SPEC.md) for the full contract.
 
 ## Updating
 

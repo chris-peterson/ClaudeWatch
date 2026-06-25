@@ -152,11 +152,23 @@ what `claude plugin update` reads.
 
 ## Known constraints (do not paper over)
 
+- **Supported platforms are macOS, Linux, and Windows, including genuine native
+  Windows** (PowerShell/cmd, not only WSL or Git Bash). See the Platforms
+  section ([PL-01]–[PL-05]) in `SPEC.md`. The hook entries invoke portable
+  launchers (`hooks/run-watchdog.sh` and `hooks/run-watchdog.ps1`) that probe
+  `python3`/`python`/`py` rather than naming an interpreter directly, so the
+  cross-platform logic lives in the wiring and the engine stays generic. Which
+  shell native Windows dispatches the hook through (Git Bash vs PowerShell) is
+  the issue's open acceptance criterion; it can't be verified from a macOS/Linux
+  host, so both launcher paths are shipped and `.github/workflows/ci.yml`
+  exercises each on a `windows-latest` runner ([PL-01a]) — the CI run is the
+  evidence. The decision log's owner-only guarantee is degraded on Windows
+  (`chmod` honors only the read-only bit — [PL-04]/[LOG-05]), documented rather
+  than worked around.
 - **macOS-style absolute paths** appear in shipped rules (`~/.ssh/...`,
-  `~/.aws/credentials`). These are user-home patterns, not platform-specific
-  per se — but the documentation references unix conventions. If
-  cross-platform support becomes a goal, that's a spec change, not a quick
-  fix.
+  `~/.aws/credentials`). These are user-home patterns. The engine matches the
+  command string regardless of OS, so they are not wrong on Windows — they just
+  rarely fire for a user working in PowerShell or cmd ([PL-05]).
 - **`SessionStart` hook is a no-op placeholder.** `hooks/cli-freshness.sh`
   exists for symmetry across the chris-peterson plugin namespace and to
   reserve a spot for future plugin-update self-checks. Do not delete it

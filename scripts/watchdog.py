@@ -484,6 +484,9 @@ def _log_event(data, input_kind, input_text, decision, matched):
             f.write(json.dumps(entry, separators=(",", ":")) + "\n")
         # Owner-only access ([LOG-05]). Applied every write so a pre-existing
         # wider mode (e.g. a 0644 log from before this was enforced) is corrected.
+        # On Windows chmod honors only the read-only bit, so the owner-only
+        # guarantee is degraded there ([PL-04]); the same call runs on every
+        # platform to keep the engine free of OS branching.
         os.chmod(dest, 0o600)
         if parent:
             os.chmod(parent, 0o700)

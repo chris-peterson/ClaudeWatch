@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches"
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/run-watchdog.sh"
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches"
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/run-watchdog.sh"
           }
         ]
       }

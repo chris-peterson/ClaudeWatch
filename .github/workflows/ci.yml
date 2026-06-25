@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # The full bash test suite on Unix — the canonical gate.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Run the watchdog test suite
+        run: bash tests/test-watchdog.sh
+
+  # Native-Windows evidence ([PL-01a]). The Git Bash vs PowerShell dispatch
+  # question can't be answered from a non-Windows dev host, so the runner
+  # exercises BOTH launcher paths plus the engine directly. Each step is the
+  # actual proof for one acceptance criterion: interpreter resolution, a
+  # PreToolUse decision, the loud-failure path, and SessionStart emission.
+  windows:
+    runs-on: windows-latest
+    env:
+      CLAUDE_PLUGIN_ROOT: ${{ github.workspace }}
+      CLAUDEWATCH_LOG: 'off'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      # Confirm the interpreter names the launchers probe for. setup-python
+      # provides `python`; the py.exe launcher ships with Windows Python.
+      - name: Report available Python interpreters
+        shell: pwsh
+        run: |
+          foreach ($i in @('python3','python','py')) {
+            $c = Get-Command $i -ErrorAction SilentlyContinue
+            if ($c) { Write-Host "$i -> $($c.Source)" } else { Write-Host "$i -> (absent)" }
+          }
+
+      # The engine runs directly under Windows Python and produces a decision.
+      - name: Engine produces a deny under Windows Python
+        shell: pwsh
+        run: |
+          $block = '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}'
+          $out = $block | python scripts/watchdog.py watches
+          if ($out -match '"permissionDecision":"deny"') { Write-Host "OK: deny" }
+          else { Write-Error "expected deny, got: $out"; exit 1 }
+
+      # PowerShell launcher path (native Windows without Git Bash) — resolves an
+      # interpreter and forwards the engine's decision.
+      - name: PowerShell launcher resolves and decides
+        shell: pwsh
+        run: |
+          $block = '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}'
+          $out = $block | pwsh -File hooks/run-watchdog.ps1
+          if ($out -match '"permissionDecision":"deny"') { Write-Host "OK: deny via ps1 launcher" }
+          else { Write-Error "ps1 launcher: expected deny, got: $out"; exit 1 }
+
+      # PowerShell launcher fails loudly with no fabricated decision when no
+      # interpreter resolves ([PL-02], [PL-03]).
+      - name: PowerShell launcher fails loud on no interpreter
+        shell: pwsh
+        run: |
+          # Resolve pwsh first, then hand the child a PATH with no interpreter on
+          # it (a nonexistent dir, not empty — empty PATH falls back to a default
+          # on some hosts). Invoking pwsh by absolute path keeps the launcher's
+          # own shell findable while the probe finds no python/py.
+          $pwsh = (Get-Command pwsh).Source
+          $block = '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}'
+          $stdout = $block | & {
+            $env:PATH = "C:\nonexistent-claudewatch"
+            & $pwsh -NoProfile -File hooks/run-watchdog.ps1 2>$null
+          }
+          $rc = $LASTEXITCODE
+          if ($rc -eq 0) { Write-Error "expected non-zero exit, got 0"; exit 1 }
+          if ([string]::IsNullOrEmpty($stdout)) { Write-Host "OK: no fabricated decision, rc=$rc" }
+          else { Write-Error "launcher fabricated output: $stdout"; exit 1 }
+
+      # Bash launcher path (Git Bash, which windows-latest provides). The full
+      # launcher test asserts resolution, allow-by-silence, and the loud-failure
+      # path; running it here proves the bash path on Windows too.
+      - name: Bash launcher and SessionStart scripts under Git Bash
+        shell: bash
+        run: |
+          bash tests/test-launcher.sh
+          out=$(CLAUDE_PLUGIN_ROOT="$GITHUB_WORKSPACE" bash hooks/emit-rules.sh)
+          echo "$out" | grep -qF "# Ambient rules from the ClaudeWatch plugin" \
+            && echo "OK: SessionStart emit-rules emits" \
+            || { echo "emit-rules did not emit the header"; exit 1; }
+          CLAUDE_PLUGIN_ROOT="$GITHUB_WORKSPACE" bash hooks/cli-freshness.sh \
+            && echo "OK: SessionStart cli-freshness runs"

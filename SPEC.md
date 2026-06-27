@@ -57,6 +57,7 @@ post-edit file content).
 - **[EN-11]** The engine shall not require any third-party Python packages at runtime.
 - **[EN-12]** When evaluating a `Write` input, the engine shall match rules against the value of `tool_input.content`.
 - **[EN-13]** When evaluating an `Edit` input, the engine shall read the file at `tool_input.file_path`, apply the `old_string` → `new_string` substitution (all occurrences if `tool_input.replace_all` is true, otherwise the first occurrence), and match rules against the resulting full content. If the file cannot be read, the engine shall match against `tool_input.new_string` alone.
+- **[EN-13a]** When the `Edit` target file contains bytes that are not valid UTF-8, the engine shall read it with the invalid bytes replaced by the Unicode replacement character (U+FFFD) and continue evaluating, still emitting a decision and exiting 0. (The earlier Python engine raised `UnicodeDecodeError` on such a file and exited non-zero, violating the exit-0 contract [EN-10]; the graceful read is an intentional improvement.)
 
 ### Decision logging (LOG)
 
@@ -91,7 +92,9 @@ Rules are the matchable units within a rule set.
 
 - **[RL-01]** Each rule shall declare `name`, `pattern`, and `reason`.
 - **[RL-02]** Each rule may declare an optional `ref` URL.
-- **[RL-03]** Rule patterns shall be Python regexes matched against the input string with `re.search()` semantics (matches anywhere; no implicit anchoring). The input string depends on the rule's `target`: the bash command for `target: bash`, the script body for `target: file-content`.
+- **[RL-03]** Rule patterns shall be regexes matched against the input string with find-anywhere, no-implicit-anchoring semantics (Python `re.search()` / JavaScript `RegExp.prototype.test()` without anchors). The input string depends on the rule's `target`: the bash command for `target: bash`, the script body for `target: file-content`.
+- **[RL-03a]** A leading inline-flag token (`(?i)`, `(?m)`, `(?s)`, or a combination such as `(?is)`) at the very start of a `pattern`, `filter`, or `except` shall set the corresponding case-insensitive / multiline / dotall flag for that regex. Inline flags elsewhere in the pattern are not supported.
+- **[RL-03b]** Regex matching uses JavaScript `RegExp` semantics. Two consequences are accepted for v1.0.0: (1) `\w`, `\d`, and `\b` match the ASCII repertoire, not Unicode — rules target ASCII shell tokens, so a non-ASCII word character adjacent to a guarded token may not match (e.g. `export MÝSECRET=1` is not caught by the secrets rule, where an all-ASCII `MYSECRET` is); (2) a trailing `$` matches only at true end-of-string, not before a final newline. Rule authors shall write patterns that hold under these semantics. (The earlier Python engine used Unicode character classes and matched `$` before a final newline; the shipped rules do not depend on either, so this is a behavior change without a coverage change.)
 - **[RL-04]** If a rule's `pattern` is empty, then the engine shall emit a `deny` with a configuration-error reason naming the rule.
 - **[RL-05]** If a rule's `pattern` is an invalid regex, then the engine shall emit a `deny` with the regex error and continue.
 - **[RL-06]** Within a rule set, the engine shall evaluate `block` rules before `ask` rules.
@@ -253,6 +256,19 @@ These describe how the current implementation satisfies the spec. They are
 - `/ClaudeWatch:learn` reads the log via `scripts/analyze-decisions.py`, a
   separate read-only, stdlib-only tool. The engine remains the only
   decision-making component; the analyzer never evaluates rules.
+- A Node port of the engine (`scripts/watchdog.mjs`, ESM, Node 18+, Node
+  standard library only) reproduces `watchdog.py` behavior so the hook can run
+  on the Node runtime that ships with Claude Code without resolving a Python
+  interpreter. The port lifts a leading inline-flag token into JS `RegExp` flags
+  ([RL-03a]) and otherwise uses JS `RegExp` semantics ([RL-03b]); it reads an
+  `Edit` target with U+FFFD substitution rather than crashing on invalid UTF-8
+  ([EN-13a]); it sets `process.exitCode = 0` and lets Node flush stdout (rather
+  than calling `process.exit`, which can truncate a decision JSON larger than
+  the OS pipe buffer); and it reproduces Python's `str.replace` empty-needle
+  insertion, `os.path.basename` (trailing slash → empty), and
+  `datetime.isoformat` (`+00:00` suffix, fractional second omitted when zero,
+  otherwise six digits) exactly so the reconstructed content and the logged
+  command shape and timestamp match.
 - The compound-command detection ([OUT-08]) strips quoted spans with a simple
   regex before scanning for shell operators. It does not parse escaped quotes
   (`\"`) or `$'…'`, so an operator hidden behind such quoting may go undetected.

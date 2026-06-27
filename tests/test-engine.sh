@@ -98,7 +98,7 @@ rules:
       ref: n/a
 YAMLEOF
 TYPO_STDERR=$(echo '{"tool_name":"Bash","tool_input":{"command":"whatever"}}' \
-  | python3 "$HOOK" "$TMPDIR_TESTS/typo-field.yml" 2>&1 >/dev/null || true)
+  | node "$HOOK" "$TMPDIR_TESTS/typo-field.yml" 2>&1 >/dev/null || true)
 TOTAL=$((TOTAL + 1))
 if echo "$TYPO_STDERR" | grep -q "unrecognized line"; then
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: unrecognized YAML field warns"

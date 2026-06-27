@@ -40,7 +40,7 @@ YAMLEOF
 # Print the emitted permissionDecisionReason for an input under given env.
 fmt_reason() {
   local env_kv="$1" input="$2"
-  echo "$input" | env $env_kv CLAUDEWATCH_LOG=off python3 "$HOOK" "$TMPDIR_OUT/watch-fmt.yml" 2>/dev/null \
+  echo "$input" | env $env_kv CLAUDEWATCH_LOG=off node "$HOOK" "$TMPDIR_OUT/watch-fmt.yml" 2>/dev/null \
     | python3 -c 'import json,sys; sys.stdout.write(json.load(sys.stdin)["hookSpecificOutput"]["permissionDecisionReason"])'
 }
 
@@ -108,7 +108,7 @@ assert_reason "ask reason does not add the source tag" "-u CLAUDEWATCH_HYPERLINK
 echo "--- logged reasons stay plain text even with hyperlinks on ---"
 LOGF=$(mktemp /tmp/cw-fmtlog.XXXXXX.jsonl)
 echo "$NEEDS_REF" \
-  | env -u CLAUDEWATCH_HYPERLINKS CLAUDEWATCH_LOG="$LOGF" python3 "$HOOK" "$TMPDIR_OUT/watch-fmt.yml" >/dev/null 2>&1 || true
+  | env -u CLAUDEWATCH_HYPERLINKS CLAUDEWATCH_LOG="$LOGF" node "$HOOK" "$TMPDIR_OUT/watch-fmt.yml" >/dev/null 2>&1 || true
 TOTAL=$((TOTAL + 1))
 if python3 -c 'import json,sys; rec=json.loads(open(sys.argv[1]).read().splitlines()[-1]); m=rec.get("matched",[]); sys.exit(0 if m and all("\x1b]8;;" not in x for x in m) and any("https://example.com/docs" in x for x in m) else 1)' "$LOGF"; then
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: logged matched reasons are plain (url inline, no escapes)"
@@ -120,7 +120,7 @@ rm -f "$LOGF"
 # The deny display tag is a presentation detail; the log keeps the canonical form.
 DENYLOG=$(mktemp /tmp/cw-denylog.XXXXXX.jsonl)
 echo "$BOOM" \
-  | env -u CLAUDEWATCH_HYPERLINKS CLAUDEWATCH_LOG="$DENYLOG" python3 "$HOOK" "$TMPDIR_OUT/watch-fmt.yml" >/dev/null 2>&1 || true
+  | env -u CLAUDEWATCH_HYPERLINKS CLAUDEWATCH_LOG="$DENYLOG" node "$HOOK" "$TMPDIR_OUT/watch-fmt.yml" >/dev/null 2>&1 || true
 TOTAL=$((TOTAL + 1))
 if python3 -c 'import json,sys; rec=json.loads(open(sys.argv[1]).read().splitlines()[-1]); m=rec.get("matched",[]); sys.exit(0 if m and all("[plugin:ClaudeWatch]" not in x for x in m) else 1)' "$DENYLOG"; then
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: logged deny reason omits the source tag"

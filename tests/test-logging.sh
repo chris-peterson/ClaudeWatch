@@ -12,7 +12,7 @@ log_decision_test() {
   local logfile
   logfile=$(mktemp /tmp/cw-log.XXXXXX.jsonl)
   TOTAL=$((TOTAL + 1))
-  echo "$input" | CLAUDEWATCH_LOG="$logfile" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+  echo "$input" | CLAUDEWATCH_LOG="$logfile" node "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
   local got
   got=$(python3 -c 'import json,sys; print(json.loads(open(sys.argv[1]).read().splitlines()[-1])["decision"])' "$logfile" 2>/dev/null || true)
   rm -f "$logfile"
@@ -30,7 +30,7 @@ log_decision_test "deny decision is logged"  deny  '{"tool_name":"Bash","tool_in
 echo "--- logged record carries the command shape, not the raw command (LOG-03) ---"
 LOGFILE=$(mktemp /tmp/cw-cmd.XXXXXX.jsonl)
 echo '{"tool_name":"Bash","tool_input":{"command":"git push --force https://user:s3cr3t-token@host/repo"}}' \
-  | CLAUDEWATCH_LOG="$LOGFILE" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+  | CLAUDEWATCH_LOG="$LOGFILE" node "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
 TOTAL=$((TOTAL + 1))
 # The record stores command_shape="git push", carries no raw `command` field, and
 # the inline credential never appears anywhere in the serialized line.
@@ -52,7 +52,7 @@ HOMEDIR=$(mktemp -d /tmp/cw-perms.XXXXXX)
 DEFAULT_LOG="$HOMEDIR/.claude/claudewatch/decisions.jsonl"
 TOTAL=$((TOTAL + 1))
 echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' \
-  | env -u CLAUDEWATCH_LOG HOME="$HOMEDIR" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+  | env -u CLAUDEWATCH_LOG HOME="$HOMEDIR" node "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
 # Read the mode via Python — portable across BSD/macOS and GNU stat flag differences.
 FILE_MODE=$(python3 -c 'import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])' "$DEFAULT_LOG" 2>/dev/null || true)
 DIR_MODE=$(python3 -c 'import os,sys; print(oct(os.stat(sys.argv[1]).st_mode & 0o777)[2:])' "$(dirname "$DEFAULT_LOG")" 2>/dev/null || true)
@@ -66,7 +66,7 @@ rm -rf "$HOMEDIR"
 echo "--- a fresh log opens with a schema header (LOG-06) ---"
 LOGFILE=$(mktemp -u /tmp/cw-schema.XXXXXX.jsonl)
 echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' \
-  | CLAUDEWATCH_LOG="$LOGFILE" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+  | CLAUDEWATCH_LOG="$LOGFILE" node "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
 TOTAL=$((TOTAL + 1))
 if python3 -c 'import json,sys; sys.exit(0 if json.loads(open(sys.argv[1]).read().splitlines()[0])=={"schema":2} else 1)' "$LOGFILE" 2>/dev/null; then
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: log opens with a {\"schema\":2} header"
@@ -80,7 +80,7 @@ LOGFILE=$(mktemp /tmp/cw-migrate.XXXXXX.jsonl)
 # Simulate a v1 log: no header, one raw-command record carrying an inline secret.
 printf '%s\n' '{"ts":"2026-01-01T00:00:00+00:00","decision":"allow","tool":"Bash","command":"curl -H \"Authorization: Bearer sk-leaked\""}' > "$LOGFILE"
 echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' \
-  | CLAUDEWATCH_LOG="$LOGFILE" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+  | CLAUDEWATCH_LOG="$LOGFILE" node "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
 TOTAL=$((TOTAL + 1))
 # After the write the log is a fresh v2: header line, only the new shape-only
 # record, and the old raw command's secret is gone.
@@ -102,7 +102,7 @@ rm -f "$LOGFILE"
 echo "--- logged record carries the matched rule reasons for ask/deny ---"
 LOGFILE=$(mktemp /tmp/cw-matched.XXXXXX.jsonl)
 echo '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}' \
-  | CLAUDEWATCH_LOG="$LOGFILE" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+  | CLAUDEWATCH_LOG="$LOGFILE" node "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
 TOTAL=$((TOTAL + 1))
 if python3 -c 'import json,sys; rec=json.loads(open(sys.argv[1]).read().splitlines()[-1]); sys.exit(0 if rec["decision"]=="deny" and len(rec.get("matched",[]))>=1 else 1)' "$LOGFILE" 2>/dev/null; then
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: matched reasons recorded for deny"
@@ -114,7 +114,7 @@ rm -f "$LOGFILE"
 echo "--- logged record carries the active permission_mode ---"
 LOGFILE=$(mktemp /tmp/cw-mode.XXXXXX.jsonl)
 echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"},"permission_mode":"auto"}' \
-  | CLAUDEWATCH_LOG="$LOGFILE" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+  | CLAUDEWATCH_LOG="$LOGFILE" node "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
 TOTAL=$((TOTAL + 1))
 if python3 -c 'import json,sys; sys.exit(0 if json.loads(open(sys.argv[1]).read().splitlines()[-1]).get("mode")=="auto" else 1)' "$LOGFILE" 2>/dev/null; then
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: permission_mode recorded in log"
@@ -131,7 +131,7 @@ HOMEDIR=$(mktemp -d /tmp/cw-home.XXXXXX)
 DEFAULT_LOG="$HOMEDIR/.claude/claudewatch/decisions.jsonl"
 TOTAL=$((TOTAL + 1))
 echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' \
-  | env -u CLAUDEWATCH_LOG HOME="$HOMEDIR" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+  | env -u CLAUDEWATCH_LOG HOME="$HOMEDIR" node "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
 if [ -s "$DEFAULT_LOG" ]; then
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: default-path log written when env unset"
 else
@@ -145,7 +145,7 @@ for off_value in off 0 false none ""; do
   DEFAULT_LOG="$HOMEDIR/.claude/claudewatch/decisions.jsonl"
   TOTAL=$((TOTAL + 1))
   echo '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}' \
-    | CLAUDEWATCH_LOG="$off_value" HOME="$HOMEDIR" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+    | CLAUDEWATCH_LOG="$off_value" HOME="$HOMEDIR" node "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
   if [ ! -e "$DEFAULT_LOG" ]; then
     PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: no log written for CLAUDEWATCH_LOG='${off_value}'"
   else

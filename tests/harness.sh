@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HOOK="$SCRIPT_DIR/../scripts/watchdog.py"
+HOOK="$SCRIPT_DIR/../scripts/watchdog.mjs"
 RULES_DIR="$SCRIPT_DIR/../watches"
 
 # Logging is on by default and writes to the real ~/.claude/claudewatch log.
@@ -23,7 +23,7 @@ NC='\033[0m'
 run_test() {
   local rules="$1" label="$2" expected="$3" input="$4"
   TOTAL=$((TOTAL + 1))
-  result=$(echo "$input" | python3 "$HOOK" "$rules" 2>/dev/null || true)
+  result=$(echo "$input" | node "$HOOK" "$rules" 2>/dev/null || true)
   case "$expected" in
     ask)
       if echo "$result" | grep -q '"permissionDecision":"ask"'; then

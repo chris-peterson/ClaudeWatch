@@ -1,10 +1,10 @@
 #!/bin/bash
-# Tests for the SessionStart ambient-guidance hook (hooks/emit-rules.sh, [HK-04]).
+# Tests for the SessionStart ambient-guidance hook (hooks/emit-rules.mjs, [HK-04]).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-EMIT="$PLUGIN_ROOT/hooks/emit-rules.sh"
+EMIT="$PLUGIN_ROOT/hooks/emit-rules.mjs"
 
 PASS=0
 FAIL=0
@@ -13,7 +13,7 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 
 echo "Running ambient-guidance tests..."
-out=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$EMIT")
+out=$(CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" node "$EMIT")
 
 check() {
   local label="$1" needle="$2"

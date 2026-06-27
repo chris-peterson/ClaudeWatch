@@ -1,9 +1,9 @@
 #!/bin/bash
-# Decision-log analyzer (scripts/analyze-decisions.py). Builds a synthetic log
+# Decision-log analyzer (scripts/analyze.mjs). Builds a synthetic log
 # plus a stub allow list and asserts the three proposal buckets.
 source "$(cd "$(dirname "$0")" && pwd)/harness.sh"
 
-ANALYZE="$SCRIPT_DIR/../scripts/analyze-decisions.py"
+ANALYZE="$SCRIPT_DIR/../scripts/analyze.mjs"
 
 echo "=== decision log analysis ==="
 
@@ -56,7 +56,7 @@ sys.exit(0 if ($expr) else 1)
   fi
 }
 
-python3 "$ANALYZE" --log "$LOG" --settings "$SETTINGS" --min-count 2 > "$OUT" 2>/dev/null
+node "$ANALYZE" --log "$LOG" --settings "$SETTINGS" --min-count 2 > "$OUT" 2>/dev/null
 
 assert_json "gh pr view is an allow candidate (count 4)" \
   "any(c['shape']=='gh pr view' and c['count']==4 for c in d['allow_candidates'])"
@@ -84,13 +84,13 @@ assert_json "force push appears in deny summary (count 2)" \
   "any('force push' in s['reason'] and s['count']==2 for s in d['deny_summary'])"
 
 echo "--- min-count filters low-frequency shapes ---"
-python3 "$ANALYZE" --log "$LOG" --settings "$SETTINGS" --min-count 5 > "$OUT" 2>/dev/null
+node "$ANALYZE" --log "$LOG" --settings "$SETTINGS" --min-count 5 > "$OUT" 2>/dev/null
 assert_json "gh pr view (count 4) dropped at min-count 5" \
   "all(c['shape']!='gh pr view' for c in d['allow_candidates'])"
 
 echo "--- missing log exits non-zero with guidance ---"
 TOTAL=$((TOTAL + 1))
-if python3 "$ANALYZE" --log "$TMP/nope.jsonl" --settings "$SETTINGS" >/dev/null 2>&1; then
+if node "$ANALYZE" --log "$TMP/nope.jsonl" --settings "$SETTINGS" >/dev/null 2>&1; then
   FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: missing log should exit non-zero"
 else
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: missing log exits non-zero"
@@ -100,7 +100,7 @@ echo "--- CLAUDEWATCH_LOG=off reports logging disabled ---"
 TOTAL=$((TOTAL + 1))
 # Sandbox HOME so the default path resolves to a nonexistent file, forcing the
 # not-found branch; env off must produce the "disabled" guidance, not "no sessions".
-OFFERR=$(CLAUDEWATCH_LOG=off HOME="$TMP" python3 "$ANALYZE" --settings "$SETTINGS" 2>&1 >/dev/null || true)
+OFFERR=$(CLAUDEWATCH_LOG=off HOME="$TMP" node "$ANALYZE" --settings "$SETTINGS" 2>&1 >/dev/null || true)
 if echo "$OFFERR" | grep -qi "disabled"; then
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: CLAUDEWATCH_LOG=off reports logging disabled"
 else

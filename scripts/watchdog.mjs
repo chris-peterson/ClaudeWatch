@@ -6,9 +6,9 @@
  * Reads tool input JSON from stdin, evaluates all rule sets in a directory,
  * and outputs a single coalesced JSON decision to stdout.
  *
- * Node port of scripts/watchdog.py — behaviorally identical. Node ships with
- * Claude Code, so this runs natively on every platform without resolving a
- * Python interpreter. Standard library only (node: built-ins); no npm deps.
+ * The engine is a single Node script. Node ships with Claude Code, so this runs
+ * natively on every platform without resolving a separate interpreter. Standard
+ * library only (node: built-ins); no npm deps.
  *
  * Supports three tool inputs:
  * - Bash: matches against tool_input.command (target: bash rules)
@@ -36,7 +36,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const VALID_TARGETS = ["bash", "file-content"];
 
@@ -125,9 +125,10 @@ function _lstripLen(line) {
 
 function _pyRepr(s) {
   // Approximate Python's repr() for a string, used in stderr warnings so the
-  // surfaced text matches watchdog.py. Python prefers single quotes unless the
-  // string contains a single quote (and no double quote), in which case it uses
-  // double quotes.
+  // surfaced text reads the way Python would format it (the warning wording is
+  // unchanged from the prior Python engine). Python prefers single quotes unless
+  // the string contains a single quote (and no double quote), in which case it
+  // uses double quotes.
   const hasSingle = s.includes("'");
   const hasDouble = s.includes('"');
   let quote = "'";
@@ -579,7 +580,10 @@ function _splitWhitespace(s) {
   return t.split(/\s+/);
 }
 
-function commandShape(command) {
+// Exported so the analyzer (scripts/analyze.mjs) shares one definition with the
+// engine — the engine writes the shape to the log ([LOG-03]) and the analyzer
+// re-derives it when grouping, so writer and reader can't drift.
+export function commandShape(command) {
   const tokens = _splitWhitespace(command);
   let i = 0;
   while (
@@ -963,4 +967,10 @@ function main() {
   });
 }
 
-main();
+// Run only when invoked directly (the hook command line), not when imported for
+// a shared helper (the analyzer imports `commandShape`). Importing must not read
+// stdin or emit a decision. `process.argv[1]` is the script path the runtime was
+// asked to run; compare it to this module's own URL.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

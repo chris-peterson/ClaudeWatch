@@ -1,6 +1,6 @@
 # Rules YAML Schema
 
-This is the reference for the **claude-watchdog** rules file format. Each YAML file is a self-contained rule set that the watchdog engine (`scripts/watchdog.py`) evaluates independently.
+This is the reference for the **claude-watchdog** rules file format. Each YAML file is a self-contained rule set that the watchdog engine (`scripts/watchdog.mjs`) evaluates independently.
 
 ## Overview
 
@@ -165,7 +165,7 @@ Two `PreToolUse` hooks point the engine at the `watches/` directory — one for 
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.mjs ${CLAUDE_PLUGIN_ROOT}/watches"
           }
         ]
       },
@@ -174,7 +174,7 @@ Two `PreToolUse` hooks point the engine at the `watches/` directory — one for 
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches"
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.mjs ${CLAUDE_PLUGIN_ROOT}/watches"
           }
         ]
       }

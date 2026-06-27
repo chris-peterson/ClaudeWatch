@@ -11,7 +11,7 @@ FUT-04 is a deferred-discussion note on rule-edit durability across upgrades,
 not a numbered target.
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
-for the contract, `scripts/watchdog.py` for engine behavior, and the per-set
+for the contract, `scripts/watchdog.mjs` for engine behavior, and the per-set
 `tests/test-watch-*.sh` / `tests/test-engine.sh` for executable verification.
 Specific line numbers are given only where a single requirement pins to one
 spot; broader clusters cite the file and its tests.
@@ -20,21 +20,23 @@ spot; broader clusters cite the file and its tests.
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| EN-01..EN-13 | Engine lifecycle, IO, tool dispatch, error handling | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
-| EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.py:335` |
-| EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py:343-346` |
-| LOG-01..LOG-06 | Decision logging side channel: on by default (`CLAUDEWATCH_LOG=off` to opt out), records the command shape rather than the raw command, owner-only perms (0600/0700), schema-versioned header that discards pre-shape logs on upgrade | Covered | `scripts/watchdog.py` (`_log_event`, `command_shape`) + `tests/test-logging.sh` |
-| RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
-| RL-01..RL-14 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
-| OUT-01..OUT-08 | Output decisions, formatting, aggregation, allow-by-default, ref hyperlinks (`CLAUDEWATCH_HYPERLINKS`), deny source tag, compound-command ask→deny escalation | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
+| EN-01..EN-13 | Engine lifecycle, IO, tool dispatch, error handling | Covered | `scripts/watchdog.mjs` + `tests/test-engine.sh` + `tests/test-node-port.sh` |
+| EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.mjs:855` |
+| EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.mjs:870` |
+| EN-13a | Invalid-UTF-8 Edit target read with U+FFFD substitution | Covered | `scripts/watchdog.mjs` + `tests/test-node-port.sh` |
+| RL-03a, RL-03b | Leading inline-flag lift; JS RegExp semantics (ASCII `\w`, end-of-string `$`) | Covered | `scripts/watchdog.mjs` + `tests/test-node-port.sh` |
+| LOG-01..LOG-06 | Decision logging side channel: on by default (`CLAUDEWATCH_LOG=off` to opt out), records the command shape rather than the raw command, owner-only perms (0600/0700), schema-versioned header that discards pre-shape logs on upgrade | Covered | `scripts/watchdog.mjs` (`_logEvent`, `commandShape`) + `tests/test-logging.sh` |
+| RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.mjs` + `tests/test-engine.sh` |
+| RL-01..RL-14 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning | Covered | `scripts/watchdog.mjs` + `tests/test-engine.sh` |
+| OUT-01..OUT-08 | Output decisions, formatting, aggregation, allow-by-default, ref hyperlinks (`CLAUDEWATCH_HYPERLINKS`), deny source tag, compound-command ask→deny escalation | Covered | `scripts/watchdog.mjs` + `tests/test-engine.sh` + `tests/test-output.sh` |
 | HK-01 | PreToolUse hooks for Bash/Write/Edit | Covered | `hooks/hooks.json` |
-| HK-02 | SessionStart hook (no-op placeholder) | Covered | `hooks/hooks.json`, `hooks/cli-freshness.sh` |
+| HK-02 | SessionStart hook (no-op placeholder) | Covered | `hooks/hooks.json`, `hooks/cli-freshness.mjs` |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |
-| HK-04 | SessionStart ambient guidance emission | Covered | `hooks/emit-rules.sh`, `rules/*.md`, `tests/test-ambient.sh` |
-| EXT-01..EXT-03 | Auto-discovery, disable-by-rename, no-code-change | Covered | `scripts/watchdog.py`, `tests/test-engine.sh` |
+| HK-04 | SessionStart ambient guidance emission | Covered | `hooks/emit-rules.mjs`, `rules/*.md`, `tests/test-ambient.sh` |
+| EXT-01..EXT-03 | Auto-discovery, disable-by-rename, no-code-change | Covered | `scripts/watchdog.mjs`, `tests/test-engine.sh` |
 | SK-01 | `/ClaudeWatch:help` overview | Covered | `skills/help/SKILL.md` |
 | SK-02..SK-12 | `/ClaudeWatch:rules` interactive editor | Covered | `skills/rules/SKILL.md` |
-| SK-13..SK-17 | `/ClaudeWatch:learn` decision-log analysis | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` |
+| SK-13..SK-17 | `/ClaudeWatch:learn` decision-log analysis | Covered | `skills/learn/SKILL.md`, `scripts/analyze.mjs` |
 | DOC-01, DOC-02, DOC-04, DOC-05 | Docsify site, `just docs` regen (rules + prompts pages), YAML schema reference | Covered | `docs/`, `SCHEMA.md`, `build/gen-rules-doc.py`, `justfile` |
 | DIST-01 | Expose install metadata in manifest | Covered | `.claude-plugin/plugin.json` (name, version, description, repository, license) — hosting/marketplace mechanism is out of scope per SPEC.md |
 | DIST-02 | `.claude-plugin/plugin.json` manifest | Covered | `.claude-plugin/plugin.json` |
@@ -44,7 +46,7 @@ spot; broader clusters cite the file and its tests.
 | SH-03 | `ref` URLs on rules | Covered | All shipped `watches/*.yml` |
 | SH-04 | Per-set test files | Covered | `tests/test-watch-*.sh` |
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just docs-preview` | Covered | `justfile` + `tests/` |
-| FUT-01 | SessionStart self-check | Deferred | `hooks/cli-freshness.sh` is intentional no-op |
+| FUT-01 | SessionStart self-check | Deferred | `hooks/cli-freshness.mjs` is intentional no-op |
 | FUT-02 | `new` rule-set scaffolds a test file | Deferred — partially covered | `skills/rules/SKILL.md` already offers this; consider promoting |
 | FUT-03 | Multi-line YAML strings / anchors | Deferred | Not needed by current rules |
 

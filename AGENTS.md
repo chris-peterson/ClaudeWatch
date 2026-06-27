@@ -20,27 +20,29 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
    no network on the decision path. Decision logging (on by default, see
    [LOG-01]–[LOG-04]; `CLAUDEWATCH_LOG=off` opts out) is a side channel: it
    stamps a timestamp and writes a file *after* the decision is computed, never
-   feeding back into it. Keep it that way — the clock stays in `_log_event`, not
-   in `evaluate_rules`.
+   feeding back into it. Keep it that way — the clock stays in `_logEvent`, not
+   in `evaluateRules`.
 2. **Exit code is always 0.** A non-zero exit blocks the host (Claude Code)
    from getting a useful decision. All errors are surfaced as `deny` decisions
    with explanatory messages.
 3. **Single coalesced decision per invocation.** Multiple matching rules
    across multiple rule sets aggregate into one `deny` (preferred) or one
    `ask`. Never emit more than one decision.
-4. **The engine ships self-contained.** `scripts/watchdog.py` and everything on
-   the decision path use only the Python standard library (with a minimal
+4. **The engine ships self-contained.** `scripts/watchdog.mjs` and everything on
+   the decision path use only the Node standard library (with a minimal
    built-in YAML parser), so the plugin installs cleanly and evaluates rules
-   fast in any environment Claude Code runs in — no pip step on the hot path.
-   Build- and release-time tooling that never runs on the decision path (e.g.
-   `scripts/gen-plugin-json.py`) may use PyYAML; it runs only in dev and CI.
+   fast in any environment Claude Code runs in — Node ships with Claude Code, so
+   there is no install step and no separate interpreter to resolve on the hot
+   path. Build- and release-time tooling that never runs on the decision path
+   (e.g. `scripts/gen-plugin-json.py`, `build/gen-rules-doc.py`) is Python and
+   may use PyYAML; it runs only in dev and CI, never on a user's machine.
 5. **Allow-by-default.** When no rule matches, the engine produces no stdout
    output. Silence is allow.
 
 ## Build philosophy
 
 - **The engine is generic; the rules are domain-specific.** Treat
-  `scripts/watchdog.py` as a stable library. New safety domains are new YAML
+  `scripts/watchdog.mjs` as a stable library. New safety domains are new YAML
   files in `watches/`, not new code.
 - **Make adding a rule set frictionless.** Drop a `watch-*.yml` file, add a
   test file, regenerate docs. No registration, no manifest, no engine change.
@@ -69,7 +71,7 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 
 ## Repo conventions
 
-- One Python file (`scripts/watchdog.py`), one YAML format, one hook config
+- One engine file (`scripts/watchdog.mjs`), one YAML format, one hook config
   (`hooks/hooks.json`). Resist refactoring into modules until there's a
   concrete reason — the simplicity is a feature.
 - Tests are bash scripts that pipe JSON to the engine and assert decisions.
@@ -84,9 +86,10 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 - **Rule edits** — Use `/ClaudeWatch:rules` for interactive edits; it
   validates and previews. Manual edits to YAML are fine for bulk changes,
   but run `just test` before committing.
-- **Engine changes** — Update `scripts/watchdog.py` and `tests/test-engine.sh`
-  in the same change. The engine has a small surface; every behavior should
-  be exercised by a test.
+- **Engine changes** — Update `scripts/watchdog.mjs` and `tests/test-engine.sh`
+  (and `tests/test-node-port.sh` for Node-specific behaviors) in the same
+  change. The engine has a small surface; every behavior should be exercised by
+  a test.
 - **New or changed rule set** — Add/edit `watches/watch-<name>.yml` and
   `tests/test-watch-<name>.sh`. No `hooks.json` change needed (auto-discovery).
   A rule set is described in three hand-maintained indexes that drift
@@ -152,12 +155,15 @@ what `claude plugin update` reads.
 
 ## Known constraints (do not paper over)
 
-- **macOS-style absolute paths** appear in shipped rules (`~/.ssh/...`,
-  `~/.aws/credentials`). These are user-home patterns, not platform-specific
-  per se — but the documentation references unix conventions. If
-  cross-platform support becomes a goal, that's a spec change, not a quick
-  fix.
-- **`SessionStart` hook is a no-op placeholder.** `hooks/cli-freshness.sh`
+- **The runtime is cross-platform; the rule patterns are unix-convention.**
+  The hooks invoke `node` directly (Node ships with Claude Code), so the engine
+  runs natively wherever Claude Code runs — no `.sh`/`.ps1` launcher, no
+  interpreter resolution. The shipped *rules*, however, still use unix-home
+  path patterns (`~/.ssh/...`, `~/.aws/credentials`). These are user-home
+  patterns, not platform-specific per se — but they reference unix conventions.
+  Broadening the rule patterns to Windows path conventions is a spec change,
+  not a quick fix.
+- **`SessionStart` hook is a no-op placeholder.** `hooks/cli-freshness.mjs`
   exists for symmetry across the chris-peterson plugin namespace and to
   reserve a spot for future plugin-update self-checks. Do not delete it
   silently — see [FUT-01] in `SPEC.md`.
@@ -170,7 +176,7 @@ what `claude plugin update` reads.
 
 1. `README.md` — the elevator pitch and install path
 2. `SPEC.md` — the contract
-3. `scripts/watchdog.py` — the engine (under 250 lines)
+3. `scripts/watchdog.mjs` — the engine
 4. `watches/watch-git.yml` — the canonical rule-set example
 5. `SCHEMA.md` — the YAML rule format reference (for rule authors)
 6. `tests/test-watch-git.sh` — the test pattern

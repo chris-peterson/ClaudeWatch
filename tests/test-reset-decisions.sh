@@ -1,5 +1,5 @@
 #!/bin/bash
-# Decision-log reset (scripts/reset-decisions.py). Archives by default, deletes
+# Decision-log reset (scripts/reset.mjs). Archives by default, deletes
 # with --hard, and no-ops with guidance when logging is disabled or absent.
 source "$(cd "$(dirname "$0")" && pwd)/harness.sh"
 
@@ -7,7 +7,7 @@ source "$(cd "$(dirname "$0")" && pwd)/harness.sh"
 # errexit (the harness sets `set -e`); each case asserts on $? explicitly.
 set +e
 
-RESET="$SCRIPT_DIR/../scripts/reset-decisions.py"
+RESET="$SCRIPT_DIR/../scripts/reset.mjs"
 
 echo "=== decision log reset ==="
 
@@ -28,7 +28,7 @@ echo "--- default archives the log (recoverable) ---"
 TMP=$(mktemp -d /tmp/cw-reset.XXXXXX)
 LOG="$TMP/decisions.jsonl"
 make_log "$LOG"
-OUT=$(python3 "$RESET" --log "$LOG" 2>&1); RC=$?
+OUT=$(node "$RESET" --log "$LOG" 2>&1); RC=$?
 check "$RC" 0 "archive exits zero"
 [ -f "$LOG" ]; check "$?" 1 "original log is gone"
 ls "$TMP"/archive/decisions-*.jsonl >/dev/null 2>&1; check "$?" 0 "an archive copy exists"
@@ -42,7 +42,7 @@ echo "--- --hard deletes the log ---"
 TMP=$(mktemp -d /tmp/cw-reset.XXXXXX)
 LOG="$TMP/decisions.jsonl"
 make_log "$LOG"
-OUT=$(python3 "$RESET" --log "$LOG" --hard 2>&1); RC=$?
+OUT=$(node "$RESET" --log "$LOG" --hard 2>&1); RC=$?
 check "$RC" 0 "hard exits zero"
 [ -f "$LOG" ]; check "$?" 1 "log is gone"
 [ -d "$TMP/archive" ]; check "$?" 1 "no archive dir created"
@@ -50,13 +50,13 @@ check_grep "deleted" "$OUT" "reports a delete"
 rm -rf "$TMP"
 
 echo "--- logging disabled is a no-op with guidance ---"
-OUT=$(CLAUDEWATCH_LOG=off python3 "$RESET" 2>&1); RC=$?
+OUT=$(CLAUDEWATCH_LOG=off node "$RESET" 2>&1); RC=$?
 TOTAL=$((TOTAL + 1)); if [ "$RC" -ne 0 ]; then pass "disabled exits non-zero"; else fail "disabled exits non-zero (got $RC)"; fi
 check_grep "disabled" "$OUT" "disabled explains why"
 
 echo "--- missing log is a benign no-op ---"
 TMP=$(mktemp -d /tmp/cw-reset.XXXXXX)
-OUT=$(python3 "$RESET" --log "$TMP/nope.jsonl" 2>&1); RC=$?
+OUT=$(node "$RESET" --log "$TMP/nope.jsonl" 2>&1); RC=$?
 check "$RC" 0 "missing log exits zero"
 check_grep "nothing to reset" "$OUT" "missing log reports nothing to reset"
 rm -rf "$TMP"

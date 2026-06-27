@@ -2,7 +2,7 @@
 
 A Claude Code plugin that enforces command and script safety rules via a `PreToolUse` hook on `Bash`, `Write`, and `Edit`.
 
-Claude Code's built-in permission system uses naive string matching that [fails for compound commands, heredocs, and flag reordering](https://github.com/anthropics/claude-code/issues/30519). `ClaudeWatch` solves this with Python regex rules matched anywhere in the command string (or in the body of a script being written/edited) via `re.search()`.
+Claude Code's built-in permission system uses naive string matching that [fails for compound commands, heredocs, and flag reordering](https://github.com/anthropics/claude-code/issues/30519). `ClaudeWatch` solves this with regex rules matched anywhere in the command string (or in the body of a script being written/edited) — find-anywhere, no implicit anchoring.
 
 ## Rule Sets
 
@@ -47,7 +47,7 @@ Broadening the allowlist is safe because a hook decision outranks an `allow` rul
 
 One nuance for compound commands. Claude Code does not honor a hook `ask` for a piped or chained command (e.g. `git push --force-with-lease 2>&1 | tail`) whose segments each match an allow rule — it auto-approves the pipeline before the prompt surfaces, so the confirm is skipped. A `deny`, by contrast, is honored through a pipe. So that an `ask`-tier command isn't silently bypassed when piped, ClaudeWatch escalates an `ask` to a `deny` whenever the command is compound, with a message to re-run the guarded command on its own to get the prompt. Bare commands prompt normally; the escalation only changes the piped/chained form.
 
-To keep agents out of that escalation in the first place, a `SessionStart` hook (`hooks/emit-rules.sh`) injects a short ambient note advising that consequential steps be run as their own Bash call rather than chained. The content lives in `rules/*.md`; the escalation is the backstop, the note is the nudge that fires before it.
+To keep agents out of that escalation in the first place, a `SessionStart` hook (`hooks/emit-rules.mjs`) injects a short ambient note advising that consequential steps be run as their own Bash call rather than chained. The content lives in `rules/*.md`; the escalation is the backstop, the note is the nudge that fires before it.
 
 `watch-aws` leans on this. Unlike the interpreter sets — which stay silent on most commands and only block destructive variants — it *asks* on most `aws` commands and stays silent only on read-only ops (`get-`/`list-`/`describe-`/`head-`, `s3 ls`). `Bash(aws *)` is what makes those reads frictionless; without it they still hit Claude Code's default prompt. Mutations still prompt and destructive ops (`delete-`, `terminate-`, `s3 rm`, …) are still blocked, because the hook's decision wins over the allow rule.
 
@@ -63,7 +63,7 @@ Deciding *which* patterns to add to the allowlist is itself the chore. The engin
 
 For a `Bash` decision the log records the command *shape* — the program plus its leading subcommand tokens (`git push`, `aws s3 cp`), stopping at the first flag, path, or value — rather than the full command, which keeps inline secrets (credentials in flags, URLs, or `VAR=value` prefixes) out of the plaintext log. The shape is what `/ClaudeWatch:learn` groups by, so nothing is lost for the workflow. The log file and its directory are owner-only (`0600`/`0700`).
 
-Then `/ClaudeWatch:learn` aggregates the log into a batch proposal: frequently-allowed commands that aren't in your allowlist yet (promote them), ask rules you keep approving (add an `except`), and blocks that may be in your way. `scripts/analyze-decisions.py` does the read-only analysis; the skill drives the per-item approval. Because it works from the hook's own decisions rather than scanning transcripts heuristically, it distinguishes allowed / asked / blocked instead of guessing what looks read-only. You vet a window's worth of prompts once instead of one at a time. The proposal leads with the window it covers (records, sessions, span) so you can weigh it, and once you've applied changes the skill offers to reset the log (`scripts/reset-decisions.py`, archives by default) so the next pass measures from the new baseline rather than re-surfacing what you just handled.
+Then `/ClaudeWatch:learn` aggregates the log into a batch proposal: frequently-allowed commands that aren't in your allowlist yet (promote them), ask rules you keep approving (add an `except`), and blocks that may be in your way. `scripts/analyze.mjs` does the read-only analysis; the skill drives the per-item approval. Because it works from the hook's own decisions rather than scanning transcripts heuristically, it distinguishes allowed / asked / blocked instead of guessing what looks read-only. You vet a window's worth of prompts once instead of one at a time. The proposal leads with the window it covers (records, sessions, span) so you can weigh it, and once you've applied changes the skill offers to reset the log (`scripts/reset.mjs`, archives by default) so the next pass measures from the new baseline rather than re-surfacing what you just handled.
 
 ## The `\n#` gate (and how to work around it)
 
@@ -88,6 +88,13 @@ Coverage is preserved: ClaudeWatch's `Write` and `Edit` hooks run the same `targ
 claude plugin marketplace add chris-peterson/claude-marketplace
 claude plugin install ClaudeWatch@chris-peterson
 ```
+
+The engine (`scripts/watchdog.mjs`) and the `/ClaudeWatch:learn` tooling
+(`scripts/analyze.mjs`, `scripts/reset.mjs`) run on Node, which ships with
+Claude Code — there is nothing extra to install, and the hooks run natively on
+every platform Claude Code supports. Python is needed only for dev/release-time
+tooling (`scripts/gen-plugin-json.py`, `build/gen-rules-doc.py`) and the test
+suite's assertion helpers, never on a user's machine.
 
 ## Updating
 

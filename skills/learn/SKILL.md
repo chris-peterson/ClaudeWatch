@@ -62,7 +62,7 @@ Forward any window argument the user passed (`--since 1d`, `--since 4h`). The
 analyzer is read-only and emits JSON:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/analyze-decisions.py" --since 1d
+node "${CLAUDE_PLUGIN_ROOT}/scripts/analyze.mjs" --since 1d
 ```
 
 Useful flags: `--min-count N` (default 3) sets how many times a command must
@@ -141,7 +141,7 @@ Reset **archives** by default — it moves the log to
 recoverable — and reports what it cleared:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/reset-decisions.py"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/reset.mjs"
 ```
 
 Pass `--hard` to delete the log outright instead of archiving it. Only offer

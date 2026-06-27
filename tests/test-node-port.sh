@@ -1,8 +1,9 @@
 #!/bin/bash
-# Behaviors specific to the Node engine port (scripts/watchdog.mjs) that close
-# gaps found in review. Each test pins a behavior that must match the Python
-# engine (watchdog.py) — or, for the two documented v1.0.0 limitations, pins the
-# accepted JS RegExp / UTF-8 behavior so it can't silently change.
+# Behaviors specific to the Node engine (scripts/watchdog.mjs) that close gaps
+# found in review. Each test pins a faithfulness behavior (matching Python's
+# str.replace, os.path.basename, datetime.isoformat) — or, for the two
+# documented v1.0.0 limitations, pins the accepted JS RegExp / UTF-8 behavior so
+# it can't silently change.
 source "$(cd "$(dirname "$0")" && pwd)/harness.sh"
 
 echo "=== Node port: faithfulness and documented limitations ==="

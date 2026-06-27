@@ -7,7 +7,7 @@ after a Write/Edit to a `watches/watch-*.yml` source file and injects a reminder
 listing those places so a rule-set change doesn't silently leave them stale.
 
 This guards development of ClaudeWatch itself — it is NOT part of the shipped
-plugin (that is `hooks/hooks.json` + `scripts/watchdog.py`). Pure stdlib, exits 0.
+plugin (that is `hooks/hooks.json` + `scripts/watchdog.mjs`). Pure stdlib, exits 0.
 """
 import json
 import re

@@ -54,7 +54,7 @@ post-edit file content).
 - **[EN-08]** If the rules path does not exist, then the engine shall emit a `deny` decision with a "rules not found" reason that names the path.
 - **[EN-09]** When the engine evaluates multiple rule files, it shall process them in a stable, sorted order.
 - **[EN-10]** The engine's process exit code shall be `0` regardless of decision or error condition.
-- **[EN-11]** The engine shall not require any third-party Python packages at runtime.
+- **[EN-11]** The engine shall not require any third-party packages at runtime — it runs on the Node standard library alone.
 - **[EN-12]** When evaluating a `Write` input, the engine shall match rules against the value of `tool_input.content`.
 - **[EN-13]** When evaluating an `Edit` input, the engine shall read the file at `tool_input.file_path`, apply the `old_string` → `new_string` substitution (all occurrences if `tool_input.replace_all` is true, otherwise the first occurrence), and match rules against the resulting full content. If the file cannot be read, the engine shall match against `tool_input.new_string` alone.
 - **[EN-13a]** When the `Edit` target file contains bytes that are not valid UTF-8, the engine shall read it with the invalid bytes replaced by the Unicode replacement character (U+FFFD) and continue evaluating, still emitting a decision and exiting 0. (The earlier Python engine raised `UnicodeDecodeError` on such a file and exited non-zero, violating the exit-0 contract [EN-10]; the graceful read is an intentional improvement.)
@@ -228,47 +228,45 @@ self-contained and removable by renaming its file to `*.yml.disabled`.
 These describe how the current implementation satisfies the spec. They are
 *not* requirements — they may change without bumping the spec version.
 
-- The engine is a single Python script at `scripts/watchdog.py` with a minimal
-  pure-Python YAML parser (no PyYAML dependency). The parser supports inline
-  list syntax (`['.ps1', '.psm1']`) for the top-level `extensions` field.
+- The engine is a single Node script at `scripts/watchdog.mjs` (ESM, Node 18+,
+  Node standard library only) with a minimal built-in YAML parser (no
+  dependency). The parser supports inline list syntax (`['.ps1', '.psm1']`) for
+  the top-level `extensions` field. Node ships with Claude Code, so the hook
+  runs natively on every platform Claude Code runs on without resolving a
+  separate interpreter — there is no `.sh`/`.ps1` launcher.
 - The hook command line is
-  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches`,
+  `node ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.mjs ${CLAUDE_PLUGIN_ROOT}/watches`,
   invoked from two `PreToolUse` matchers: `Bash` and `Write|Edit`.
-- The SessionStart hook (`hooks/cli-freshness.sh`) is intentionally a no-op
+- The engine uses JS `RegExp` semantics, lifting a leading inline-flag token
+  into `RegExp` flags ([RL-03a]) and otherwise applying the consequences in
+  [RL-03b]. It reads an `Edit` target with U+FFFD substitution rather than
+  crashing on invalid UTF-8 ([EN-13a]); it sets `process.exitCode = 0` and lets
+  Node flush stdout (rather than calling `process.exit`, which can truncate a
+  decision JSON larger than the OS pipe buffer).
+- The SessionStart hook (`hooks/cli-freshness.mjs`) is intentionally a no-op
   placeholder for future plugin-update self-checks; ClaudeWatch does not
   install a CLI shim, so the freshness-check pattern used by sibling plugins
   (`beacon`, `tack`, `logbook`) does not apply here.
 - The ambient-guidance emission ([HK-04]) is a second SessionStart hook,
-  `hooks/emit-rules.sh`, which prints a `# Ambient rules from the ClaudeWatch
+  `hooks/emit-rules.mjs`, which prints a `# Ambient rules from the ClaudeWatch
   plugin` header followed by each `rules/*.md` file to stdout. Claude Code
   adds SessionStart stdout to context on startup, resume, and compaction, so
-  the guidance persists across a compaction. This mirrors the `emit-rules.sh`
+  the guidance persists across a compaction. This mirrors the `emit-rules`
   pattern in sibling plugins (`beacon`, `anchor`), which also keep their
   ambient markdown under `rules/`. The YAML rule sets the engine evaluates
   live in a separate `watches/` directory ([HK-01]), so the two never collide.
 - The rules-skill ID convention strips the `watch-` prefix from the rule set
   name (e.g. `watch-git` → `git-block-01`).
-- Decision logging is implemented in `watchdog.py` as a single `_log_event`
+- Decision logging is implemented in `watchdog.mjs` as a single `_logEvent`
   call after the decision is computed; it is on by default and `CLAUDEWATCH_LOG`
   only redirects the path or opts out. The UTC timestamp is the only clock in
   the script, and it is confined to the logging side channel — the decision path
   remains clock-free and deterministic.
-- `/ClaudeWatch:learn` reads the log via `scripts/analyze-decisions.py`, a
-  separate read-only, stdlib-only tool. The engine remains the only
+- `/ClaudeWatch:learn` reads the log via `scripts/analyze.mjs`, a separate
+  read-only, stdlib-only tool that `import`s `commandShape` from the engine so
+  the writer (engine) and reader (analyzer) share one shape definition. The
+  reset tool ([SK-19]) is `scripts/reset.mjs`. The engine remains the only
   decision-making component; the analyzer never evaluates rules.
-- A Node port of the engine (`scripts/watchdog.mjs`, ESM, Node 18+, Node
-  standard library only) reproduces `watchdog.py` behavior so the hook can run
-  on the Node runtime that ships with Claude Code without resolving a Python
-  interpreter. The port lifts a leading inline-flag token into JS `RegExp` flags
-  ([RL-03a]) and otherwise uses JS `RegExp` semantics ([RL-03b]); it reads an
-  `Edit` target with U+FFFD substitution rather than crashing on invalid UTF-8
-  ([EN-13a]); it sets `process.exitCode = 0` and lets Node flush stdout (rather
-  than calling `process.exit`, which can truncate a decision JSON larger than
-  the OS pipe buffer); and it reproduces Python's `str.replace` empty-needle
-  insertion, `os.path.basename` (trailing slash → empty), and
-  `datetime.isoformat` (`+00:00` suffix, fractional second omitted when zero,
-  otherwise six digits) exactly so the reconstructed content and the logged
-  command shape and timestamp match.
 - The compound-command detection ([OUT-08]) strips quoted spans with a simple
   regex before scanning for shell operators. It does not parse escaped quotes
   (`\"`) or `$'…'`, so an operator hidden behind such quoting may go undetected.
@@ -281,7 +279,7 @@ These describe how the current implementation satisfies the spec. They are
 
 ## 13. Future / Deferred (FUT)
 
-- **[FUT-01]** Where a plugin-update self-check is implemented, the SessionStart hook shall verify `watchdog.py` emits the expected `hookSpecificOutput.permissionDecision` schema.
+- **[FUT-01]** Where a plugin-update self-check is implemented, the SessionStart hook shall verify `watchdog.mjs` emits the expected `hookSpecificOutput.permissionDecision` schema.
 - **[FUT-02]** Where the user adds a custom rule set via `/ClaudeWatch:rules new`, the skill should offer to scaffold a matching test file in `tests/`.
 - **[FUT-03]** Where multi-line YAML strings or nested anchors are required, the parser may switch to PyYAML; currently the minimal parser does not support these constructs.
 - **[FUT-04]** Where the user customizes rules on an installed plugin via `/ClaudeWatch:rules` (including the `except` and demotion edits proposed by `/ClaudeWatch:learn`, which route through that skill), those edits shall survive plugin version upgrades. The skill writes to `${CLAUDE_PLUGIN_ROOT}/watches`, which for an installed plugin resolves to the version-scoped cache directory (e.g. `~/.claude/plugins/cache/chris-peterson/ClaudeWatch/0.8.0/watches/`); an upgrade installs a fresh version directory with its own shipped rules and the hook reads from the new root, orphaning prior edits. The decision log ([LOG-01]) already shows the durable shape: it lives in a fixed user directory (`~/.claude/claudewatch/`) outside the cache and so persists across upgrades. The gap closes by giving rule customizations the same treatment — a user rules directory alongside it (`~/.claude/claudewatch/watches/`) that the engine loads in addition to the shipped set (user rules winning on conflict), or a migration step on upgrade. Until then, only allow-list outputs of `/ClaudeWatch:learn` (written to `settings.json`) are durable on an installed plugin; rule edits are not. Edits made when running from a working copy via `claude --plugin-dir .` (per [DIST-03]) are already durable because `${CLAUDE_PLUGIN_ROOT}` is the git-tracked checkout, not the cache.

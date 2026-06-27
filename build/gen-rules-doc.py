@@ -7,8 +7,6 @@ import os
 import shutil
 import sys
 
-from importlib.util import spec_from_file_location, module_from_spec
-
 import yaml
 
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
@@ -16,11 +14,115 @@ ROOT_DIR = os.path.dirname(SCRIPT_DIR)
 PLUGIN_YML = os.path.join(ROOT_DIR, "plugin.yml")
 
 
-def load_parser():
-    spec = spec_from_file_location("watchdog", os.path.join(ROOT_DIR, "scripts", "watchdog.py"))
-    mod = module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.parse_rules_yml
+# The rules YAML parser, inlined here so the (Python, dev-only) docs generator
+# stays self-contained. The runtime engine is scripts/watchdog.mjs (Node); this
+# generator never runs on a user's machine, so it does not import the engine —
+# it parses the same frozen YAML format ([FUT-03]) with the same line-indent
+# algorithm the engine uses, producing identical structure.
+def _unquote(s):
+    if len(s) >= 2 and s[0] == "'" and s[-1] == "'":
+        return s[1:-1].replace("''", "'")
+    if len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+        return s[1:-1]
+    return s
+
+
+def _parse_inline_list(val):
+    """Parse YAML inline list syntax like ['.ps1', '.psm1'] or [.ps1, .psm1]."""
+    val = val.strip()
+    if not (val.startswith("[") and val.endswith("]")):
+        return []
+    inner = val[1:-1].strip()
+    if not inner:
+        return []
+    return [_unquote(item.strip()) for item in inner.split(",") if item.strip()]
+
+
+def parse_rules_yml(path):
+    """Parse a watchdog rules YAML file (same format the engine reads)."""
+    result = {
+        "name": "",
+        "filter": "",
+        "extensions": [],
+        "rules": {"block": [], "ask": []},
+    }
+    current_section = None
+    current_item = None
+
+    with open(path) as f:
+        for raw_line in f:
+            line = raw_line.rstrip("\n")
+            stripped = line.strip()
+
+            if not stripped or stripped.startswith("#"):
+                continue
+
+            indent = len(line) - len(line.lstrip())
+
+            # top-level fields (indent 0)
+            if indent == 0 and stripped.startswith("name:"):
+                result["name"] = _unquote(stripped[5:].strip())
+            elif indent == 0 and stripped.startswith("filter:"):
+                result["filter"] = _unquote(stripped[7:].strip())
+            elif indent == 0 and stripped.startswith("extensions:"):
+                result["extensions"] = _parse_inline_list(stripped[11:].strip())
+            elif indent == 0 and stripped == "rules:":
+                pass
+
+            # section headers (indent 2)
+            elif indent == 2 and stripped in ("block:", "ask:"):
+                current_section = stripped[:-1]
+                current_item = None
+
+            # list item start (indent 4)
+            elif indent == 4 and stripped.startswith("- name:") and current_section is not None:
+                current_item = {"name": _unquote(stripped[7:].strip()), "pattern": "", "reason": "", "ref": "", "target": "bash"}
+                result["rules"][current_section].append(current_item)
+
+            elif indent == 4 and stripped.startswith("- pattern:") and current_section is not None:
+                current_item = {"name": "", "pattern": _unquote(stripped[10:].strip()), "reason": "", "ref": "", "target": "bash"}
+                result["rules"][current_section].append(current_item)
+
+            # item fields (indent 6)
+            elif indent == 6 and stripped.startswith("pattern:") and current_item is not None:
+                current_item["pattern"] = _unquote(stripped[8:].strip())
+
+            elif indent == 6 and stripped.startswith("name:") and current_item is not None:
+                current_item["name"] = _unquote(stripped[5:].strip())
+
+            elif indent == 6 and stripped.startswith("reason:") and current_item is not None:
+                current_item["reason"] = _unquote(stripped[7:].strip())
+
+            elif indent == 6 and stripped.startswith("ref:") and current_item is not None:
+                current_item["ref"] = _unquote(stripped[4:].strip())
+
+            elif indent == 6 and stripped.startswith("target:") and current_item is not None:
+                current_item["target"] = _unquote(stripped[7:].strip())
+
+            elif indent == 6 and stripped.startswith("except:") and current_item is not None:
+                if current_section == "block":
+                    print(f"warning: {result['name'] or path} — rule {current_item.get('name', '?')!r} has 'except' on a block rule (ignored — except only applies to ask rules)", file=sys.stderr)
+                else:
+                    current_item["except"] = _unquote(stripped[7:].strip())
+
+            else:
+                # Unrecognized line — warn so typos surface instead of silently disappearing.
+                label = result["name"] or path
+                where = ""
+                if indent == 0:
+                    where = "top-level"
+                elif indent == 2:
+                    where = "section header"
+                elif indent == 4:
+                    where = "list item"
+                elif indent == 6:
+                    rule_name = current_item.get("name", "?") if current_item else "?"
+                    where = f"rule {rule_name!r}"
+                else:
+                    where = f"indent {indent}"
+                print(f"warning: {label} — unrecognized line in {where}: {stripped!r}", file=sys.stderr)
+
+    return result
 
 
 # FontAwesome 6 (loaded site-wide by the shared docsify bundle) + Dracula
@@ -180,8 +282,6 @@ def write_suite_json(site_dir):
 
 
 def main():
-    parse_rules_yml = load_parser()
-
     rules_dir = os.path.join(ROOT_DIR, "watches")
     docs_dir = os.path.join(ROOT_DIR, "docs")
     site_dir = os.path.join(docs_dir, "_site")

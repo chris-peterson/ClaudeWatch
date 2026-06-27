@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # The full bash test suite on Unix — the canonical gate. The engine and the
+  # analyzer/reset tools run under Node; the suite's inline assertion helpers
+  # use Python, so both runtimes are provisioned.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Run the watchdog test suite
+        run: bash tests/test-watchdog.sh
+
+  # Native-Windows evidence that the shipped hooks run on Windows. The hooks
+  # invoke `node` directly (hooks.json), so there is no interpreter-resolution
+  # launcher to exercise — Node is the interpreter. Each step is the proof for
+  # one acceptance criterion: a PreToolUse decision, allow-by-silence, and
+  # SessionStart emission.
+  windows:
+    runs-on: windows-latest
+    env:
+      CLAUDE_PLUGIN_ROOT: ${{ github.workspace }}
+      CLAUDEWATCH_LOG: 'off'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The engine produces a deny under Windows Node.
+      - name: Engine produces a deny under Windows Node
+        shell: pwsh
+        run: |
+          $block = '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main"}}'
+          $out = $block | node scripts/watchdog.mjs watches
+          if ($out -match '"permissionDecision":"deny"') { Write-Host "OK: deny" }
+          else { Write-Error "expected deny, got: $out"; exit 1 }
+
+      # Allow-by-default: a benign command produces no output and exit 0.
+      - name: Engine is silent on a benign command
+        shell: pwsh
+        run: |
+          $safe = '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'
+          $out = $safe | node scripts/watchdog.mjs watches
+          if ([string]::IsNullOrEmpty($out)) { Write-Host "OK: silent allow" }
+          else { Write-Error "expected no output, got: $out"; exit 1 }
+
+      # SessionStart emit-rules emits the ambient header under Windows Node.
+      - name: SessionStart emit-rules emits under Windows Node
+        shell: pwsh
+        run: |
+          $out = node hooks/emit-rules.mjs
+          if ($out -match '# Ambient rules from the ClaudeWatch plugin') { Write-Host "OK: emit-rules" }
+          else { Write-Error "emit-rules did not emit the header"; exit 1 }
+
+      # SessionStart cli-freshness is a no-op that exits 0.
+      - name: SessionStart cli-freshness runs under Windows Node
+        shell: pwsh
+        run: |
+          node hooks/cli-freshness.mjs
+          if ($LASTEXITCODE -eq 0) { Write-Host "OK: cli-freshness" }
+          else { Write-Error "cli-freshness exited non-zero: $LASTEXITCODE"; exit 1 }

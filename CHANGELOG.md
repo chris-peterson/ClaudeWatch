@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.4
+
+### Fixes
+
+- `watch-installs` now prompts on `npx` only for the forms that actually download and run a remote package — `-y`/`--yes`, `-p`/`--package`, and versioned or scoped specs (`pkg@version`, `@scope/pkg`). A bare `npx <tool>` that runs an already-installed binary is allowed, since it executes local code no differently from `npm run` — cutting the prompt friction from routine dev-loop commands like `npx tsc`, `npx eslint`, and `npx playwright test`.
+
 ## 0.15.3
 
 ### Fixes

@@ -52,8 +52,13 @@ t "gem install"     ask '{"tool_name":"Bash","tool_input":{"command":"gem instal
 echo "--- ask: composer ---"
 t "composer require" ask '{"tool_name":"Bash","tool_input":{"command":"composer require monolog/monolog"}}'
 
-echo "--- ask: npx ---"
-t "npx"             ask '{"tool_name":"Bash","tool_input":{"command":"npx create-react-app my-app"}}'
+echo "--- ask: npx remote fetch ---"
+t "npx -y"          ask '{"tool_name":"Bash","tool_input":{"command":"npx -y create-react-app my-app"}}'
+t "npx --yes"       ask '{"tool_name":"Bash","tool_input":{"command":"npx --yes cowsay hi"}}'
+t "npx -p"          ask '{"tool_name":"Bash","tool_input":{"command":"npx -p typescript tsc --init"}}'
+t "npx --package"   ask '{"tool_name":"Bash","tool_input":{"command":"npx --package=foo bar"}}'
+t "npx pkg@version" ask '{"tool_name":"Bash","tool_input":{"command":"npx cowsay@latest moo"}}'
+t "npx @scope/pkg"  ask '{"tool_name":"Bash","tool_input":{"command":"npx @angular/cli new app"}}'
 
 echo "--- allow: safe operations ---"
 t "npm run"         allow '{"tool_name":"Bash","tool_input":{"command":"npm run build"}}'
@@ -61,6 +66,8 @@ t "npm test"        allow '{"tool_name":"Bash","tool_input":{"command":"npm test
 t "pip --version"   allow '{"tool_name":"Bash","tool_input":{"command":"pip --version"}}'
 t "cargo build"     allow '{"tool_name":"Bash","tool_input":{"command":"cargo build"}}'
 t "go build"        allow '{"tool_name":"Bash","tool_input":{"command":"go build ./..."}}'
+t "npx local tool"  allow '{"tool_name":"Bash","tool_input":{"command":"npx eslint ."}}'
+t "npx --no-install" allow '{"tool_name":"Bash","tool_input":{"command":"npx --no-install tsc"}}'
 t "ls -la"          allow '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'
 t "Write tool"      allow '{"tool_name":"Write","tool_input":{"file_path":"test.txt","content":"hi"}}'
 

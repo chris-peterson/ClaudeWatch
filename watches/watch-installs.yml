@@ -79,7 +79,7 @@ rules:
       reason: adds PHP dependencies
       ref: https://getcomposer.org/doc/03-cli.md#require
 
-    - name: npx
-      pattern: 'npx\s+'
-      reason: executes package code (may download and run)
+    - name: npx (remote fetch)
+      pattern: 'npx\s+(-y|--yes|-p\b|--package|\S+@|@\S+/)'
+      reason: may download and run a remote package
       ref: https://docs.npmjs.com/cli/commands/npx

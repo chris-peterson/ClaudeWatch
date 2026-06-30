@@ -1,11 +1,7 @@
 ---
 description: >
   Learn from the ClaudeWatch decision log and propose permission changes that
-  cut prompt fatigue — promote frequently-allowed commands to your allow list,
-  add `except` clauses to noisy ask rules, and surface blocks that may be in
-  your way. Invoke with /ClaudeWatch:learn, optionally with a window like
-  `--since 1d`. Triggers on "what keeps prompting me", "tune my watches",
-  "reduce prompts", "learn from my sessions".
+  cut prompt fatigue. Triggers on "what keeps prompting me", "reduce prompts".
 ---
 
 # ClaudeWatch — learn

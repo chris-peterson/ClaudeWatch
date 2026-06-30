@@ -1,9 +1,8 @@
 ---
 description: >
-  View and edit ClaudeWatch rules. Displays the current block/ask rules
-  for each rule set as tables, then guides the user through any changes with
-  conflict detection and a preview before writing. Invoke with no arguments
-  to list and optionally edit; pass --list to list only.
+  View and edit ClaudeWatch rules — display each rule set's block/ask rules as
+  tables, then guide any changes with conflict detection and a preview before
+  writing.
 ---
 
 View and interactively edit ClaudeWatch watches & rules.

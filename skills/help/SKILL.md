@@ -1,9 +1,7 @@
 ---
 description: >
   Show a ClaudeWatch overview — what it does, the rule sets it ships, the
-  available commands, and where to find full docs. Invoke when the user asks
-  "what does ClaudeWatch do?", "how do I use ClaudeWatch?", or types
-  /ClaudeWatch:help.
+  commands, and where the full docs live.
 ---
 
 # ClaudeWatch

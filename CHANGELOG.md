@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.17.0
+
+### Features
+- Recursive `rm` deletes confined to your working directory no longer prompt — they're recoverable from git history, so the confirmation was just noise. A delete that reaches outside the working directory still asks: absolute out-of-tree paths, `..` escapes, home (`~`) paths, globs or variables that can't be resolved, the working directory itself, and any `.git` directory.
+- Rule authors get two new list-valued ask-rule exemptions, `unless_condition` (named engine predicates) and `unless_regex` (regexes), plus the first shipped predicate, `is_relative_to_cwd`. They sit alongside the existing `except`, and any match skips the prompt.
+
+### Other
+- Inline YAML lists are now quote-aware, so a comma inside a quoted item (e.g. a `{1,2}` regex quantifier) survives parsing.
+- SPEC, SCHEMA, and the generated rules reference document the new fields and predicate.
+
 ## 0.16.0
 
 ### Removed

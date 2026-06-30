@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.0
+
+### Removed
+- The `/ClaudeWatch:help` skill is removed — its overview duplicated the README and docs site while carrying always-resident description weight. Use `/ClaudeWatch:rules` to view and edit rules, and `/ClaudeWatch:learn` to cut prompt fatigue from your decision log; the overview lives in the README and docs site.
+
+### Other
+- Trimmed the `description` frontmatter of the remaining skills (`learn`, `rules`) to cut the always-resident context cost. `learn` keeps the natural-language cues ("what keeps prompting me", "reduce prompts").
+
 ## 0.15.4
 
 ### Fixes

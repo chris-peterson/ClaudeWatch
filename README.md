@@ -102,7 +102,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release notes.
 
 See the [docs site](https://chris-peterson.github.io/ClaudeWatch/) for usage, configuration, and the full [rules](https://chris-peterson.github.io/ClaudeWatch/#/rules) reference. The YAML rule format is documented for rule authors in [`SCHEMA.md`](SCHEMA.md).
 
-In-session, run `/ClaudeWatch:help` for an overview or `/ClaudeWatch:rules` to view and edit rules interactively.
+In-session, run `/ClaudeWatch:rules` to view and edit rules interactively, or `/ClaudeWatch:learn` to cut prompt fatigue from your decision log.
 
 ## Development
 

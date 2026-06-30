@@ -21,7 +21,7 @@ Requirement IDs use `[XX-NN]`. Categories:
 - **LOG** — Decision logging (on by default, opt-out side channel)
 - **HK** — Hook wiring
 - **EXT** — Extensibility
-- **SK** — Skills (`/ClaudeWatch:help`, `/ClaudeWatch:rules`, `/ClaudeWatch:learn`)
+- **SK** — Skills (`/ClaudeWatch:rules`, `/ClaudeWatch:learn`)
 - **DOC** — Documentation
 - **DIST** — Distribution / install
 - **SH** — Shipped rule sets
@@ -135,9 +135,7 @@ The engine emits at most one decision per invocation.
 The plugin ships interactive Claude Code skills that surface and edit rules
 without leaving the session.
 
-### `/ClaudeWatch:help`
-
-- **[SK-01]** Where the user invokes `/ClaudeWatch:help`, the skill shall display an overview covering: shipped rule sets, available commands, decision semantics, and documentation links.
+> **[SK-01]** *(retired in 0.16.0)* — the `/ClaudeWatch:help` overview skill was removed; its overview now lives in the README and the docs site.
 
 ### `/ClaudeWatch:rules`
 

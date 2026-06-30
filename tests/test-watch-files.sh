@@ -44,6 +44,30 @@ t "rm -rf cache dir"    allow '{"tool_name":"Bash","tool_input":{"command":"rm -
 t "rm -rf /tmp"         allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/build-output"}}'
 t "rm -r /var/tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"rm -r /var/tmp/stale-dir"}}'
 
+echo "--- is_relative_to_cwd: in-tree recursive deletes allowed ---"
+t "rm -r in-tree relative"       allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r old-dir"}}'
+t "rm -rf in-tree relative dir"  allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -rf src/legacy"}}'
+t "rm -r in-tree dotted path"    allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r ./build"}}'
+t "rm -rf in-tree absolute"      allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -rf /work/repo/build"}}'
+t "rm -r quoted in-tree path"    allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r \"my dir\""}}'
+t "rm -r multiple in-tree"       allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r a b c"}}'
+
+echo "--- is_relative_to_cwd: out-of-tree / unresolvable still prompts ---"
+t "rm -r out-of-tree absolute"   ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r /etc/foo"}}'
+t "rm -r parent escape"          ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r ../sibling"}}'
+t "rm -rf home path"             ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -rf ~/Downloads/x"}}'
+t "rm -r cwd itself"             ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r ."}}'
+t "rm -rf .git directory"        ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -rf .git"}}'
+t "rm -rf inside .git"           ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -rf .git/refs"}}'
+t "rm -r glob target"            ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r build/*"}}'
+t "rm -r variable target"        ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r $TMP"}}'
+t "rm -r mixed in/out tree"      ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r src /etc"}}'
+t "rm -r in-tree, no cwd"        ask   '{"tool_name":"Bash","tool_input":{"command":"rm -r old-dir"}}'
+t "rm -r escape via subpath .."  ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r src/../../etc"}}'
+
+echo "--- is_relative_to_cwd: compound in-tree delete escalates to block ---"
+t "rm -r in-tree chained"        block '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r src && echo done"}}'
+
 echo "--- allow: safe operations ---"
 t "rm single file"   allow '{"tool_name":"Bash","tool_input":{"command":"rm temp.txt"}}'
 t "mv local"         allow '{"tool_name":"Bash","tool_input":{"command":"mv old.txt new.txt"}}'

@@ -15,9 +15,12 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 
 ## Core contracts (don't break these)
 
-1. **Determinism.** Given the same command and the same `watches/` tree, the
-   engine must always produce the same *decision*. No clocks, no randomness,
-   no network on the decision path. Decision logging (on by default, see
+1. **Determinism.** Given the same command, the same `cwd`, and the same
+   `watches/` tree, the engine must always produce the same *decision*. No
+   clocks, no randomness, no network on the decision path. `cwd` enters the
+   decision only as the deterministic hook input that the `is_relative_to_cwd`
+   predicate ([RL-15], [RL-16]) resolves `rm` targets against — pure string
+   work, no filesystem access. Decision logging (on by default, see
    [LOG-01]–[LOG-04]; `CLAUDEWATCH_LOG=off` opts out) is a side channel: it
    stamps a timestamp and writes a file *after* the decision is computed, never
    feeding back into it. Keep it that way — the clock stays in `_log_event`, not

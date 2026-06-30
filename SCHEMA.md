@@ -22,6 +22,8 @@ rules:
       pattern: '<regex>'
       target: bash | file-content  # optional
       except: '<regex>'        # optional — skip this rule if except matches
+      unless_condition: [name] # optional — skip this rule if a named predicate matches
+      unless_regex: ['<regex>'] # optional — skip this rule if any listed regex matches
       reason: <string>
       ref: <url>
 ```
@@ -151,6 +153,40 @@ A Python regex that exempts matching commands from this rule. If `except` matche
 ```
 
 Using `except` on a `block` rule emits a warning and is ignored — block rules always fire.
+
+### `unless_condition` / `unless_regex` (optional, ask rules only)
+
+Two inline-list fields that exempt an ask rule, OR'd together: the rule is skipped when **any** `unless_regex` entry matches the command, or **any** `unless_condition` predicate matches. Both apply only to `ask` rules; on a `block` rule they emit a warning and are ignored.
+
+```yaml
+- name: rm -r
+  pattern: 'rm\s+-[a-zA-Z]*r'
+  unless_condition: [is_relative_to_cwd]
+  unless_regex: ['rm\s+(-[a-zA-Z]+\s+)*(~/\.cache/|/tmp/|/var/tmp/)']
+  reason: recursively deletes directories
+  ref: https://man7.org/linux/man-pages/man1/rm.1.html
+```
+
+**`unless_regex`** is a list of regexes — the same exemption `except` provides, but as a list (and `except` remains supported for the single-regex case). List items may be quoted or bare; commas inside a quoted item are preserved, so a regex quantifier like `{1,2}` is safe.
+
+**`unless_condition`** is a list of **named predicates** the engine ships — richer than a regex because a predicate can reason about the command's structure and the hook's `cwd`. An unknown name surfaces as a config-error `deny` (it never silently fails to match). Predicates apply to bash input only.
+
+Available predicates:
+
+| Predicate | Skips the ask when… |
+| --- | --- |
+| `is_relative_to_cwd` | every deletion target of an `rm` command resolves **strictly under the session's working directory** (the `cwd` Claude Code passes at the top level of the hook input). The premise: an in-tree recursive delete is recoverable from git history, so it need not prompt, while one reaching outside the working directory still does. |
+
+`is_relative_to_cwd` is deliberately conservative — it declines (and the ask stands) whenever in-tree-ness can't be proven from the command text alone:
+
+- there is no `cwd` in the hook input;
+- the command is compound (a pipe/chain/`;`/substitution) — those are handled by the compound-command escalation instead;
+- the program is not `rm`, or the command has no deletion targets;
+- a target is the working directory itself (`.`) or a `.git` directory — the git-history safety net doesn't cover wiping the whole tree or its history;
+- a target carries an unresolvable marker: `~` (home), `$`/backtick (variable or command substitution), a glob (`*`, `?`, `[`), or a `..` segment that could escape the tree;
+- a target is an absolute path, or a relative path, that resolves outside `cwd`.
+
+The analysis is pure string resolution against `cwd` (no filesystem access), so the decision stays deterministic — symlinked targets are classified by their textual path, not their link destination.
 
 ## Hook wiring
 

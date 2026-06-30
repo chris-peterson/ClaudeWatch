@@ -32,6 +32,7 @@ import glob
 import json
 import os
 import re
+import shlex
 import sys
 
 
@@ -46,6 +47,31 @@ def _unquote(s):
     return s
 
 
+def _split_top_level_commas(s):
+    """Split on commas that are outside single/double-quoted spans.
+
+    Lets a quoted list item carry a literal comma — e.g. a regex quantifier
+    `{1,2}` in a quoted `unless_regex` entry — without being mis-split.
+    """
+    items, buf, quote = [], [], None
+    for ch in s:
+        if quote:
+            buf.append(ch)
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+            buf.append(ch)
+        elif ch == ",":
+            items.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    if buf:
+        items.append("".join(buf))
+    return items
+
+
 def _parse_inline_list(val):
     """Parse YAML inline list syntax like ['.ps1', '.psm1'] or [.ps1, .psm1]."""
     val = val.strip()
@@ -54,7 +80,7 @@ def _parse_inline_list(val):
     inner = val[1:-1].strip()
     if not inner:
         return []
-    return [_unquote(item.strip()) for item in inner.split(",") if item.strip()]
+    return [_unquote(item.strip()) for item in _split_top_level_commas(inner) if item.strip()]
 
 
 def parse_rules_yml(path):
@@ -142,6 +168,18 @@ def parse_rules_yml(path):
                     print(f"warning: {result['name'] or path} — rule {current_item.get('name', '?')!r} has 'except' on a block rule (ignored — except only applies to ask rules)", file=sys.stderr)
                 else:
                     current_item["except"] = _unquote(stripped[7:].strip())
+
+            elif indent == 6 and stripped.startswith("unless_condition:") and current_item is not None:
+                if current_section == "block":
+                    print(f"warning: {result['name'] or path} — rule {current_item.get('name', '?')!r} has 'unless_condition' on a block rule (ignored — it only applies to ask rules)", file=sys.stderr)
+                else:
+                    current_item["unless_condition"] = _parse_inline_list(stripped[17:].strip())
+
+            elif indent == 6 and stripped.startswith("unless_regex:") and current_item is not None:
+                if current_section == "block":
+                    print(f"warning: {result['name'] or path} — rule {current_item.get('name', '?')!r} has 'unless_regex' on a block rule (ignored — it only applies to ask rules)", file=sys.stderr)
+                else:
+                    current_item["unless_regex"] = _parse_inline_list(stripped[13:].strip())
 
             else:
                 # Unrecognized line — warn so typos surface instead of silently disappearing.
@@ -264,6 +302,114 @@ def _is_compound_command(command):
     return bool(_SHELL_COMPOUND.search(_QUOTED_SPAN.sub("", command)))
 
 
+# A path token whose on-disk location can't be resolved from the command text
+# alone: `~` (home, out of tree), `$` / backtick (unexpanded variable or command
+# substitution), `*?[` (glob), or a `..` segment (can escape the tree). A target
+# carrying any of these can't be proven in-tree, so the `is_relative_to_cwd`
+# predicate declines and the ask stands.
+_UNRESOLVABLE_TARGET = re.compile(r"[~$`*?\[]|(?:^|/)\.\.(?:/|$)")
+
+
+def _targets_under_cwd(command, cwd):
+    """Whether every deletion target of an `rm` command resolves strictly under `cwd`.
+
+    Pure string analysis (no filesystem access) so the decision stays
+    deterministic. Backs the `is_relative_to_cwd` unless-condition: an in-tree
+    `rm -r` is recoverable from git history, so it need not prompt, while a
+    delete that reaches outside the working directory still does.
+
+    Returns False — decline the exemption, keep the ask — whenever in-tree-ness
+    can't be proven from the text: no cwd, a compound command, a parse failure,
+    a non-`rm` program, no targets, a target that is the working directory
+    itself or a `.git` directory, or any target carrying an unresolvable marker
+    (`~`, `$`, glob, `..`). Only an all-clear set of literal paths strictly
+    under cwd returns True. The working directory itself and any `.git`
+    directory are excluded because the git-history safety net the exemption
+    relies on does not cover wiping the whole tree or its history.
+    """
+    if not cwd:
+        return False
+    # A compound command is handled by the ask->deny escalation ([OUT-08]); don't
+    # let the exemption pre-empt that, and don't try to reason about which tokens
+    # belong to which segment.
+    if _is_compound_command(command):
+        return False
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return False
+    # Skip leading `VAR=value` assignments and `sudo` to reach the program.
+    i = 0
+    while i < len(tokens) and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[i]) or tokens[i] == "sudo"):
+        i += 1
+    if i >= len(tokens) or os.path.basename(tokens[i]) != "rm":
+        return False
+
+    targets = []
+    after_ddash = False
+    for tok in tokens[i + 1:]:
+        if not after_ddash and tok == "--":
+            after_ddash = True
+            continue
+        if not after_ddash and tok.startswith("-"):
+            continue  # a flag, not a target
+        targets.append(tok)
+    if not targets:
+        return False
+
+    cwd_norm = os.path.normpath(cwd)
+    for tok in targets:
+        if _UNRESOLVABLE_TARGET.search(tok):
+            return False
+        resolved = os.path.normpath(tok if os.path.isabs(tok) else os.path.join(cwd_norm, tok))
+        if resolved == cwd_norm or not resolved.startswith(cwd_norm + os.sep):
+            return False
+        if ".git" in os.path.relpath(resolved, cwd_norm).split(os.sep):
+            return False
+    return True
+
+
+# Named predicates an `unless_condition` entry can reference. Each takes the bash
+# command and the hook's `cwd` and returns True when the rule's ask should be
+# skipped. Keep this the single registry of valid condition names — an unknown
+# name surfaces as a config-error deny rather than silently never matching.
+_PREDICATES = {
+    "is_relative_to_cwd": _targets_under_cwd,
+}
+
+
+def _is_exempted(rule, input_kind, input_text, cwd):
+    """Whether an ask rule's `except` / `unless_*` exemptions skip it.
+
+    Returns (exempted, error). `exempted` is True when the legacy `except`
+    regex, any `unless_regex` entry, or any `unless_condition` predicate matches
+    — the rule's ask is then suppressed (the exemptions are OR'd). `error` is a
+    message when a regex is malformed or a condition names an unknown predicate,
+    which the caller surfaces as a config-error deny. Predicates apply to bash
+    input only.
+    """
+    exc = rule.get("except")
+    if exc:
+        try:
+            if re.search(exc, input_text):
+                return True, None
+        except re.error as e:
+            return False, f"has invalid 'except' regex: {e}"
+    for rx in rule.get("unless_regex", []):
+        try:
+            if re.search(rx, input_text):
+                return True, None
+        except re.error as e:
+            return False, f"has invalid 'unless_regex' entry: {e}"
+    for cond in rule.get("unless_condition", []):
+        pred = _PREDICATES.get(cond)
+        if pred is None:
+            return False, f"references unknown unless_condition {cond!r}"
+        if input_kind == "bash" and pred(input_text, cwd):
+            return True, None
+    return False, None
+
+
 def _compound_escalation():
     """The note prepended when an `ask` is escalated to `deny` for a compound command."""
     return {
@@ -273,12 +419,14 @@ def _compound_escalation():
     }
 
 
-def evaluate_rules(config, input_kind, input_text, file_extension=None):
+def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None):
     """Evaluate a single rule set against an input.
 
     input_kind is "bash" or "file-content". input_text is the string to match
     against. file_extension is the lowercase extension (including the dot) of
-    the target file, used to filter rule sets for file-content inputs.
+    the target file, used to filter rule sets for file-content inputs. cwd is
+    the working directory from the hook input, used by the `is_relative_to_cwd`
+    unless-condition to tell in-tree deletes from out-of-tree ones.
 
     Returns (blocks, asks) — lists of violation dicts (see `_violation`).
     """
@@ -334,18 +482,19 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None):
             _block(f"{label} — rule {rule.get('name', '?')!r} has empty pattern")
             continue
         try:
-            if re.search(rule["pattern"], input_text):
-                exc = rule.get("except")
-                if exc:
-                    try:
-                        if re.search(exc, input_text):
-                            continue
-                    except re.error as e:
-                        _block(f"{label} — rule {rule.get('name', '?')!r} has invalid 'except' regex: {e}")
-                        continue
-                asks.append(_violation(rule))
+            matched = bool(re.search(rule["pattern"], input_text))
         except re.error as e:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid regex: {e}")
+            continue
+        if not matched:
+            continue
+        exempted, err = _is_exempted(rule, input_kind, input_text, cwd)
+        if err:
+            _block(f"{label} — rule {rule.get('name', '?')!r} {err}")
+            continue
+        if exempted:
+            continue
+        asks.append(_violation(rule))
 
     return blocks, asks
 
@@ -544,6 +693,7 @@ def main():
     if resolved is None:
         sys.exit(0)
     input_kind, input_text, file_extension = resolved
+    cwd = data.get("cwd")
 
     if len(sys.argv) > 1:
         target = sys.argv[1]
@@ -576,7 +726,7 @@ def main():
         except Exception as e:
             all_blocks.append(_error_violation(f"watchdog: failed to load rules: {e}"))
             continue
-        blocks, asks = evaluate_rules(config, input_kind, input_text, file_extension)
+        blocks, asks = evaluate_rules(config, input_kind, input_text, file_extension, cwd)
         all_blocks.extend(blocks)
         all_asks.extend(asks)
 

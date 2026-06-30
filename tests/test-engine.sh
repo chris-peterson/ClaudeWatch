@@ -260,4 +260,85 @@ run_test "$RULES_DIR" "cmd-subst inside quotes stays ask"   ask   '{"tool_name":
 run_test "$RULES_DIR" "block through pipe unaffected"       block '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main | tail -4"}}'
 run_test "$RULES_DIR" "allow through pipe stays silent"     allow '{"tool_name":"Bash","tool_input":{"command":"ls -la | tail -4"}}'
 
+
+echo ""
+echo "=== unless_condition (in-tree exemption) ==="
+# An ask rule may carry `unless_condition: [is_relative_to_cwd]` so a recursive delete confined
+# to the working tree (recoverable from git history) is allowed, while one that
+# reaches outside still prompts. The decision reads the hook's top-level `cwd`.
+TMPDIR_CWD=$(mktemp -d)
+cat > "$TMPDIR_CWD/watch-cwd.yml" <<'YAMLEOF'
+name: watch-cwd
+filter: '\brm\b'
+rules:
+  ask:
+    - name: rm -r
+      pattern: 'rm\s+-[a-zA-Z]*r'
+      unless_condition: [is_relative_to_cwd]
+      reason: recursively deletes directories
+      ref: n/a
+YAMLEOF
+run_test "$TMPDIR_CWD/watch-cwd.yml" "in-tree delete allowed with cwd" allow \
+  '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r build"}}'
+run_test "$TMPDIR_CWD/watch-cwd.yml" "out-of-tree delete still asks" ask \
+  '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r /etc/x"}}'
+run_test "$TMPDIR_CWD/watch-cwd.yml" "absent cwd falls back to ask" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r build"}}'
+
+echo "--- unless_condition on a block rule is ignored (with warning) ---"
+cat > "$TMPDIR_CWD/cwd-block-warn.yml" <<'YAMLEOF'
+name: cwd-block-warn
+filter: '\brm\b'
+rules:
+  block:
+    - name: rm -r
+      pattern: 'rm\s+-[a-zA-Z]*r'
+      unless_condition: [is_relative_to_cwd]
+      reason: recursive delete
+      ref: n/a
+YAMLEOF
+CWD_WARN_STDERR=$(echo '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r build"}}' \
+  | python3 "$HOOK" "$TMPDIR_CWD/cwd-block-warn.yml" 2>&1 >/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$CWD_WARN_STDERR" | grep -q "unless_condition"; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: unless_condition on block warns"
+else
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: unless_condition on block warns (stderr: ${CWD_WARN_STDERR:-empty})"
+fi
+run_test "$TMPDIR_CWD/cwd-block-warn.yml" "block ignores unless_condition (in-tree still blocks)" block \
+  '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r build"}}'
+
+
+cat > "$TMPDIR_CWD/unless-regex.yml" <<'YAMLEOF'
+name: unless-regex
+filter: '\brm\b'
+rules:
+  ask:
+    - name: rm -r
+      pattern: 'rm\s+-[a-zA-Z]*r'
+      unless_regex: ['rm\s+(-[a-zA-Z]+\s+)*/tmp/']
+      reason: recursively deletes directories
+      ref: n/a
+YAMLEOF
+run_test "$TMPDIR_CWD/unless-regex.yml" "unless_regex exempts matching path" allow \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/build"}}'
+run_test "$TMPDIR_CWD/unless-regex.yml" "unless_regex leaves others asking" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -rf /etc/x"}}'
+
+cat > "$TMPDIR_CWD/bad-predicate.yml" <<'YAMLEOF'
+name: bad-predicate
+filter: '\brm\b'
+rules:
+  ask:
+    - name: rm -r
+      pattern: 'rm\s+-[a-zA-Z]*r'
+      unless_condition: [no_such_predicate]
+      reason: recursively deletes directories
+      ref: n/a
+YAMLEOF
+run_test "$TMPDIR_CWD/bad-predicate.yml" "unknown unless_condition blocks (config error)" block \
+  '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r build"}}'
+
+rm -rf "$TMPDIR_CWD"
+
 print_results

@@ -1,7 +1,9 @@
 ---
+name: learn
 description: >
   Learn from the ClaudeWatch decision log and propose permission changes that
-  cut prompt fatigue. Triggers on "what keeps prompting me", "reduce prompts".
+  cut prompt fatigue.
+disable-model-invocation: true
 ---
 
 # ClaudeWatch — learn

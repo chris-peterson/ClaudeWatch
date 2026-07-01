@@ -92,11 +92,10 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
   be exercised by a test.
 - **New or changed rule set** — Add/edit `watches/watch-<name>.yml` and
   `tests/test-watch-<name>.sh`. No `hooks.json` change needed (auto-discovery).
-  A rule set is described in three hand-maintained indexes that drift
+  A rule set is described in hand-maintained indexes that drift
   independently — update whichever the change affects:
   1. `README.md` — rule-sets table (one row per set)
   2. `SPEC.md` `[SH-01]` — enumeration with block/ask coverage prose
-  3. `skills/help/SKILL.md` — rule-sets table (one-line summary)
 
   The `docs/_site` reference is generated, not hand-maintained — run `just docs`.
   A dev-time PostToolUse hook (`.claude/settings.json` →

@@ -1,8 +1,10 @@
 ---
+name: rules
 description: >
   View and edit ClaudeWatch rules — display each rule set's block/ask rules as
   tables, then guide any changes with conflict detection and a preview before
   writing.
+disable-model-invocation: true
 ---
 
 View and interactively edit ClaudeWatch watches & rules.
@@ -52,7 +54,7 @@ them:
 
 ### 4. Check for `--list` flag
 
-If `$ARGUMENTS` contains `--list`, stop here and do not enter the edit loop.
+If the user passed `--list`, stop here and do not enter the edit loop.
 
 ### 5. Prompt for edits
 

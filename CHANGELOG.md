@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.1
+
+- Both `/`-invoked skills (`learn`, `rules`) are now marked `disable-model-invocation`, dropping their descriptions from every session's always-resident context. They stay available via `/ClaudeWatch:learn` and `/ClaudeWatch:rules`; Claude no longer auto-loads them.
+- Skill metadata polish: explicit `name:` frontmatter on both skills, and the `rules` skill no longer documents a non-interpolating `$ARGUMENTS` token (skills don't substitute it).
+- Docs: pruned stale `/ClaudeWatch:help` references (retired in 0.16.0) from `AGENTS.md` and `STATUS.md`, and removed a drift-prone index count.
+
 ## 0.17.0
 
 ### Features

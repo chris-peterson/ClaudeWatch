@@ -20,6 +20,7 @@ PACKAGING_FIELDS = (
     "description",
     "author",
     "repository",
+    "homepage",
     "icon",
     "license",
     "keywords",
@@ -34,9 +35,13 @@ def build() -> str:
     spec = yaml.safe_load(SOURCE.read_text())
     out = {}
     for field in PACKAGING_FIELDS:
-        if field not in spec:
+        value = spec.get(field)
+        # homepage lives under the marketplace: block in plugin.yml, but Claude
+        # Code reads it from plugin.json, so project it here too.
+        if field == "homepage" and value is None:
+            value = (spec.get("marketplace") or {}).get("homepage")
+        if value is None:
             continue
-        value = spec[field]
         # author is a plain string in plugin.yml; plugin.json wants an object.
         if field == "author" and isinstance(value, str):
             value = {"name": value}

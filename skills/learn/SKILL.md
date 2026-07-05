@@ -1,8 +1,9 @@
 ---
 name: learn
 description: >
-  Learn from the ClaudeWatch decision log and propose permission changes that
-  cut prompt fatigue.
+  Analyze the ClaudeWatch decision log to find commands that repeatedly prompt,
+  and propose allow-list entries and rule tweaks that cut prompt fatigue —
+  reviewed as one batch, then reset the log.
 disable-model-invocation: true
 ---
 

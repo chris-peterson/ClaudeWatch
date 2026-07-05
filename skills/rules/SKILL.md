@@ -1,24 +1,28 @@
 ---
 name: rules
 description: >
-  View and edit ClaudeWatch rules — display each rule set's block/ask rules as
-  tables, then guide any changes with conflict detection and a preview before
-  writing.
+  View and interactively edit ClaudeWatch safety rules — list each rule set's
+  block/ask rules as tables, then add, move, or remove rules, toggle whole rule
+  sets on/off, or scaffold a new set, with conflict detection, a preview, and a
+  test run before writing.
 disable-model-invocation: true
 ---
 
-View and interactively edit ClaudeWatch watches & rules.
+A rule set is a `watches/watch-*.yml` file; each holds `block` and `ask` rules
+that the PreToolUse hook matches against commands. This skill lists them and
+walks any change through preview and tests before writing.
 
 ## Steps
 
 ### 1. Find the plugin root
 
-Run `bash -c 'echo "${CLAUDE_PLUGIN_ROOT}"'`. If the output is empty, use the
-current working directory.
+All paths below are relative to `${CLAUDE_PLUGIN_ROOT}`, which Claude Code sets
+when the skill runs. If it is empty, stop and report — do not guess a path, since
+running against the wrong directory would edit the wrong rule files.
 
 ### 2. Discover rule sets
 
-List YAML files in `$PLUGIN_ROOT/watches/`. Each file is a rule set
+List YAML files in `${CLAUDE_PLUGIN_ROOT}/watches/`. Each file is a rule set
 (e.g. `watch-git.yml`, `watch-installs.yml`).
 
 Also check for disabled rule sets — files ending in `.yml.disabled` in the
@@ -131,7 +135,10 @@ Confirm changes? [yes / edit / abort]
 
 ### 8. Apply changes
 
-Write only the modified rule set files. Preserve the exact YAML format:
+Write only the modified rule set files. Preserve the exact YAML format — the
+skeleton below is the common case; `SCHEMA.md` in the repo root is the
+authoritative field reference (`except`, multiple patterns, `filter`, etc.),
+so consult it rather than inferring fields:
 
 ```yaml
 name: watch-name
@@ -153,7 +160,7 @@ rules:
 
 ### 9. Verify
 
-Run `bash $PLUGIN_ROOT/tests/test-watchdog.sh`. If tests fail, explain which
+Run `bash ${CLAUDE_PLUGIN_ROOT}/tests/test-watchdog.sh`. If tests fail, explain which
 rule caused the failure and offer to fix or revert.
 
 If any rules were added, note that the test file has no coverage for them yet

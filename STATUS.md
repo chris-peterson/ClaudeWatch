@@ -6,9 +6,9 @@ the spec is revised.
 
 **Last audit:** 2026-06-22
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 85/85 normative requirements (100%) + 3 deferred (FUT-01..FUT-03).
-FUT-04 is a deferred-discussion note on rule-edit durability across upgrades,
-not a numbered target.
+**Coverage:** 85/85 normative requirements (100%) + 3 deferred targets (FUT-01..FUT-03).
+FUT-04..FUT-06 are deferred-discussion notes (rule-edit durability across upgrades,
+repo-scoped git trust, per-repo self-marketplace), not numbered targets.
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
 for the contract, `scripts/watchdog.py` for engine behavior, and the per-set

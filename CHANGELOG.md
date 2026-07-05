@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.17.2
+
+Plugin metadata and skill-hygiene fixes from a plugin-dev best-practices scan.
+
+- **`plugin.json` now carries `homepage`.** The generator projects
+  `marketplace.homepage` into the descriptor, so a standalone (non-marketplace)
+  install exposes the documented homepage field.
+- **`icon` points at the rendered asset** — corrected from the unused
+  `docs/logo.svg` to `docs/favicon.svg`.
+- **Skills fail loud on a missing plugin root.** Both `/ClaudeWatch:learn` and
+  `/ClaudeWatch:rules` use `${CLAUDE_PLUGIN_ROOT}` with no silent cwd fallback.
+- **Sharper skill descriptions** and a pointer to `SCHEMA.md` as the
+  authoritative rule-YAML reference.
+- Documented the intentional PascalCase plugin name; parked a per-repo
+  self-marketplace idea as `FUT-06`.
+
 ## 0.17.1
 
 - Both `/`-invoked skills (`learn`, `rules`) are now marked `disable-model-invocation`, dropping their descriptions from every session's always-resident context. They stay available via `/ClaudeWatch:learn` and `/ClaudeWatch:rules`; Claude no longer auto-loads them.

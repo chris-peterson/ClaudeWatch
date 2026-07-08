@@ -1,14 +1,16 @@
 # ClaudeWatch — Spec Coverage Status
 
-Tracking status of the requirements declared in [SPEC.md](SPEC.md). Updated
-whenever an audit (`/spec-audit`) is run, when implementation lands, or when
-the spec is revised.
+Tracking status of the requirements declared in [SPEC.md](SPEC.md). Maintained by
+`/sextant:spec-status`; updated when a coverage audit runs, when implementation lands,
+or when the spec is revised.
 
-**Last audit:** 2026-06-22
+**Last audit:** 2026-07-08
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 85/85 normative requirements (100%) + 3 deferred targets (FUT-01..FUT-03).
-FUT-04..FUT-06 are deferred-discussion notes (rule-edit durability across upgrades,
-repo-scoped git trust, per-repo self-marketplace), not numbered targets.
+**Coverage:** 93 of 103 normative requirements Covered (90%); 10 Missing; 0 Partial. Plus
+5 deferred (FUT-01..FUT-05). Retired, excluded from the count: SK-01, FUT-06. The 10 Missing
+are the unbuilt §8 Session Mute feature ([MUTE-01]..[MUTE-08], [HK-05], [HK-06]), spec'd
+2026-07-08. Counting rule: one distinct `[XX-NN]` = one requirement (lettered decompositions
+included), excluding deferred FUT and retired IDs.
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
 for the contract, `scripts/watchdog.py` for engine behavior, and the per-set
@@ -25,16 +27,19 @@ spot; broader clusters cite the file and its tests.
 | EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py:343-346` |
 | LOG-01..LOG-06 | Decision logging side channel: on by default (`CLAUDEWATCH_LOG=off` to opt out), records the command shape rather than the raw command, owner-only perms (0600/0700), schema-versioned header that discards pre-shape logs on upgrade | Covered | `scripts/watchdog.py` (`_log_event`, `command_shape`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
-| RL-01..RL-14 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
+| RL-01..RL-16 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning, `unless_regex`/`unless_condition` exemptions + `is_relative_to_cwd` predicate | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-watch-files.sh` |
 | OUT-01..OUT-08 | Output decisions, formatting, aggregation, allow-by-default, ref hyperlinks (`CLAUDEWATCH_HYPERLINKS`), deny source tag, compound-command ask→deny escalation | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
 | HK-01 | PreToolUse hooks for Bash/Write/Edit | Covered | `hooks/hooks.json` |
 | HK-02 | SessionStart hook (no-op placeholder) | Covered | `hooks/hooks.json`, `hooks/cli-freshness.sh` |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |
 | HK-04 | SessionStart ambient guidance emission | Covered | `hooks/emit-rules.sh`, `rules/*.md`, `tests/test-ambient.sh` |
+| HK-05 | SessionEnd deletes session mute file + pointer | Missing | Spec'd 2026-07-08 (MUTE promotion); no `SessionEnd` hook in `hooks/hooks.json` yet |
+| HK-06 | SessionStart writes cwd→session_id pointer for mutes | Missing | Spec'd 2026-07-08; no pointer hook yet |
 | EXT-01..EXT-03 | Auto-discovery, disable-by-rename, no-code-change | Covered | `scripts/watchdog.py`, `tests/test-engine.sh` |
 | SK-01 | `/ClaudeWatch:help` overview *(retired in 0.16.0)* | Removed | README + docs site |
 | SK-02..SK-12 | `/ClaudeWatch:rules` interactive editor | Covered | `skills/rules/SKILL.md` |
-| SK-13..SK-17 | `/ClaudeWatch:learn` decision-log analysis | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` |
+| SK-13..SK-19 | `/ClaudeWatch:learn` decision-log analysis, `--since` window + window-provenance reporting, log reset/archive | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` |
+| MUTE-01..MUTE-08 | Session mute: per-session `ask` suppression, skill (`/ClaudeWatch:mute`/`unmute`/`mutes`), durable store, friction hint | Missing | Spec'd 2026-07-08 (promoted from FUT-07); no engine read path, hooks, or skill yet |
 | DOC-01, DOC-02, DOC-04, DOC-05 | Docsify site, `just docs` regen (rules + prompts pages), YAML schema reference | Covered | `docs/`, `SCHEMA.md`, `build/gen-rules-doc.py`, `justfile` |
 | DIST-01 | Expose install metadata in manifest | Covered | `.claude-plugin/plugin.json` (name, version, description, repository, license) — hosting/marketplace mechanism is out of scope per SPEC.md |
 | DIST-02 | `.claude-plugin/plugin.json` manifest | Covered | `.claude-plugin/plugin.json` |
@@ -45,10 +50,24 @@ spot; broader clusters cite the file and its tests.
 | SH-04 | Per-set test files | Covered | `tests/test-watch-*.sh` |
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just docs-preview` | Covered | `justfile` + `tests/` |
 | FUT-01 | SessionStart self-check | Deferred | `hooks/cli-freshness.sh` is intentional no-op |
-| FUT-02 | `new` rule-set scaffolds a test file | Deferred — partially covered | `skills/rules/SKILL.md` already offers this; consider promoting |
+| FUT-02 | `new` rule-set scaffolds a test file | Deferred | `skills/rules/SKILL.md` offers post-write test *coverage* but scaffolds no test *file* for a `new` set; [FUT-02] now specifies the file scaffold |
 | FUT-03 | Multi-line YAML strings / anchors | Deferred | Not needed by current rules |
 
 ## Audit history
+
+### 2026-07-08 — Coverage refresh (spec-status)
+
+STATUS.md regenerated: coverage recomputed to 93 Covered / 10 Missing / 0 Partial of 103 normative (+5 deferred FUT-01..05; SK-01/FUT-06 retired-excluded); MUTE-01..08 + HK-05/06 classified Missing; status vocab and coverage line canonicalized. Supersedes the manual recount below — the tool is `/sextant:spec-status`, not the retired `/spec-audit`.
+
+### 2026-07-08 — FUT audit + Session Mute promotion (manual spec revision)
+
+Spec revised (SPEC.md) and coverage recounted by hand (the `/spec-audit` tooling no longer exists):
+
+- **Promoted the former FUT-07 to a normative feature.** New §8 **Session Mute** ([MUTE-01]..[MUTE-08]) plus [HK-05]/[HK-06], and amended the §1 core contract to admit the session mute set as a deterministic decision input. Not yet implemented (no engine read path, hooks, or skill) — table rows added as *Not implemented*.
+- **Recounted coverage: 85 → 93/103.** The old "85/85 100%" was stale — [RL-15]/[RL-16] (`unless_*` exemptions + `is_relative_to_cwd`) and [SK-18]/[SK-19] (`--since` window provenance, log reset/archive) were implemented and tested but had never been tabled. Added those to their cluster rows. New counting rule recorded in the header. The 10-requirement gap to 103 is entirely the unbuilt Session Mute feature.
+- **Audited the deferred list.** FUT-01/03/04/05 remain relevant; FUT-04 and FUT-05 re-pointed at [MUTE-04] now that the durable user directory is concrete rather than hypothetical. FUT-02 refined to specify scaffolding the test *file* (the rules skill offers test *cases* today but no file for a `new` set).
+- **FUT-06 declined** as a non-goal (standalone self-marketplace) and tombstoned in house style (per the retired [SK-01]); its ID is preserved because CHANGELOG.md and this file reference it.
+- **Known drift (not fixed here):** sibling plugins' `STATUS.md` and the ai-sdlc convention still name the removed `/spec-audit` command — captured as a deferred logbook note for the retro.
 
 ### 2026-06-22 — Coverage refresh (spec-status)
 

@@ -10,7 +10,7 @@ and at the moment a script file is authored.
 
 This spec captures the contract — what the system must do — independent of
 how it's currently implemented. Mechanism notes (current file layout, parser
-internals) live in §11.
+internals) live in §13.
 
 Requirement IDs use `[XX-NN]`. Categories:
 
@@ -22,6 +22,7 @@ Requirement IDs use `[XX-NN]`. Categories:
 - **HK** — Hook wiring
 - **EXT** — Extensibility
 - **SK** — Skills (`/ClaudeWatch:rules`, `/ClaudeWatch:learn`)
+- **MUTE** — Session mutes (per-session `ask` suppression)
 - **DOC** — Documentation
 - **DIST** — Distribution / install
 - **SH** — Shipped rule sets
@@ -37,7 +38,10 @@ Unwanted (`If…then`).
 ## 1. Engine (EN)
 
 **Core contract:** Given tool input on stdin, the engine deterministically
-emits exactly one of `{deny, ask, no-output}` and exits 0. The engine handles
+emits exactly one of `{deny, ask, no-output}` and exits 0. The decision is a
+pure function of the tool input, the working directory (`cwd`), the `watches/`
+rule tree, and — where present — the active session's mute set ([MUTE-03]); no
+clock, randomness, or network enters the decision path. The engine handles
 three tool inputs: `Bash` (matched against the bash command string), `Write`
 (matched against the new file content), and `Edit` (matched against the full
 post-edit file content).
@@ -125,6 +129,8 @@ The engine emits at most one decision per invocation.
 - **[HK-02]** The plugin shall register a `SessionStart` hook for plugin-update self-checks. (Currently a no-op placeholder — see [FUT-01].)
 - **[HK-03]** The plugin shall declare its hooks in `hooks/hooks.json`.
 - **[HK-04]** The plugin shall register a `SessionStart` hook that emits ambient guidance into the session context advising that a consequential command be run as its own Bash call rather than piped or chained, so the compound-command escalation ([OUT-08]) is avoided before it triggers. The guidance shall be sourced from `rules/*.md` so it can be edited without changing the hook.
+- **[HK-05]** The plugin shall register a `SessionEnd` hook that deletes the ending session's mute file and its `cwd → session_id` pointer ([HK-06], [MUTE-04]), so a session mute ([MUTE-01]) never outlives its session. `SessionEnd` is non-blocking; the hook's output is advisory and it shall exit 0.
+- **[HK-06]** The plugin shall register a `SessionStart` hook that records a `cwd → session_id` pointer in the mute store ([MUTE-04]), so the mute skill — which does not receive `session_id` (Claude Code supplies it on hook stdin but not as an environment variable to slash commands or bash) — can resolve the active session from its own `cwd`. Where two sessions share a `cwd`, the pointer is last-writer-wins; because the engine's read path ([MUTE-03]) keys on the exact `session_id` from stdin, a collision can misdirect a *write* but never misapply a mute to a session it was not written for.
 
 ## 6. Extensibility (EXT)
 
@@ -167,20 +173,40 @@ rather than per command.
 - **[SK-18]** The analysis shall report the window its proposals are drawn from: the number of decision records considered, the count of distinct sessions among them, and the time span from the oldest to the newest record. The skill shall surface this so the user can weigh how much history backs the suggestions.
 - **[SK-19]** The skill shall offer to reset the decision log after the user has applied their chosen changes, so that the next analysis measures from the post-change baseline rather than re-surfacing already-dispositioned commands. Reset shall **archive** the current log by default — moving it to a fixed user directory (`~/.claude/claudewatch/archive/`, beside the durable log per [LOG-01]) so the prior history is recoverable — and shall support a `--hard` mode that deletes it outright. Where logging is disabled ([LOG-02]) or no log exists, reset shall make no change and shall report why. Reset shall report what it cleared (record count and span).
 
-## 8. Documentation (DOC)
+## 8. Session Mute (MUTE)
+
+A *session mute* silences a rule set's or an individual rule's `ask` prompts
+for the duration of one Claude Code session — for a commit-heavy recipe where
+`watch-git`'s `git commit`/`--amend` asks fire repeatedly and the user intends
+to review the accumulated work at the end rather than approve each step. It is
+the *session-scoped, ephemeral* counterpart to the *repo-scoped, persistent*
+trust of [FUT-05]: both suppress `ask` decisions only and neither ever waives a
+`block` rule, but they key on different things (session identity vs. target
+repo) and have different lifetimes.
+
+- **[MUTE-01]** A session mute shall suppress `ask` rules only. When a `block` rule matches, the engine shall emit its `deny` regardless of any active mute, mirroring the `except`/`unless_*` law ([RL-08], [RL-15]) that block is un-bypassable. This is the property that makes "let the agent run wild, review at the end" safe: muting `watch-git` silences the recoverable `commit`/`amend`/`reset --hard` prompts while `push --force` and its fellow block rules still fire.
+- **[MUTE-02]** A mute name shall resolve against both rule-set names (e.g. `git` or `watch-git`, muting all that set's `ask` rules) and individual rule names (e.g. `git-commit`, muting that one rule). While a session has an active mute, the engine shall skip — emit no ask for — every matched `ask` rule whose rule `name` or containing rule-set `name` is in that session's mute set, evaluated at the same point as the [RL-07]/[RL-15] exemptions.
+- **[MUTE-03]** The engine shall read the active session's mute set on the decision path keyed by the `session_id` on the hook input ([LOG-03]). Reading the mute set shall be a pure file read with no clock, randomness, or network, so the decision stays deterministic (core contract #1, [EN]): the mute set is a deterministic file input like the `watches/` tree, and `session_id` a deterministic stdin input like `cwd` ([RL-16]). Because expiry cannot be evaluated without a clock on the decision path, a mute shall be scoped to session lifetime — established by the SessionStart/SessionEnd hooks ([HK-05], [HK-06]) — rather than a wall-clock TTL.
+- **[MUTE-04]** The mute set shall be stored per session in the durable user directory `~/.claude/claudewatch/mutes/`, beside the decision log ([LOG-01]) and outside the version-scoped plugin cache, so the fixed path resolves identically for the engine, the mute skill, and the session hooks regardless of installed plugin version (the durability rationale of [FUT-04]). The engine and skill shall restrict the store to owner-only access as the decision log is restricted ([LOG-05]).
+- **[MUTE-05]** The plugin shall ship a skill exposing `/ClaudeWatch:mute <name>`, `/ClaudeWatch:unmute <name>`, and a bare `/ClaudeWatch:mutes` (list the session's active mutes). A natural-language request ("stop asking me about commits this session") shall route to the same skill. The skill shall write and read the [MUTE-04] store for the active session, resolved via the [HK-06] pointer.
+- **[MUTE-06]** When the skill applies a mute, it shall confirm explicitly which `ask` rules it disabled for the session — naming each — and how to clear it (`/ClaudeWatch:unmute <name>`), so the user always knows the current suppression state and its undo.
+- **[MUTE-07]** If a mute name resolves to no `ask` rules — a name matching only block rules, or matching nothing — then the skill shall make no change and shall report why ("`<name>` has no ask rules; nothing to mute" / "no rule or rule set named `<name>`"), rather than silently recording an inert mute.
+- **[MUTE-08]** In the `permissionDecisionReason` of an `ask` decision — but not in the logged reasons ([LOG-03]) — the engine should include a display-only hint naming the mute command for the matched rule (e.g. `mute for this session: /ClaudeWatch:mute git-commit`), so the affordance is taught at the point of friction. Like the OSC 8 hyperlink of [OUT-06], the hint is presentation-only.
+
+## 9. Documentation (DOC)
 
 - **[DOC-01]** The plugin shall ship a Docsify documentation site under `docs/`.
 - **[DOC-02]** `just docs` shall regenerate the rules-reference page from the YAML rule files.
 - **[DOC-04]** The documentation shall include a YAML schema reference covering top-level fields and rule fields.
 - **[DOC-05]** `just docs` shall regenerate a prompts page, linked from the docs-site sidebar, approximating the Claude Code permission prompt each rule produces — block rules as an outright rejection, ask rules as a confirmation prompt — with the reason prose linking to the rule's `ref`.
 
-## 9. Distribution (DIST)
+## 10. Distribution (DIST)
 
 - **[DIST-01]** The plugin shall expose the metadata required for installation as a Claude Code plugin (name, version, description, repository, license) in its manifest. The mechanism by which the plugin is hosted or distributed (marketplace registration, install command) is out of scope.
 - **[DIST-02]** The plugin shall declare a manifest at `.claude-plugin/plugin.json`.
 - **[DIST-03]** The plugin shall be runnable from a working copy via `claude --plugin-dir .` (no install required for local testing).
 
-## 10. Shipped Rule Sets (SH)
+## 11. Shipped Rule Sets (SH)
 
 These are the rule sets the plugin ships out of the box. Each is
 self-contained and removable by renaming its file to `*.yml.disabled`.
@@ -213,14 +239,14 @@ self-contained and removable by renaming its file to `*.yml.disabled`.
 - **[SH-03]** Each shipped rule set shall include `ref` URLs pointing to upstream tool documentation, vendor docs, or a CWE/OWASP entry.
 - **[SH-04]** Each shipped rule set shall have a corresponding test file `tests/test-watch-<name>.sh` that exercises representative match/no-match cases.
 
-## 11. Development & Testing (DEV)
+## 12. Development & Testing (DEV)
 
 - **[DEV-01]** `just test` shall run the full test suite via `tests/test-watchdog.sh`.
 - **[DEV-02]** The test suite shall exercise each shipped rule set independently and shall also exercise engine-level behavior (decision aggregation, error handling, file/directory rules paths).
 - **[DEV-03]** `just rules` shall launch an interactive Claude Code session with the local plugin loaded and the rules skill open.
 - **[DEV-04]** `just docs-preview` shall serve the generated docs locally for review.
 
-## 12. Implementation Notes (non-normative)
+## 13. Implementation Notes (non-normative)
 
 These describe how the current implementation satisfies the spec. They are
 *not* requirements — they may change without bumping the spec version.
@@ -263,11 +289,11 @@ These describe how the current implementation satisfies the spec. They are
   stripping does not affect which rules fire — only whether a matched `ask` is
   escalated.
 
-## 13. Future / Deferred (FUT)
+## 14. Future / Deferred (FUT)
 
 - **[FUT-01]** Where a plugin-update self-check is implemented, the SessionStart hook shall verify `watchdog.py` emits the expected `hookSpecificOutput.permissionDecision` schema.
-- **[FUT-02]** Where the user adds a custom rule set via `/ClaudeWatch:rules new`, the skill should offer to scaffold a matching test file in `tests/`.
+- **[FUT-02]** Where the user adds a custom rule set via `/ClaudeWatch:rules new` ([SK-11]), the skill should scaffold a matching test file `tests/test-watch-<name>.sh` in the [SH-04] shape. The rules skill already offers to add test *coverage* after a write, but for a brand-new set there is no test file to write into, so the set ships untested until the author hand-creates it; scaffolding the file on `new` closes that gap.
 - **[FUT-03]** Where multi-line YAML strings or nested anchors are required, the parser may switch to PyYAML; currently the minimal parser does not support these constructs.
-- **[FUT-04]** Where the user customizes rules on an installed plugin via `/ClaudeWatch:rules` (including the `except` and demotion edits proposed by `/ClaudeWatch:learn`, which route through that skill), those edits shall survive plugin version upgrades. The skill writes to `${CLAUDE_PLUGIN_ROOT}/watches`, which for an installed plugin resolves to the version-scoped cache directory (e.g. `~/.claude/plugins/cache/chris-peterson/ClaudeWatch/0.8.0/watches/`); an upgrade installs a fresh version directory with its own shipped rules and the hook reads from the new root, orphaning prior edits. The decision log ([LOG-01]) already shows the durable shape: it lives in a fixed user directory (`~/.claude/claudewatch/`) outside the cache and so persists across upgrades. The gap closes by giving rule customizations the same treatment — a user rules directory alongside it (`~/.claude/claudewatch/watches/`) that the engine loads in addition to the shipped set (user rules winning on conflict), or a migration step on upgrade. Until then, only allow-list outputs of `/ClaudeWatch:learn` (written to `settings.json`) are durable on an installed plugin; rule edits are not. Edits made when running from a working copy via `claude --plugin-dir .` (per [DIST-03]) are already durable because `${CLAUDE_PLUGIN_ROOT}` is the git-tracked checkout, not the cache.
-- **[FUT-05]** Where the user designates specific repositories as trusted for otherwise-prompted git operations (e.g. a personal knowledge repo or a dashboard repo where unattended `commit`/`push` is acceptable), the engine should suppress `watch-git`'s `ask` decisions for commands targeting those repos while still applying them everywhere else. This is *repo-scoped* allow configuration, distinct from the command-shape allow-list in `settings.json` (which blanket-allows a command in every directory) and from `except` (which exempts a command *variant*, not a *location*). The trusted set keys on the resolved target repo — the `git -C <path>` argument when present, otherwise the invocation's working directory — matched by path prefix or by remote URL. Determinism (core contract #1) holds because the target repo is a pure function of the hook input (the command string plus the cwd Claude Code already passes), with no clock or network on the decision path. The configuration must survive plugin upgrades, so it lives in the durable user directory described in [FUT-04] (`~/.claude/claudewatch/`), not in the version-scoped cache. Open questions: whether the match key is filesystem path, remote URL, or both (a path moves; a remote is stable but absent for never-pushed repos); whether trust is scoped per rule set (`watch-git` only) or is a general repo-scoped allow applying to any rule; and whether `push --force`-class **block** rules are ever in scope (likely not — "no recovery" should not be repo-waivable).
-- **[FUT-06]** Where persistent standalone install (without the central chris-peterson marketplace) becomes a goal, the repo may ship its own single-plugin `.claude-plugin/marketplace.json` (`source: "./"`) so users can `/plugin marketplace add <this-repo>` and `/plugin install`. Claude Code has no bare git-URL install; a marketplace descriptor is the only path to a *persistent* install, and [DIST-01] currently holds distribution out of scope. This must be a **generated artifact** from `plugin.yml`'s existing `marketplace:` block (the same single source of truth as `plugin.json`), never hand-authored. Deferred: `claude --plugin-dir .` ([DIST-03]) already covers clone-and-run standalone use, so the marginal gain is low until a persistent install is actually wanted.
+- **[FUT-04]** Where the user customizes rules on an installed plugin via `/ClaudeWatch:rules` (including the `except` and demotion edits proposed by `/ClaudeWatch:learn`, which route through that skill), those edits shall survive plugin version upgrades. The skill writes to `${CLAUDE_PLUGIN_ROOT}/watches`, which for an installed plugin resolves to the version-scoped cache directory (e.g. `~/.claude/plugins/cache/chris-peterson/ClaudeWatch/0.8.0/watches/`); an upgrade installs a fresh version directory with its own shipped rules and the hook reads from the new root, orphaning prior edits. The decision log ([LOG-01]) and the session-mute store ([MUTE-04]) already show the durable shape: they live in a fixed user directory (`~/.claude/claudewatch/`) outside the cache and so persist across upgrades. The gap closes by giving rule customizations the same treatment — a user rules directory alongside it (`~/.claude/claudewatch/watches/`) that the engine loads in addition to the shipped set (user rules winning on conflict), or a migration step on upgrade. Until then, only allow-list outputs of `/ClaudeWatch:learn` (written to `settings.json`) are durable on an installed plugin; rule edits are not. Edits made when running from a working copy via `claude --plugin-dir .` (per [DIST-03]) are already durable because `${CLAUDE_PLUGIN_ROOT}` is the git-tracked checkout, not the cache.
+- **[FUT-05]** Where the user designates specific repositories as trusted for otherwise-prompted git operations (e.g. a personal knowledge repo or a dashboard repo where unattended `commit`/`push` is acceptable), the engine should suppress `watch-git`'s `ask` decisions for commands targeting those repos while still applying them everywhere else. This is *repo-scoped* allow configuration, distinct from the command-shape allow-list in `settings.json` (which blanket-allows a command in every directory) and from `except` (which exempts a command *variant*, not a *location*). The trusted set keys on the resolved target repo — the `git -C <path>` argument when present, otherwise the invocation's working directory — matched by path prefix or by remote URL. Determinism (core contract #1) holds because the target repo is a pure function of the hook input (the command string plus the cwd Claude Code already passes), with no clock or network on the decision path. The configuration must survive plugin upgrades, so it lives in the durable user directory described in [FUT-04] (`~/.claude/claudewatch/`), not in the version-scoped cache. Open questions: whether the match key is filesystem path, remote URL, or both (a path moves; a remote is stable but absent for never-pushed repos); whether trust is scoped per rule set (`watch-git` only) or is a general repo-scoped allow applying to any rule; and whether `push --force`-class **block** rules are ever in scope (likely not — "no recovery" should not be repo-waivable). See §8 (Session Mute, [MUTE-01]) for the *session-scoped, ephemeral* sibling of this *repo-scoped, persistent* trust; both suppress `ask` decisions only and would likely share one durable suppression store ([MUTE-04]) and skip-point ([MUTE-02]).
+> **[FUT-06]** *(declined 2026-07-08)* — a standalone single-plugin `.claude-plugin/marketplace.json` (`source: "./"`) for `/plugin marketplace add`-based install was considered and declined. `claude --plugin-dir .` ([DIST-03]) already covers clone-and-run standalone use, and distribution otherwise goes through the central chris-peterson marketplace, so a self-hosted descriptor adds maintenance surface for marginal gain. Standalone self-hosted install is a **non-goal** unless a concrete need arises; reopen with a new ID if it does.

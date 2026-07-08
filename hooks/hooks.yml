@@ -14,3 +14,6 @@ hooks:
   - event: SessionStart
     command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/emit-rules.sh'
     description: Emit ClaudeWatch's ambient guidance into context.
+  - event: SessionEnd
+    command: 'python3 ${CLAUDE_PLUGIN_ROOT}/scripts/mute.py session-end'
+    description: Clear this session's rule-set mutes when the session ends.

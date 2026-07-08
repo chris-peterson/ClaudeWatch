@@ -129,8 +129,8 @@ The engine emits at most one decision per invocation.
 - **[HK-02]** The plugin shall register a `SessionStart` hook for plugin-update self-checks. (Currently a no-op placeholder — see [FUT-01].)
 - **[HK-03]** The plugin shall declare its hooks in `hooks/hooks.json`.
 - **[HK-04]** The plugin shall register a `SessionStart` hook that emits ambient guidance into the session context advising that a consequential command be run as its own Bash call rather than piped or chained, so the compound-command escalation ([OUT-08]) is avoided before it triggers. The guidance shall be sourced from `rules/*.md` so it can be edited without changing the hook.
-- **[HK-05]** The plugin shall register a `SessionEnd` hook that deletes the ending session's mute file and its `cwd → session_id` pointer ([HK-06], [MUTE-04]), so a session mute ([MUTE-01]) never outlives its session. `SessionEnd` is non-blocking; the hook's output is advisory and it shall exit 0.
-- **[HK-06]** The plugin shall register a `SessionStart` hook that records a `cwd → session_id` pointer in the mute store ([MUTE-04]), so the mute skill — which does not receive `session_id` (Claude Code supplies it on hook stdin but not as an environment variable to slash commands or bash) — can resolve the active session from its own `cwd`. Where two sessions share a `cwd`, the pointer is last-writer-wins; because the engine's read path ([MUTE-03]) keys on the exact `session_id` from stdin, a collision can misdirect a *write* but never misapply a mute to a session it was not written for.
+- **[HK-05]** The plugin shall register a `SessionEnd` hook that deletes the ending session's mute file ([MUTE-04]), so a session mute ([MUTE-01]) never outlives its session. `SessionEnd` is non-blocking; the hook's output is advisory and it shall exit 0.
+- **[HK-06]** *(superseded 2026-07-09)* — formerly required a `SessionStart` hook recording a `cwd → session_id` pointer so the mute skill could resolve its session without `session_id`, on the premise that Claude Code does not expose `session_id` to a slash command. That premise no longer holds: Claude Code substitutes `${CLAUDE_SESSION_ID}` in skill content, so the mute skill passes the exact session id to the CLI directly ([MUTE-05]). The pointer indirection — and its last-writer-wins collision when two sessions shared a `cwd`, a stale pointer resolving to a dead session, and the `os.getcwd()`-vs-recorded-`cwd` mismatch — is removed; no `SessionStart` hook is needed for mutes.
 
 ## 6. Extensibility (EXT)
 
@@ -185,13 +185,13 @@ trust of [FUT-05]: both suppress `ask` decisions only and neither ever waives a
 repo) and have different lifetimes.
 
 - **[MUTE-01]** A session mute shall suppress `ask` rules only. When a `block` rule matches, the engine shall emit its `deny` regardless of any active mute, mirroring the `except`/`unless_*` law ([RL-08], [RL-15]) that block is un-bypassable. This is the property that makes "let the agent run wild, review at the end" safe: muting `watch-git` silences the recoverable `commit`/`amend`/`reset --hard` prompts while `push --force` and its fellow block rules still fire.
-- **[MUTE-02]** A mute name shall resolve against both rule-set names (e.g. `git` or `watch-git`, muting all that set's `ask` rules) and individual rule names (e.g. `git-commit`, muting that one rule). While a session has an active mute, the engine shall skip — emit no ask for — every matched `ask` rule whose rule `name` or containing rule-set `name` is in that session's mute set, evaluated at the same point as the [RL-07]/[RL-15] exemptions.
-- **[MUTE-03]** The engine shall read the active session's mute set on the decision path keyed by the `session_id` on the hook input ([LOG-03]). Reading the mute set shall be a pure file read with no clock, randomness, or network, so the decision stays deterministic (core contract #1, [EN]): the mute set is a deterministic file input like the `watches/` tree, and `session_id` a deterministic stdin input like `cwd` ([RL-16]). Because expiry cannot be evaluated without a clock on the decision path, a mute shall be scoped to session lifetime — established by the SessionStart/SessionEnd hooks ([HK-05], [HK-06]) — rather than a wall-clock TTL.
+- **[MUTE-02]** A mute token shall resolve against a **rule set** — by its full name (`watch-git`) or short name (`git`), muting all that set's `ask` rules — or an **individual `ask` rule by its `name`** (the descriptive label the ask prompt already shows, e.g. `git commit`). While a session has an active mute, the engine shall skip — emit no ask for — every matched `ask` rule whose rule-set name, rule-set short name, or rule `name` is in that session's mute set, evaluated at the same point as the [RL-07]/[RL-15] exemptions. Rule names are matched exactly; a name that appears in more than one set mutes that rule in each. Keying on the rule `name` rather than a positional id keeps the mute token discoverable (it is the prompt's own label) and stable across rule reordering.
+- **[MUTE-03]** The engine shall read the active session's mute set on the decision path keyed by the `session_id` on the hook input ([LOG-03]). Reading the mute set shall be a pure file read with no clock, randomness, or network, so the decision stays deterministic (core contract #1, [EN]): the mute set is a deterministic file input like the `watches/` tree, and `session_id` a deterministic stdin input like `cwd` ([RL-16]). Because expiry cannot be evaluated without a clock on the decision path, a mute shall be scoped to session lifetime — bounded by the `session_id` it is keyed on and the [HK-05] SessionEnd cleanup — rather than a wall-clock TTL.
 - **[MUTE-04]** The mute set shall be stored per session in the durable user directory `~/.claude/claudewatch/mutes/`, beside the decision log ([LOG-01]) and outside the version-scoped plugin cache, so the fixed path resolves identically for the engine, the mute skill, and the session hooks regardless of installed plugin version (the durability rationale of [FUT-04]). The engine and skill shall restrict the store to owner-only access as the decision log is restricted ([LOG-05]).
-- **[MUTE-05]** The plugin shall ship a skill exposing `/ClaudeWatch:mute <name>`, `/ClaudeWatch:unmute <name>`, and a bare `/ClaudeWatch:mutes` (list the session's active mutes). A natural-language request ("stop asking me about commits this session") shall route to the same skill. The skill shall write and read the [MUTE-04] store for the active session, resolved via the [HK-06] pointer.
+- **[MUTE-05]** The plugin shall ship a skill exposing `/ClaudeWatch:mute <name>`, `/ClaudeWatch:unmute <name>`, and a bare `/ClaudeWatch:mutes` (list the session's active mutes). A natural-language request ("stop asking me about commits this session") shall route to the same skill. The skill shall write and read the [MUTE-04] store for the active session, whose id it obtains from Claude Code's `${CLAUDE_SESSION_ID}` skill-content substitution and passes to the CLI (`--session`) — the same id the engine keys its read on ([MUTE-03]), so a mute lands on exactly the session that requested it.
 - **[MUTE-06]** When the skill applies a mute, it shall confirm explicitly which `ask` rules it disabled for the session — naming each — and how to clear it (`/ClaudeWatch:unmute <name>`), so the user always knows the current suppression state and its undo.
 - **[MUTE-07]** If a mute name resolves to no `ask` rules — a name matching only block rules, or matching nothing — then the skill shall make no change and shall report why ("`<name>` has no ask rules; nothing to mute" / "no rule or rule set named `<name>`"), rather than silently recording an inert mute.
-- **[MUTE-08]** In the `permissionDecisionReason` of an `ask` decision — but not in the logged reasons ([LOG-03]) — the engine should include a display-only hint naming the mute command for the matched rule (e.g. `mute for this session: /ClaudeWatch:mute git-commit`), so the affordance is taught at the point of friction. Like the OSC 8 hyperlink of [OUT-06], the hint is presentation-only.
+- **[MUTE-08]** In the `permissionDecisionReason` of an `ask` decision — but not in the logged reasons ([LOG-03]) — the engine should include a display-only hint naming the mute command for the matched ask rules (e.g. `Mute for this session: /ClaudeWatch:mute 'git commit'`, shell-quoting names with spaces), so the affordance is taught at the point of friction. Like the OSC 8 hyperlink of [OUT-06], the hint is presentation-only.
 
 ## 9. Documentation (DOC)
 
@@ -288,6 +288,22 @@ These describe how the current implementation satisfies the spec. They are
   pattern matching itself runs on the full, unstripped command, so quote
   stripping does not affect which rules fire — only whether a matched `ask` is
   escalated.
+- Session mutes ([MUTE-*]) live under `~/.claude/claudewatch/mutes/`: one
+  `<session_id>.json` (`{"session", "mutes": [...]}`) per session. The engine
+  reads the mute file keyed by the `session_id` on stdin — a pure decision-path
+  read with no clock/network. Mutes key on the rule-set name/short-name or the
+  rule `name` (the label the prompt shows), not a positional id. The write side
+  is a separate stdlib CLI, `scripts/mute.py` (like `analyze-decisions.py`, it
+  imports the shared store-path helpers from `watchdog.py` so the two never
+  disagree); it handles `add`/`remove`/`list` — taking the session id via
+  `--session`, which the skill fills from `${CLAUDE_SESSION_ID}` ([MUTE-05]) —
+  and the `session-end` hook subcommand that deletes the mute file ([HK-05]).
+  `CLAUDEWATCH_HOME` overrides the store root for tests. The three skills
+  (`skills/mute`, `skills/unmute`, `skills/mutes`) are thin wrappers over the CLI
+  and, unlike `rules`/`learn`, are model-invocable so natural language routes to
+  them ([MUTE-05]). The [MUTE-08] hint is appended to the ask reason *after* the
+  decision is logged, so it never reaches the log; it follows a blank line, which
+  the multi-rule line-count test accounts for.
 
 ## 14. Future / Deferred (FUT)
 

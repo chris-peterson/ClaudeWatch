@@ -4,13 +4,12 @@ Tracking status of the requirements declared in [SPEC.md](SPEC.md). Maintained b
 `/sextant:spec-status`; updated when a coverage audit runs, when implementation lands,
 or when the spec is revised.
 
-**Last audit:** 2026-07-08
+**Last audit:** 2026-07-09
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 93 of 103 normative requirements Covered (90%); 10 Missing; 0 Partial. Plus
-5 deferred (FUT-01..FUT-05). Retired, excluded from the count: SK-01, FUT-06. The 10 Missing
-are the unbuilt §8 Session Mute feature ([MUTE-01]..[MUTE-08], [HK-05], [HK-06]), spec'd
-2026-07-08. Counting rule: one distinct `[XX-NN]` = one requirement (lettered decompositions
-included), excluding deferred FUT and retired IDs.
+**Coverage:** 102 of 102 normative requirements Covered (100%); 0 Missing; 0 Partial. Plus
+5 deferred (FUT-01..FUT-05). Retired/superseded, excluded from the count: SK-01, HK-06, FUT-06.
+Counting rule: one distinct `[XX-NN]` = one requirement (lettered decompositions included),
+excluding deferred FUT and retired/superseded IDs.
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
 for the contract, `scripts/watchdog.py` for engine behavior, and the per-set
@@ -33,13 +32,13 @@ spot; broader clusters cite the file and its tests.
 | HK-02 | SessionStart hook (no-op placeholder) | Covered | `hooks/hooks.json`, `hooks/cli-freshness.sh` |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |
 | HK-04 | SessionStart ambient guidance emission | Covered | `hooks/emit-rules.sh`, `rules/*.md`, `tests/test-ambient.sh` |
-| HK-05 | SessionEnd deletes session mute file + pointer | Missing | Spec'd 2026-07-08 (MUTE promotion); no `SessionEnd` hook in `hooks/hooks.json` yet |
-| HK-06 | SessionStart writes cwd→session_id pointer for mutes | Missing | Spec'd 2026-07-08; no pointer hook yet |
+| HK-05 | SessionEnd deletes session mute file | Covered | `hooks/hooks.json`, `scripts/mute.py` (`session-end`) + `tests/test-mutes.sh` |
+| HK-06 | SessionStart cwd→session_id pointer for mutes *(superseded 2026-07-09)* | Removed | Skill uses `${CLAUDE_SESSION_ID}`; SPEC [HK-06] |
 | EXT-01..EXT-03 | Auto-discovery, disable-by-rename, no-code-change | Covered | `scripts/watchdog.py`, `tests/test-engine.sh` |
 | SK-01 | `/ClaudeWatch:help` overview *(retired in 0.16.0)* | Removed | README + docs site |
 | SK-02..SK-12 | `/ClaudeWatch:rules` interactive editor | Covered | `skills/rules/SKILL.md` |
 | SK-13..SK-19 | `/ClaudeWatch:learn` decision-log analysis, `--since` window + window-provenance reporting, log reset/archive | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` |
-| MUTE-01..MUTE-08 | Session mute: per-session `ask` suppression, skill (`/ClaudeWatch:mute`/`unmute`/`mutes`), durable store, friction hint | Missing | Spec'd 2026-07-08 (promoted from FUT-07); no engine read path, hooks, or skill yet |
+| MUTE-01..MUTE-08 | Session mute: per-session `ask` suppression, skill (`/ClaudeWatch:mute`/`unmute`/`mutes`), durable store, friction hint | Covered | `scripts/watchdog.py` (`load_session_mutes`, ask-loop skip, hint), `scripts/mute.py`, `skills/{mute,unmute,mutes}/SKILL.md` + `tests/test-mutes.sh` |
 | DOC-01, DOC-02, DOC-04, DOC-05 | Docsify site, `just docs` regen (rules + prompts pages), YAML schema reference | Covered | `docs/`, `SCHEMA.md`, `build/gen-rules-doc.py`, `justfile` |
 | DIST-01 | Expose install metadata in manifest | Covered | `.claude-plugin/plugin.json` (name, version, description, repository, license) — hosting/marketplace mechanism is out of scope per SPEC.md |
 | DIST-02 | `.claude-plugin/plugin.json` manifest | Covered | `.claude-plugin/plugin.json` |
@@ -54,6 +53,14 @@ spot; broader clusters cite the file and its tests.
 | FUT-03 | Multi-line YAML strings / anchors | Deferred | Not needed by current rules |
 
 ## Audit history
+
+### 2026-07-09 — Session-mute pointer removed (manual revision)
+
+The mute skill now passes the active session id via `--session` from Claude Code's `${CLAUDE_SESSION_ID}` skill substitution, so the CLI no longer bridges through a `cwd → session_id` pointer. [HK-06] (the SessionStart pointer hook) is superseded and excluded from the count (103 → 102); [HK-05] no longer deletes a pointer. This removes the pointer's failure modes: a wrong-session write when two sessions shared a `cwd`, a stale pointer resolving to a dead session, and the `os.getcwd()`-vs-recorded-`cwd` mismatch. Folded in alongside are review fixes — a guarded rule parse in the CLI (one malformed set warns and skips instead of crashing), no whole-set hint for a nameless ask rule, deduped mute-hint tokens, a shell-quoted unmute suggestion, and a dropped redundant post-write read. Coverage recounted by hand; a `/sextant:spec-status` regen should confirm. `tests/test-mutes.sh` updated (session id via `--session`, no pointer).
+
+### 2026-07-08 — Session Mute implemented
+
+MUTE-01..08 + HK-05/HK-06 implemented and tested; coverage 93 → 103/103 (100%). The engine reads the per-session mute set on the decision path (`load_session_mutes`, ask-loop skip, [MUTE-08] hint); `scripts/mute.py` is the write/read CLI plus the SessionStart/SessionEnd hook subcommands; three model-invocable skills (`mute`/`unmute`/`mutes`) wrap it; `tests/test-mutes.sh` (20 cases) covers engine suppression, block-still-fires, the hint, the CLI, and the session lifecycle. Individual rules are muted by their `name` (the label the ask prompt shows, e.g. `git commit`), not a positional id — discoverable and stable across reordering; the engine matches the rule-set name/short-name or the rule name.
 
 ### 2026-07-08 — Coverage refresh (spec-status)
 

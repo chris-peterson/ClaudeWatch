@@ -87,13 +87,18 @@ echo "--- multiple matched rules: each reason links independently, newline-joine
 assert_reason "multi: first rule linked"   "-u CLAUDEWATCH_HYPERLINKS" "$MULTI" "${OSC8}https://example.com/one${ST}first reason"  yes
 assert_reason "multi: second rule linked"  "-u CLAUDEWATCH_HYPERLINKS" "$MULTI" "${OSC8}https://example.com/two${ST}second reason" yes
 # Two violations → two lines (one newline). A regression that wrapped the joined
-# string in a single hyperlink, or dropped the newline, would fail here.
+# string in a single hyperlink, or dropped the newline, would fail the pre-blank
+# count. The [MUTE-08] mute hint follows a blank line; assert the post-blank
+# region is exactly one line too, so extra trailing output (a duplicated hint, a
+# stray appended line) is caught — the guarantee the whole-reason count once gave.
 TOTAL=$((TOTAL + 1))
-multi_lines=$(printf '%s\n' "$(fmt_reason "-u CLAUDEWATCH_HYPERLINKS" "$MULTI")" | wc -l | tr -d ' ')
-if [ "$multi_lines" = "2" ]; then
-  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: multi: reasons are newline-joined (2 lines)"
+multi_reason=$(fmt_reason "-u CLAUDEWATCH_HYPERLINKS" "$MULTI")
+multi_pre=$(printf '%s\n' "$multi_reason" | awk '/^$/{exit} {print}' | wc -l | tr -d ' ')
+multi_post=$(printf '%s\n' "$multi_reason" | awk 'f{print} /^$/{f=1}' | wc -l | tr -d ' ')
+if [ "$multi_pre" = "2" ] && [ "$multi_post" = "1" ]; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: multi: 2 reason lines + 1 mute-hint line, no extra output"
 else
-  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: multi: reasons are newline-joined (got $multi_lines lines)"
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: multi: expected 2 reason + 1 hint line (got pre=$multi_pre post=$multi_post)"
 fi
 
 echo "--- deny path uses the plain — url form (host strips OSC 8 on errors) ---"

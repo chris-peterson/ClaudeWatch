@@ -33,6 +33,16 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/mute.py session-end"
+          }
+        ]
+      }
     ]
   }
 }

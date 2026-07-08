@@ -102,7 +102,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release notes.
 
 See the [docs site](https://chris-peterson.github.io/ClaudeWatch/) for usage, configuration, and the full [rules](https://chris-peterson.github.io/ClaudeWatch/#/rules) reference. The YAML rule format is documented for rule authors in [`SCHEMA.md`](SCHEMA.md).
 
-In-session, run `/ClaudeWatch:rules` to view and edit rules interactively, or `/ClaudeWatch:learn` to cut prompt fatigue from your decision log.
+In-session, run `/ClaudeWatch:rules` to view and edit rules interactively, or `/ClaudeWatch:learn` to cut prompt fatigue from your decision log. When a chatty recipe keeps prompting on recoverable ops, `/ClaudeWatch:mute git` (or a single rule, `/ClaudeWatch:mute "git commit"`) silences those *ask* prompts for the rest of the session — block rules still fire, so you can let the agent run and review at the end. `/ClaudeWatch:unmute` and `/ClaudeWatch:mutes` clear and list them; mutes self-clear when the session ends.
 
 ## Development
 

@@ -39,6 +39,64 @@ import sys
 VALID_TARGETS = ("bash", "file-content")
 
 
+# --- Session mute store (MUTE-01..MUTE-04) ------------------------------------
+# A session mute suppresses *ask* rules (never block rules) for the duration of
+# one Claude Code session. The engine reads the muted-name set keyed by the
+# hook's session_id — a pure file read on the decision path, no clock/network,
+# so determinism holds ([EN], MUTE-03). The store lives in a fixed user
+# directory so its path resolves identically for the engine, the `mute.py` CLI,
+# and the session hooks regardless of installed plugin version (MUTE-04).
+# CLAUDEWATCH_HOME overrides the root (used by tests); default ~/.claude/claudewatch.
+
+def _claudewatch_home():
+    return os.path.expanduser(os.environ.get("CLAUDEWATCH_HOME") or "~/.claude/claudewatch")
+
+
+def mutes_dir():
+    return os.path.join(_claudewatch_home(), "mutes")
+
+
+# A session id comes from Claude Code (a UUID) or the hook's `session_id`, and
+# is the only place that value is used as a path component. Validate it before
+# it becomes a filename so a stray separator or `..` segment can't escape the
+# mutes directory.
+_SAFE_SESSION_ID = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def valid_session_id(session_id):
+    """True when session_id is safe to use as a mute-file name (no path parts)."""
+    return isinstance(session_id, str) and _SAFE_SESSION_ID.fullmatch(session_id) is not None
+
+
+def mute_file(session_id):
+    if not valid_session_id(session_id):
+        raise ValueError(f"unsafe session id: {session_id!r}")
+    return os.path.join(mutes_dir(), f"{session_id}.json")
+
+
+def short_set_name(set_name):
+    """The `/ClaudeWatch:rules` short name: the set name minus its `watch-` prefix."""
+    return set_name[len("watch-"):] if set_name.startswith("watch-") else set_name
+
+
+def load_session_mutes(session_id):
+    """Return the set of muted names for a session (empty when none/unreadable).
+
+    A pure read on the decision path (MUTE-03): a missing or malformed store is
+    an empty mute set, never an error — silence is allow, and a broken mute file
+    must never turn a normal ask into anything else.
+    """
+    if not session_id:
+        return set()
+    try:
+        with open(mute_file(session_id)) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return set()
+    mutes = data.get("mutes") if isinstance(data, dict) else data
+    return set(mutes) if isinstance(mutes, (list, set)) else set()
+
+
 def _unquote(s):
     if len(s) >= 2 and s[0] == "'" and s[-1] == "'":
         return s[1:-1].replace("''", "'")
@@ -419,14 +477,17 @@ def _compound_escalation():
     }
 
 
-def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None):
+def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None, muted=None):
     """Evaluate a single rule set against an input.
 
     input_kind is "bash" or "file-content". input_text is the string to match
     against. file_extension is the lowercase extension (including the dot) of
     the target file, used to filter rule sets for file-content inputs. cwd is
     the working directory from the hook input, used by the `is_relative_to_cwd`
-    unless-condition to tell in-tree deletes from out-of-tree ones.
+    unless-condition to tell in-tree deletes from out-of-tree ones. muted is the
+    active session's set of muted names ([MUTE-02]); a matched ask rule is
+    skipped when its rule-set name, rule-set short name, or rule name is muted.
+    Block rules ignore `muted` entirely ([MUTE-01]).
 
     Returns (blocks, asks) — lists of violation dicts (see `_violation`).
     """
@@ -494,7 +555,20 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
             continue
         if exempted:
             continue
-        asks.append(_violation(rule))
+        rule_name = rule.get("name") or ""
+        # A session mute suppresses this ask when its rule-set name, rule-set
+        # short name, or rule name is muted ([MUTE-02]). Block rules never
+        # consult this. Matching on the rule name (not a positional id) keeps the
+        # mute token the same label the ask prompt already shows.
+        if muted and ({label, short_set_name(label), rule_name} & muted):
+            continue
+        violation = _violation(rule)
+        # The friction hint ([MUTE-08]) suggests muting this specific rule by its
+        # name. A nameless ask rule has no per-rule token; falling back to the set
+        # short name would suggest a command that silences the whole set, so leave
+        # it empty (the hint filters falsy tokens) rather than over-mute.
+        violation["mute_token"] = rule_name
+        asks.append(violation)
 
     return blocks, asks
 
@@ -694,6 +768,7 @@ def main():
         sys.exit(0)
     input_kind, input_text, file_extension = resolved
     cwd = data.get("cwd")
+    muted = load_session_mutes(data.get("session_id"))
 
     if len(sys.argv) > 1:
         target = sys.argv[1]
@@ -726,7 +801,7 @@ def main():
         except Exception as e:
             all_blocks.append(_error_violation(f"watchdog: failed to load rules: {e}"))
             continue
-        blocks, asks = evaluate_rules(config, input_kind, input_text, file_extension, cwd)
+        blocks, asks = evaluate_rules(config, input_kind, input_text, file_extension, cwd, muted)
         all_blocks.extend(blocks)
         all_asks.extend(asks)
 
@@ -758,6 +833,22 @@ def main():
         # match — the user should always see which plugin made the call.
         if decision == "deny":
             reason += f" {_PLUGIN_TAG}"
+        # Teach the mute affordance at the point of friction ([MUTE-08]): a
+        # display-only hint naming the mute command for the matched ask rules.
+        # It is appended after `_log_event` above, so it never reaches the log.
+        if decision == "ask":
+            # Dedup while preserving order: two matched ask rules can share a
+            # rule name (same `name` in different sets), which would otherwise
+            # repeat the token in the suggested command.
+            seen, tokens = set(), []
+            for v in chosen:
+                t = v.get("mute_token")
+                if t and t not in seen:
+                    seen.add(t)
+                    tokens.append(t)
+            if tokens:
+                quoted = " ".join(shlex.quote(t) for t in tokens)
+                reason += "\n\nMute for this session: /ClaudeWatch:mute " + quoted
         _emit(decision, reason)
 
     sys.exit(0)

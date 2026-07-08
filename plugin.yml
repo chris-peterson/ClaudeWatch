@@ -32,19 +32,23 @@ suite:
   cmds:
     - ["/ClaudeWatch:rules", "See and edit the rule sets that guard your commands"]
     - ["/ClaudeWatch:learn", "Tune the rules from what's been prompting you"]
+    - ["/ClaudeWatch:mute", "Silence a rule set's ask prompts for this session"]
   # The automatic block/ask flow is the primary interaction (see session: below);
   # these examples are anchored on the two skills, for when you look under the hood.
   # >>> shipyard:describe — generated from source by `shipyard gen-describe`; do not edit >>>
   describe:
     skills:
       learn: Analyze the ClaudeWatch decision log to find commands that repeatedly prompt, and propose allow-list entries and rule tweaks that cut prompt fatigue — reviewed as one batch, then reset the log.
+      mute: Silence a ClaudeWatch rule set's or ask rule's confirmation prompts for the rest of this session — for when a chatty recipe keeps prompting on recoverable ops (commit, amend, stash) and you want to review at the end.
+      mutes: List the ClaudeWatch rule sets and ask rules muted for this session.
       rules: View and interactively edit ClaudeWatch safety rules — list each rule set's block/ask rules as tables, then add, move, or remove rules, toggle whole rule sets on/off, or scaffold a new set, with conflict detection, a preview, and a test run before writing.
+      unmute: Clear a ClaudeWatch session mute so its confirmation prompts return.
     rules:
       avoid-compound-commands: Before you pipe or chain, check the lead command
     hooks:
       cli-freshness: SessionStart — No-op; ClaudeWatch ships no CLI.
       emit-rules: SessionStart — Emit ClaudeWatch's ambient guidance into context.
-      hooks: 'Hook wiring: PreToolUse→watchdog (Bash, Write|Edit); SessionStart→cli-freshness, emit-rules.'
+      hooks: 'Hook wiring: PreToolUse→watchdog (Bash, Write|Edit); SessionStart→cli-freshness, emit-rules; SessionEnd→mute.'
   # <<< shipyard:describe <<<
   examples:
     - label: "/ClaudeWatch:rules"

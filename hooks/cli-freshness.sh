@@ -3,7 +3,7 @@
 #
 # ClaudeWatch is a pure-hook plugin (PreToolUse → Bash via watchdog.py).
 # It does not install a CLI wrapper on PATH, so the install-cli wrapper
-# drift problem that beacon/tack/logbook handle here does not apply.
+# drift problem that CLI-shipping plugins handle here does not apply.
 #
 # This empty handler exists for symmetry across the chris-peterson plugin
 # namespace and as a placeholder for future plugin-update self-checks

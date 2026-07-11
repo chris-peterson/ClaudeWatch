@@ -1,3 +1,4 @@
 - [Home](/)
+- [SPEC](/spec)
 - [Rules](/rules)
 - [Prompts](/prompts)

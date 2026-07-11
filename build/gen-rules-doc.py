@@ -204,6 +204,11 @@ def main():
 
     write_plugin_docs_json(site_dir)
 
+    # the plugin's SPEC, served at the lowercase /spec route like the rest of the suite
+    spec_src = os.path.join(ROOT_DIR, "SPEC.md")
+    if os.path.isfile(spec_src):
+        shutil.copy2(spec_src, os.path.join(site_dir, "spec.md"))
+
     # process each rule set
     rule_files = sorted(f for f in os.listdir(rules_dir) if f.endswith(".yml"))
     sections = []

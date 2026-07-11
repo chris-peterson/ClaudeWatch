@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# DOCUMENTATION: No-op; ClaudeWatch ships no CLI.
 # SessionStart hook: no-op for ClaudeWatch.
 #
 # ClaudeWatch is a pure-hook plugin (PreToolUse → Bash via watchdog.py).

@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Keep plugin.json in sync with plugin.yml. Install with `just install-hooks`.
+# Keep the generated artifacts in sync with their sources before every commit:
+#   plugin.yml            -> .claude-plugin/plugin.json
+#   skills/rules/hooks/*  -> plugin.yml suite.describe
+# Install with `just install-hooks`.
 #
 # A git hook, not a Claude Code hook, on purpose: the no-drift property is a
 # property of the commit, so it must hold regardless of editor — a human, a
 # rebase, or a scripted/CI bump, none of which fire a Claude Write/Edit hook.
-# The release workflow regenerates plugin.json when it cuts a release, so what
-# ships always matches plugin.yml; this hook keeps main in sync between
-# releases. See AGENTS.md "plugin.yml is canonical".
 set -euo pipefail
 
-if git diff --cached --name-only | grep -qx 'plugin.yml'; then
-  python3 scripts/gen-plugin-json.py
-  git add .claude-plugin/plugin.json
+if git diff --cached --name-only | grep -qE '^(plugin\.yml|skills/|rules/|hooks/)'; then
+  scripts/shipyard gen-describe
+  scripts/shipyard gen-plugin-json
+  git add plugin.yml .claude-plugin/plugin.json
 fi

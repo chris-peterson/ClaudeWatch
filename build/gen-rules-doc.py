@@ -166,8 +166,8 @@ def write_file(site_dir, name, content):
         f.write(content)
 
 
-def write_suite_json(site_dir):
-    """Emit the plugin.yml suite: block as suite.json at the site root. The
+def write_plugin_docs_json(site_dir):
+    """Emit the plugin.yml suite: block as plugin-docs.json at the site root. The
     shared session player (chris-peterson.github.io/claude-marketplace/session-player.js)
     fetches it to hydrate the .cw-session mount points on the docs pages — same
     source the marketplace SPA reads, so the hub and the docs live preview never
@@ -176,7 +176,7 @@ def write_suite_json(site_dir):
     suite = (spec or {}).get("suite")
     if not suite:
         raise SystemExit("plugin.yml has no suite: block — the docs session preview needs it")
-    write_file(site_dir, "suite.json", json.dumps(suite, indent=2, ensure_ascii=False) + "\n")
+    write_file(site_dir, "plugin-docs.json", json.dumps(suite, indent=2, ensure_ascii=False) + "\n")
 
 
 def main():
@@ -202,7 +202,7 @@ def main():
 
     shutil.copy2(os.path.join(docs_dir, "_sidebar.md"), os.path.join(site_dir, "_sidebar.md"))
 
-    write_suite_json(site_dir)
+    write_plugin_docs_json(site_dir)
 
     # process each rule set
     rule_files = sorted(f for f in os.listdir(rules_dir) if f.endswith(".yml"))

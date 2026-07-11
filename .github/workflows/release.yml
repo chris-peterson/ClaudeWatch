@@ -1,14 +1,7 @@
 name: Release
 
-# Triggered by publishing a GitHub Release. The release tag (v<version>) is the
-# version; this workflow writes it into plugin.yml on main, regenerates
-# plugin.json, proxies the release notes into CHANGELOG.md, and pushes the
-# result. main is the unpinned source the chris-peterson marketplace tracks, so
-# that push is the moment consumers see the update.
-#
-# Requires repo secret MARKETPLACE_DISPATCH_TOKEN — a token allowed to
-# repository_dispatch to chris-peterson/claude-marketplace (the default
-# GITHUB_TOKEN cannot dispatch across repositories).
+# Delegates to shipyard's reusable release workflow (float to @actions during
+# consolidation). secrets: inherit passes MARKETPLACE_DISPATCH_TOKEN through.
 
 on:
   release:
@@ -19,60 +12,5 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Resolve version from release tag
-        id: ver
-        run: |
-          tag="${{ github.event.release.tag_name }}"
-          version="${tag#v}"
-          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Release tag '$tag' is not a vMAJOR.MINOR.PATCH version" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/checkout@v6
-        with:
-          ref: main
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
-      - name: Run tests (gate the release)
-        run: bash tests/test-watchdog.sh
-
-      - run: pip install pyyaml
-
-      - name: Bump version and regenerate plugin.json
-        run: |
-          sed -i -E "s/^version: .*/version: ${{ steps.ver.outputs.version }}/" plugin.yml
-          python3 scripts/gen-plugin-json.py
-
-      - name: Proxy release notes into CHANGELOG.md
-        env:
-          VERSION: ${{ steps.ver.outputs.version }}
-          BODY: ${{ github.event.release.body }}
-        run: python3 scripts/changelog-prepend.py
-
-      - name: Commit and push to main
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add plugin.yml .claude-plugin/plugin.json CHANGELOG.md
-          if git diff --cached --quiet; then
-            echo "No changes to commit (version ${{ steps.ver.outputs.version }} already current)."
-          else
-            git commit -m "Release v${{ steps.ver.outputs.version }}"
-            git push origin HEAD:main
-          fi
-
-      - name: Notify bridge.ai marketplace
-        env:
-          GH_TOKEN: ${{ secrets.MARKETPLACE_DISPATCH_TOKEN }}
-        run: |
-          gh api repos/chris-peterson/claude-marketplace/dispatches \
-            -f event_type=plugin-released \
-            -f 'client_payload[plugin]=ClaudeWatch' \
-            -f "client_payload[tag]=${{ github.event.release.tag_name }}"
+    uses: chris-peterson/shipyard/.github/workflows/release.yml@main
+    secrets: inherit

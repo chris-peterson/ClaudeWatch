@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# DOCUMENTATION: Emit ClaudeWatch's ambient guidance into context.
 # SessionStart hook: emit ClaudeWatch's ambient guidance into context. Stdout is
 # added to context on every SessionStart (startup, resume, compaction — no
 # matcher in hooks.json), so the guidance survives a compaction. It steers the

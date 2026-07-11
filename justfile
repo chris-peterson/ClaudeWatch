@@ -4,27 +4,34 @@ default: test
 test:
     bash tests/test-watchdog.sh
 
+# regenerate all generated artifacts from source (describe, plugin.json, docs)
+build: describe plugin-json docs
+
+# verify committed generated artifacts (plugin.json, describe) match source
+check:
+    scripts/shipyard check
+
+# regenerate the docsify rules/prompts site from the watches
+docs:
+    python3 build/gen-rules-doc.py
+
+# preview the docs site locally
+docs-preview: docs
+    npx docsify-cli serve docs/_site --open
+
 # regenerate .claude-plugin/plugin.json from plugin.yml (the canonical descriptor)
 plugin-json:
-    python3 scripts/gen-plugin-json.py
+    scripts/shipyard gen-plugin-json
 
-# verify plugin.json is in sync with plugin.yml (used by CI and the pre-commit hook)
-plugin-json-check:
-    python3 scripts/gen-plugin-json.py --check
+# resync plugin.yml suite.describe from the skills/rules/hooks sources
+describe:
+    scripts/shipyard gen-describe
 
-# install the git pre-commit hook that keeps plugin.json in sync with plugin.yml
+# install the git pre-commit hook that keeps generated artifacts in sync
 install-hooks:
     cp scripts/hooks/pre-commit .git/hooks/pre-commit
     chmod +x .git/hooks/pre-commit
     @echo "installed .git/hooks/pre-commit"
-
-# regenerate docs from rules
-docs:
-    python3 build/gen-rules-doc.py
-
-# preview docs site locally
-docs-preview: docs
-    npx docsify-cli serve docs/_site --open
 
 # launch an interactive session with the local plugin loaded
 try:

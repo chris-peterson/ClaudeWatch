@@ -34,6 +34,18 @@ suite:
     - ["/ClaudeWatch:learn", "Tune the rules from what's been prompting you"]
   # The automatic block/ask flow is the primary interaction (see session: below);
   # these examples are anchored on the two skills, for when you look under the hood.
+  # >>> shipyard:describe — generated from source by `shipyard gen-describe`; do not edit >>>
+  describe:
+    skills:
+      learn: Analyze the ClaudeWatch decision log to find commands that repeatedly prompt, and propose allow-list entries and rule tweaks that cut prompt fatigue — reviewed as one batch, then reset the log.
+      rules: View and interactively edit ClaudeWatch safety rules — list each rule set's block/ask rules as tables, then add, move, or remove rules, toggle whole rule sets on/off, or scaffold a new set, with conflict detection, a preview, and a test run before writing.
+    rules:
+      avoid-compound-commands: Before you pipe or chain, check the lead command
+    hooks:
+      cli-freshness: SessionStart — No-op; ClaudeWatch ships no CLI.
+      emit-rules: SessionStart — Emit ClaudeWatch's ambient guidance into context.
+      hooks: 'Hook wiring: PreToolUse→watchdog (Bash, Write|Edit); SessionStart→cli-freshness, emit-rules.'
+  # <<< shipyard:describe <<<
   examples:
     - label: "/ClaudeWatch:rules"
       ac: "--purple"

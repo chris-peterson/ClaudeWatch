@@ -5,11 +5,11 @@ test:
     bash tests/test-watchdog.sh
 
 # regenerate all generated artifacts from source (describe, plugin.json, docs)
-build: describe plugin-json docs
+generate: describe plugin-json docs
 
-# verify committed generated artifacts (plugin.json, describe) match source
+# validate source projects cleanly and preview the pending projection (no write)
 check:
-    scripts/shipyard check
+    scripts/shipyard generate --dry-run
 
 # regenerate the docsify rules/prompts site from the watches
 docs:
@@ -26,12 +26,6 @@ plugin-json:
 # resync plugin.yml suite.describe from the skills/rules/hooks sources
 describe:
     scripts/shipyard gen-describe
-
-# install the git pre-commit hook that keeps generated artifacts in sync
-install-hooks:
-    cp scripts/hooks/pre-commit .git/hooks/pre-commit
-    chmod +x .git/hooks/pre-commit
-    @echo "installed .git/hooks/pre-commit"
 
 # launch an interactive session with the local plugin loaded
 try:

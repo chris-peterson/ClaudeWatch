@@ -1,0 +1,14 @@
+name: Preview
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    uses: chris-peterson/shipyard/.github/workflows/preview.yml@v1

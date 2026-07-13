@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Fetch-and-run shipyard — the shared plugin build tooling
-# (github.com/chris-peterson/shipyard). Keeps a cached checkout of the `main`
+# (github.com/chris-peterson/shipyard). Keeps a cached checkout of the `v1`
 # branch, fast-forwards it to latest, and runs the requested command against
 # this repo. No package install; shipyard's one dependency (pyyaml) must be
 # importable (`pip install pyyaml` once, or the system package).
 #
-# Env overrides: SHIPYARD_REF (branch/tag, default main), SHIPYARD_HOME
+# Env overrides: SHIPYARD_REF (branch/tag, default v1), SHIPYARD_HOME
 # (cache location).
 set -euo pipefail
 
-ref="${SHIPYARD_REF:-main}"
+ref="${SHIPYARD_REF:-v1}"
 cache="${SHIPYARD_HOME:-${XDG_CACHE_HOME:-$HOME/.cache}/shipyard}"
 repo="https://github.com/chris-peterson/shipyard.git"
 

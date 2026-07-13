@@ -4,20 +4,23 @@ default: test
 test:
     bash tests/test-watchdog.sh
 
-# regenerate all generated artifacts from source (describe, plugin.json, docs)
-generate: describe plugin-json docs
+# regenerate all generated artifacts: shipyard projection + the watches-derived docs pages
+generate:
+    scripts/shipyard generate
+    python3 build/gen-rules-doc.py
 
 # validate source projects cleanly and preview the pending projection (no write)
 check:
     scripts/shipyard generate --dry-run
 
-# regenerate the docsify rules/prompts site from the watches
+# render the docs site: shipyard's standard pages + the watches-derived rules/prompts
 docs:
+    scripts/shipyard build-docs
     python3 build/gen-rules-doc.py
 
 # preview the docs site locally
 docs-preview: docs
-    npx docsify-cli serve docs/_site --open
+    npx docsify-cli serve docs --open
 
 # regenerate .claude-plugin/plugin.json from plugin.yml (the canonical descriptor)
 plugin-json:

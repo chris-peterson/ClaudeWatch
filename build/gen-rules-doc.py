@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Generate docs/_site from rule sets and static docs (single source of truth)."""
+"""Generate the watches-derived docs pages (rules.md, prompts.md) into docs/.
+
+shipyard's `build-docs` renders the standard pages (skills, prose rules, SPEC →
+spec.md, plugin-docs.json). This adds the two pages built from `watches/*.yml`
+that shipyard can't produce — the block/ask reference tables and the permission-
+prompt gallery. Run it after `shipyard build-docs`; both write into the `docs/`
+publish root.
+"""
 
 import html
-import json
 import os
-import shutil
-import sys
 
 from importlib.util import spec_from_file_location, module_from_spec
 
-import yaml
-
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 ROOT_DIR = os.path.dirname(SCRIPT_DIR)
-PLUGIN_YML = os.path.join(ROOT_DIR, "plugin.yml")
 
 
 def load_parser():
@@ -161,22 +162,9 @@ def prompts_section(config):
     return "\n\n".join(cards)
 
 
-def write_file(site_dir, name, content):
-    with open(os.path.join(site_dir, name), "w") as f:
+def write_file(docs_dir, name, content):
+    with open(os.path.join(docs_dir, name), "w") as f:
         f.write(content)
-
-
-def write_plugin_docs_json(site_dir):
-    """Emit the plugin.yml suite: block as plugin-docs.json at the site root. The
-    shared session player (chris-peterson.github.io/claude-marketplace/session-player.js)
-    fetches it to hydrate the .cw-session mount points on the docs pages — same
-    source the marketplace SPA reads, so the hub and the docs live preview never
-    drift."""
-    spec = yaml.safe_load(open(PLUGIN_YML).read())
-    suite = (spec or {}).get("suite")
-    if not suite:
-        raise SystemExit("plugin.yml has no suite: block — the docs session preview needs it")
-    write_file(site_dir, "plugin-docs.json", json.dumps(suite, indent=2, ensure_ascii=False) + "\n")
 
 
 def main():
@@ -184,44 +172,17 @@ def main():
 
     rules_dir = os.path.join(ROOT_DIR, "watches")
     docs_dir = os.path.join(ROOT_DIR, "docs")
-    site_dir = os.path.join(docs_dir, "_site")
 
-    if os.path.exists(site_dir):
-        shutil.rmtree(site_dir)
-    os.makedirs(site_dir)
-
-    for name in os.listdir(docs_dir):
-        src = os.path.join(docs_dir, name)
-        if name.startswith("_"):
-            continue
-        dst = os.path.join(site_dir, name)
-        if os.path.isdir(src):
-            shutil.copytree(src, dst)
-        elif os.path.isfile(src):
-            shutil.copy2(src, dst)
-
-    shutil.copy2(os.path.join(docs_dir, "_sidebar.md"), os.path.join(site_dir, "_sidebar.md"))
-
-    write_plugin_docs_json(site_dir)
-
-    # the plugin's SPEC, served at the lowercase /spec route like the rest of the suite
-    spec_src = os.path.join(ROOT_DIR, "SPEC.md")
-    if os.path.isfile(spec_src):
-        shutil.copy2(spec_src, os.path.join(site_dir, "spec.md"))
-
-    # process each rule set
     rule_files = sorted(f for f in os.listdir(rules_dir) if f.endswith(".yml"))
     sections = []
     prompt_sections = []
     for rf in rule_files:
-        src = os.path.join(rules_dir, rf)
-        shutil.copy2(src, os.path.join(site_dir, rf))
-        config = parse_rules_yml(src)
+        config = parse_rules_yml(os.path.join(rules_dir, rf))
         label = config.get("name") or os.path.splitext(rf)[0]
         sections.append(f"## {label}\n\n{unified_table(config)}")
         prompt_sections.append(f"## {label}\n\n{prompts_section(config)}")
 
-    write_file(site_dir, "rules.md", "\n".join([
+    write_file(docs_dir, "rules.md", "\n".join([
         STATUS_STYLE,
         "",
         "# Rules",
@@ -235,7 +196,7 @@ def main():
         "",
     ]))
 
-    write_file(site_dir, "prompts.md", "\n".join([
+    write_file(docs_dir, "prompts.md", "\n".join([
         PROMPT_STYLE,
         "",
         "# Prompts",
@@ -254,7 +215,7 @@ def main():
         "",
     ]))
 
-    print("docs/_site built")
+    print("docs/rules.md and docs/prompts.md built")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,53 @@
+name: Deploy docs
+
+# ClaudeWatch's docs are shipyard's standard rendered pages PLUS two pages
+# (rules.md, prompts.md) generated from watches/*.yml — the block/ask reference
+# tables and the permission-prompt gallery, which shipyard's build-docs can't
+# produce. So this can't use shipyard's reusable deploy-docs.yml (which runs
+# build-docs only): it renders the standard pages, then adds the watches-derived
+# ones, then publishes docs/.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .shipyard/src
+    steps:
+      - name: Check out the plugin
+        uses: actions/checkout@v6
+      - name: Check out shipyard tooling
+        uses: actions/checkout@v6
+        with:
+          repository: chris-peterson/shipyard
+          ref: v1
+          path: .shipyard
+      - uses: actions/configure-pages@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - run: pip install pyyaml
+      - name: Render standard docs from source
+        run: python3 -m shipyard build-docs
+      - name: Add the watches-derived rules/prompts pages
+        run: python3 build/gen-rules-doc.py
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -12,5 +12,5 @@ permissions:
 
 jobs:
   release:
-    uses: chris-peterson/shipyard/.github/workflows/release.yml@main
+    uses: chris-peterson/shipyard/.github/workflows/release.yml@v1
     secrets: inherit

@@ -36,6 +36,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 
 
@@ -346,50 +347,66 @@ def _exempt_roots(cwd):
     return roots
 
 
-def _targets_under_cwd(command, cwd):
-    """Whether every deletion target of an `rm` command resolves strictly under an exempt root.
+def _resolved_targets_in_tree(command, cwd):
+    """An `rm` command's targets as absolute paths, when all sit under an exempt root.
 
     Pure string analysis (no filesystem access) so the decision stays
-    deterministic. Backs the `is_in_project_tree` unless-condition: an in-tree
-    `rm -r` is recoverable from git history, so it need not prompt, while a
-    delete that reaches outside the tree still does. The roots are the hook's
-    `cwd` and the project root (see `_exempt_roots`); relative targets resolve
-    against `cwd`, the only root the shell itself would use.
+    deterministic. The roots are the hook's `cwd` and the project root (see
+    `_exempt_roots`); relative targets resolve against `cwd`, the only root the
+    shell itself would use.
 
-    Returns False — decline the exemption, keep the ask — whenever in-tree-ness
-    can't be proven from the text: no usable root, no attributable targets, a
-    target that is a root itself or a `.git` directory, or any target carrying
-    an unresolvable marker (`~`, `$`, glob, `..`). Only an all-clear set of
-    literal paths strictly under a root returns True. A root itself and any
-    `.git` directory are excluded because the git-history safety net the
-    exemption relies on does not cover wiping the whole tree or its history.
+    Returns None — nothing provable, so callers decline — whenever in-tree-ness
+    can't be established from the text: no usable root, no attributable
+    targets, a target that is a root itself or a `.git` directory, or any
+    target carrying an unresolvable marker (`~`, `$`, glob, `..`). A root
+    itself and any `.git` directory are excluded because the git-history safety
+    net the exemption relies on does not cover wiping the whole tree or its
+    history.
+
+    Returning the resolved paths rather than a verdict is what lets
+    `_targets_recoverable` ask git about the same targets this proved in-tree,
+    instead of resolving them a second time and risking a different answer.
     """
     roots = _exempt_roots(cwd)
     if not roots:
-        return False
+        return None
     targets = _rm_targets(command)
     if not targets:
-        return False
+        return None
 
     # Relative targets are resolved by the shell against cwd, so only cwd can
     # resolve them; an absolute target may sit under either root.
     base = os.path.normpath(cwd) if cwd else None
+    resolved_targets = []
     for tok in targets:
         if _UNRESOLVABLE_TARGET.search(tok):
-            return False
+            return None
         if os.path.isabs(tok):
             resolved = os.path.normpath(tok)
         elif base:
             resolved = os.path.normpath(os.path.join(base, tok))
         else:
-            return False
+            return None
         for root in roots:
             if resolved != root and resolved.startswith(root + os.sep) \
                     and ".git" not in os.path.relpath(resolved, root).split(os.sep):
                 break
         else:
-            return False
-    return True
+            return None
+        resolved_targets.append(resolved)
+    return resolved_targets
+
+
+def _targets_under_cwd(command, cwd):
+    """Whether every deletion target of an `rm` command sits under an exempt root.
+
+    Backs the `is_in_project_tree` unless-condition: an in-tree `rm -r` is
+    *assumed* recoverable from git history, so it need not prompt, while a
+    delete reaching outside the tree still does. The assumption is unchecked —
+    `_targets_recoverable` is the opt-in variant that verifies it instead of
+    inferring it from location.
+    """
+    return _resolved_targets_in_tree(command, cwd) is not None
 
 
 # Directories a tool writes and can write again: deleting one loses nothing that
@@ -428,6 +445,80 @@ def _targets_are_ephemeral_scratch(command, cwd):
     return True
 
 
+def _is_in_git_worktree(path):
+    """Whether `path`'s containing directory is inside a real git work tree.
+
+    Requires a filesystem/subprocess call (`git -C <dir> rev-parse
+    --is-inside-work-tree`) — unlike `_targets_under_cwd`, this cannot be pure
+    string analysis, because "is this actually a git repo" is not knowable
+    from the command text alone. Fails closed (returns False) on any error —
+    git not on PATH, timeout, non-repo — so a check that can't be completed
+    never silently grants the exemption.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", os.path.dirname(path) or ".", "rev-parse", "--is-inside-work-tree"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return result.returncode == 0 and result.stdout.strip() == "true"
+    except Exception:
+        return False
+
+
+def _is_chezmoi_managed(path):
+    """Whether `path` itself (not just some descendant) is tracked by chezmoi.
+
+    `chezmoi managed --path-style=absolute <path>` lists managed entries at or
+    under `path`; an exact line match against the resolved path (not merely
+    non-empty output) confirms the path itself is managed, rather than being
+    an untracked file that happens to sit under a directory with unrelated
+    managed content elsewhere. Fails closed (returns False) on any error —
+    chezmoi not installed, timeout, not a chezmoi-managed machine — same
+    reasoning as `_is_in_git_worktree`. Harmless on machines that don't use
+    chezmoi: the subprocess call fails, this returns False, and callers fall
+    through to whatever the other recoverability check decides.
+    """
+    try:
+        result = subprocess.run(
+            ["chezmoi", "managed", "--path-style=absolute", path],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        if result.returncode != 0:
+            return False
+        return path in result.stdout.splitlines()
+    except Exception:
+        return False
+
+
+def _targets_recoverable(command, cwd):
+    """Whether every deletion target is in-tree AND actually recoverable.
+
+    Backs the opt-in `is_recoverable` unless-condition. Where
+    `is_in_project_tree` treats "under an exempt root" as standing in for
+    "recoverable from git history", this checks the second thing: each target
+    must sit inside a real git work tree, or be tracked by chezmoi. Location is
+    a proxy that fails exactly where it matters — a workspace root grouping
+    several checkouts is not itself a repo, so a delete there has no history
+    behind it.
+
+    Unlike its pure-string sibling this touches the filesystem, which is why it
+    is a separate predicate no shipped rule references rather than a change to
+    what `is_in_project_tree` does.
+
+    Scratch paths under `/tmp` and friends never reach here — `watch-files`
+    exempts them by `unless_regex` first, and requiring ephemeral space to be
+    version-controlled would defeat that exemption.
+    """
+    targets = _resolved_targets_in_tree(command, cwd)
+    if targets is None:
+        return False
+    return all(_is_in_git_worktree(t) or _is_chezmoi_managed(t) for t in targets)
+
+
 # Named predicates an `unless_condition` entry can reference. Each takes the bash
 # command and the hook's `cwd` and returns True when the rule's ask should be
 # skipped. Keep this the single registry of valid condition names — an unknown
@@ -435,6 +526,7 @@ def _targets_are_ephemeral_scratch(command, cwd):
 _PREDICATES = {
     "is_in_project_tree": _targets_under_cwd,
     "is_ephemeral_scratch": _targets_are_ephemeral_scratch,
+    "is_recoverable": _targets_recoverable,
 }
 
 

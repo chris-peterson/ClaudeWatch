@@ -263,7 +263,7 @@ run_test "$RULES_DIR" "allow through pipe stays silent"     allow '{"tool_name":
 
 echo ""
 echo "=== unless_condition (in-tree exemption) ==="
-# An ask rule may carry `unless_condition: [is_relative_to_cwd]` so a recursive delete confined
+# An ask rule may carry `unless_condition: [is_in_project_tree]` so a recursive delete confined
 # to the working tree (recoverable from git history) is allowed, while one that
 # reaches outside still prompts. The decision reads the hook's top-level `cwd`.
 TMPDIR_CWD=$(mktemp -d)
@@ -274,7 +274,7 @@ rules:
   ask:
     - name: rm -r
       pattern: 'rm\s+-[a-zA-Z]*r'
-      unless_condition: [is_relative_to_cwd]
+      unless_condition: [is_in_project_tree]
       reason: recursively deletes directories
       ref: n/a
 YAMLEOF
@@ -285,6 +285,50 @@ run_test "$TMPDIR_CWD/watch-cwd.yml" "out-of-tree delete still asks" ask \
 run_test "$TMPDIR_CWD/watch-cwd.yml" "absent cwd falls back to ask" ask \
   '{"tool_name":"Bash","tool_input":{"command":"rm -r build"}}'
 
+echo "--- unless_condition: the project root anchors when cwd has moved ---"
+# CLAUDE_PROJECT_DIR is the root Claude Code exports to hook commands; it holds
+# still while cwd follows the session's shell into a scratch directory.
+export CLAUDE_PROJECT_DIR=/work/repo
+run_test "$TMPDIR_CWD/watch-cwd.yml" "in-project delete allowed from a moved cwd" allow \
+  '{"tool_name":"Bash","cwd":"/scratch/pad","tool_input":{"command":"rm -r /work/repo/build"}}'
+run_test "$TMPDIR_CWD/watch-cwd.yml" "project root itself still asks" ask \
+  '{"tool_name":"Bash","cwd":"/scratch/pad","tool_input":{"command":"rm -r /work/repo"}}'
+run_test "$TMPDIR_CWD/watch-cwd.yml" "delete outside both roots still asks" ask \
+  '{"tool_name":"Bash","cwd":"/scratch/pad","tool_input":{"command":"rm -r /etc/x"}}'
+unset CLAUDE_PROJECT_DIR
+export CLAUDE_PROJECT_DIR=/
+run_test "$TMPDIR_CWD/watch-cwd.yml" "a project root of / is rejected" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /etc/x"}}'
+unset CLAUDE_PROJECT_DIR
+
+echo ""
+echo "=== unless_condition (ephemeral scratch exemption) ==="
+# An ask rule may carry `unless_condition: [is_ephemeral_scratch]` so deleting a
+# directory a tool writes and can write again needs no prompt, wherever it sits.
+cat > "$TMPDIR_CWD/watch-scratch.yml" <<'YAMLEOF'
+name: watch-scratch
+filter: '\brm\b'
+rules:
+  ask:
+    - name: rm -r
+      pattern: 'rm\s+-[a-zA-Z]*r'
+      unless_condition: [is_ephemeral_scratch]
+      reason: recursively deletes directories
+      ref: n/a
+YAMLEOF
+run_test "$TMPDIR_CWD/watch-scratch.yml" "scratch dir allowed with no cwd at all" allow \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /anywhere/__pycache__"}}'
+run_test "$TMPDIR_CWD/watch-scratch.yml" "scratch dir allowed from an unrelated cwd" allow \
+  '{"tool_name":"Bash","cwd":"/somewhere/else","tool_input":{"command":"rm -r /work/repo/.playwright-mcp"}}'
+run_test "$TMPDIR_CWD/watch-scratch.yml" "every target must be scratch" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /anywhere/__pycache__ /anywhere/src"}}'
+run_test "$TMPDIR_CWD/watch-scratch.yml" "a path inside a scratch dir is not exempt" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /anywhere/__pycache__/sub"}}'
+run_test "$TMPDIR_CWD/watch-scratch.yml" "a glob cannot stand in for the name" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /anywhere/*/__pycache__"}}'
+run_test "$TMPDIR_CWD/watch-scratch.yml" "a non-scratch directory still asks" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /anywhere/src"}}'
+
 echo "--- unless_condition on a block rule is ignored (with warning) ---"
 cat > "$TMPDIR_CWD/cwd-block-warn.yml" <<'YAMLEOF'
 name: cwd-block-warn
@@ -293,7 +337,7 @@ rules:
   block:
     - name: rm -r
       pattern: 'rm\s+-[a-zA-Z]*r'
-      unless_condition: [is_relative_to_cwd]
+      unless_condition: [is_in_project_tree]
       reason: recursive delete
       ref: n/a
 YAMLEOF

@@ -161,7 +161,7 @@ Two inline-list fields that exempt an ask rule, OR'd together: the rule is skipp
 ```yaml
 - name: rm -r
   pattern: 'rm\s+-[a-zA-Z]*r'
-  unless_condition: [is_relative_to_cwd]
+  unless_condition: [is_in_project_tree]
   unless_regex: ['rm\s+(-[a-zA-Z]+\s+)*(~/\.cache/|/tmp/|/var/tmp/)']
   reason: recursively deletes directories
   ref: https://man7.org/linux/man-pages/man1/rm.1.html
@@ -175,18 +175,23 @@ Available predicates:
 
 | Predicate | Skips the ask when… |
 | --- | --- |
-| `is_relative_to_cwd` | every deletion target of an `rm` command resolves **strictly under the session's working directory** (the `cwd` Claude Code passes at the top level of the hook input). The premise: an in-tree recursive delete is recoverable from git history, so it need not prompt, while one reaching outside the working directory still does. |
+| `is_in_project_tree` | every deletion target of an `rm` command resolves **strictly under an anchor root** — the session's working directory (the `cwd` Claude Code passes at the top level of the hook input) or the project root (`CLAUDE_PROJECT_DIR`, which Claude Code exports to hook commands). The premise: an in-tree recursive delete is recoverable from git history, so it need not prompt, while one reaching outside the tree still does. |
+| `is_ephemeral_scratch` | every deletion target of an `rm` command **names a regenerable tool directory** — `.playwright-mcp`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`. The premise is the directory's identity rather than its location: deleting one loses nothing that re-running the tool doesn't reproduce, so it need not prompt wherever on disk it sits. |
 
-`is_relative_to_cwd` is deliberately conservative — it declines (and the ask stands) whenever in-tree-ness can't be proven from the command text alone:
+Two roots rather than one because `cwd` follows the session's shell — it leaves the project the moment the session changes directory into a scratch area, and an in-repo delete issued from there is no less recoverable for it. The project root holds still. A **relative** target resolves against `cwd` only (that is what the shell itself would do); an **absolute** target may sit under either root. `/` and the user's home directory are rejected as roots — a delete anywhere beneath either is not what "confined to the working tree" means.
 
-- there is no `cwd` in the hook input;
+`is_in_project_tree` is deliberately conservative — it declines (and the ask stands) whenever in-tree-ness can't be proven from the command text alone:
+
+- there is no usable root (no `cwd` and no `CLAUDE_PROJECT_DIR`, or only rejected ones);
 - the command is compound (a pipe/chain/`;`/substitution) — those are handled by the compound-command escalation instead;
 - the program is not `rm`, or the command has no deletion targets;
-- a target is the working directory itself (`.`) or a `.git` directory — the git-history safety net doesn't cover wiping the whole tree or its history;
+- a target is an anchor root itself (`.`) or a `.git` directory — the git-history safety net doesn't cover wiping the whole tree or its history;
 - a target carries an unresolvable marker: `~` (home), `$`/backtick (variable or command substitution), a glob (`*`, `?`, `[`), or a `..` segment that could escape the tree;
-- a target is an absolute path, or a relative path, that resolves outside `cwd`.
+- a target is an absolute path, or a relative path, that resolves outside every root.
 
-The analysis is pure string resolution against `cwd` (no filesystem access), so the decision stays deterministic — symlinked targets are classified by their textual path, not their link destination.
+`is_ephemeral_scratch` matches on the **final path segment** only, so `rm -rf .playwright-mcp/traces` is not exempt — the exemption can't be widened by appending a subdirectory — and it declines on the same compound-command, parse-failure, non-`rm`, no-target, and unresolvable-marker conditions, so a glob or variable can never stand in for the name.
+
+Both analyses are pure string resolution (no filesystem access), so the decision stays deterministic — symlinked targets are classified by their textual path, not their link destination.
 
 ## Hook wiring
 

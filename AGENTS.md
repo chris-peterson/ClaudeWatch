@@ -15,12 +15,15 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 
 ## Core contracts (don't break these)
 
-1. **Determinism.** Given the same command, the same `cwd`, and the same
-   `watches/` tree, the engine must always produce the same *decision*. No
-   clocks, no randomness, no network on the decision path. `cwd` enters the
-   decision only as the deterministic hook input that the `is_relative_to_cwd`
-   predicate ([RL-15], [RL-16]) resolves `rm` targets against — pure string
-   work, no filesystem access. Decision logging (on by default, see
+1. **Determinism.** Given the same command, the same `cwd` and project root, and
+   the same `watches/` tree, the engine must always produce the same *decision*.
+   No clocks, no randomness, no network on the decision path. `cwd` and
+   `CLAUDE_PROJECT_DIR` enter the decision only as the deterministic per-invocation
+   inputs the `is_in_project_tree` predicate ([RL-15], [RL-16]) resolves `rm`
+   targets against — pure string work, no filesystem access. `CLAUDE_PROJECT_DIR`
+   is the one environment variable on the decision path; the others
+   (`CLAUDEWATCH_LOG`, `CLAUDEWATCH_HYPERLINKS`) govern side channels and
+   presentation only. Decision logging (on by default, see
    [LOG-01]–[LOG-04]; `CLAUDEWATCH_LOG=off` opts out) is a side channel: it
    stamps a timestamp and writes a file *after* the decision is computed, never
    feeding back into it. Keep it that way — the clock stays in `_log_event`, not
@@ -45,6 +48,15 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 - **The engine is generic; the rules are domain-specific.** Treat
   `scripts/watchdog.py` as a stable library. New safety domains are new YAML
   files in `watches/`, not new code.
+- **`unless_condition` predicates are the one exception, so keep them thin.**
+  A predicate answers something a regex cannot — "does this path resolve inside
+  the tree" — so it is domain logic living in the engine, and adding one *is* an
+  engine change with a spec requirement behind it. Push everything that isn't
+  the domain judgment down into a shared helper: `_command_operands` parses
+  POSIX utility syntax and takes the program as an argument, so a predicate for
+  a different destructive tool reuses it rather than writing a second tokenizer
+  that drifts from its guards. A predicate that has grown its own parsing is
+  the signal that something belongs in the shared layer.
 - **Make adding a rule set frictionless.** Drop a `watch-*.yml` file, add a
   test file, regenerate docs. No registration, no manifest, no engine change.
 - **Rules are documentation.** Every rule has a `reason` and (almost always) a

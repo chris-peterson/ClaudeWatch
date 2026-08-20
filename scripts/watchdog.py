@@ -6,8 +6,11 @@ Generic rule engine that enforces safety rules loaded from YAML config files.
 Reads tool input JSON from stdin, evaluates all rule sets in a directory,
 and outputs a single coalesced JSON decision to stdout.
 
-Supports three tool inputs:
+Supports these tool inputs:
 - Bash: matches against tool_input.command (target: bash rules)
+- Monitor: matches against tool_input.command (target: bash rules) — the tool
+  runs its command in the same shell environment as Bash, so it is screened on
+  identical terms
 - Write: matches against tool_input.content (target: file-content rules)
 - Edit: matches against the full post-edit file content reconstructed from
   the on-disk file plus tool_input.old_string -> tool_input.new_string
@@ -593,12 +596,14 @@ _SUBCOMMAND_LIKE = re.compile(r"^[a-z][a-z0-9-]*$")
 _MAX_SHAPE_TOKENS = 4
 
 
-def command_shape(command):
+def command_shape(command, tool):
     """Reduce a bash command to a stable, secret-free grouping prefix.
 
     Skips leading `VAR=value` assignments and `sudo`, then keeps the program and
     (for known subcommand tools) its leading subcommand tokens, stopping at the
-    first flag, path, or value. Returns `(shape, allow_pattern)`. This is what
+    first flag, path, or value. Returns `(shape, allow_pattern)`, where the
+    pattern names `tool` because a host `Bash(…)` allow rule does not cover the
+    same command issued through `Monitor`. This is what
     `[LOG-03]` records in place of the raw command, and what `/ClaudeWatch:learn`
     groups by — defined here so the engine (which writes the log) and the
     analyzer (which reads it) share one definition. Applying it to an already-
@@ -610,7 +615,7 @@ def command_shape(command):
     while i < len(tokens) and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[i]) or tokens[i] == "sudo"):
         i += 1
     if i >= len(tokens):
-        return command.strip(), f"Bash({command.strip()})"
+        return command.strip(), f"{tool}({command.strip()})"
 
     prog = os.path.basename(tokens[i])
     shape_tokens = [prog]
@@ -621,7 +626,7 @@ def command_shape(command):
             j += 1
 
     shape = " ".join(shape_tokens)
-    return shape, f"Bash({shape}:*)"
+    return shape, f"{tool}({shape}:*)"
 
 
 def _log_event(data, input_kind, input_text, decision, matched):
@@ -663,7 +668,7 @@ def _log_event(data, input_kind, input_text, decision, matched):
         # (credentials in flags, URLs, or VAR=value prefixes), and the durable log
         # is plaintext ([LOG-03]). The shape drops everything past the program and
         # its subcommand tokens, so no secret survives into the log.
-        entry["command_shape"] = command_shape(input_text)[0]
+        entry["command_shape"] = command_shape(input_text, entry["tool"])[0]
     else:
         tool_input = data.get("tool_input", {}) or {}
         entry["path"] = tool_input.get("file_path")
@@ -702,7 +707,10 @@ def _resolve_input(data):
     tool_name = data.get("tool_name")
     tool_input = data.get("tool_input", {}) or {}
 
-    if tool_name == "Bash":
+    # A Monitor command runs in the same shell environment as a Bash command,
+    # so it is the same input kind ([EN-14]). Monitor's `ws` form carries no
+    # command and falls through to the empty-input exit ([EN-03]).
+    if tool_name in ("Bash", "Monitor"):
         cmd = tool_input.get("command", "")
         if not cmd:
             return None

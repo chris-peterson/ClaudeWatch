@@ -195,14 +195,14 @@ Both analyses are pure string resolution (no filesystem access), so the decision
 
 ## Hook wiring
 
-Two `PreToolUse` hooks point the engine at the `watches/` directory — one for `Bash`, one for `Write|Edit`. The engine auto-discovers all `*.yml` files, evaluates every rule set, and returns a single coalesced decision:
+Two `PreToolUse` hooks point the engine at the `watches/` directory — one for `Bash|Monitor`, one for `Write|Edit`. The engine auto-discovers all `*.yml` files, evaluates every rule set, and returns a single coalesced decision:
 
 ```json
 {
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|Monitor",
         "hooks": [
           {
             "type": "command",
@@ -226,13 +226,24 @@ Two `PreToolUse` hooks point the engine at the `watches/` directory — one for 
 
 ## Hook protocol
 
-Claude Code sends tool invocations as JSON on stdin. The engine handles three tool names:
+Claude Code sends tool invocations as JSON on stdin. The engine handles these tool names:
 
 ```json
 {
   "tool_name": "Bash",
   "tool_input": {
     "command": "git push --force origin main"
+  }
+}
+```
+
+`Monitor` carries the same `command` field and runs it in the same shell, so it is matched against `target: bash` rules exactly as `Bash` is. A `Monitor` call that carries a `ws` object instead of a `command` has nothing to screen and is allowed.
+
+```json
+{
+  "tool_name": "Monitor",
+  "tool_input": {
+    "command": "while true; do git commit -m wip; sleep 30; done"
   }
 }
 ```
@@ -271,7 +282,7 @@ The watchdog engine outputs one of:
 
 Exit code is always `0`.
 
-Tool invocations other than `Bash`, `Write`, `Edit` (and empty payloads) are silently allowed.
+Tool invocations other than `Bash`, `Monitor`, `Write`, `Edit` (and empty payloads) are silently allowed.
 
 ## Creating a new rule set
 

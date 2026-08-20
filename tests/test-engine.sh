@@ -245,6 +245,18 @@ run_test "$RULES_DIR" "file except (dir)"    allow '{"tool_name":"Bash","tool_in
 run_test "$RULES_DIR" "safe cmd (dir)"      allow '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'
 
 echo ""
+echo "=== Monitor input ==="
+# The Monitor tool runs its command in the same shell environment as Bash, so it
+# is screened as a bash input on identical terms ([EN-14]), compound escalation
+# included: a monitor command runs unattended and repeats on a single approval.
+# A Monitor call carrying a `ws` object has no shell command to screen.
+run_test "$RULES_DIR" "Monitor block"                  block '{"tool_name":"Monitor","tool_input":{"command":"git push --force origin main"}}'
+run_test "$RULES_DIR" "Monitor bare ask prompts"       ask   '{"tool_name":"Monitor","tool_input":{"command":"git stash list"}}'
+run_test "$RULES_DIR" "Monitor poll loop escalates"    block '{"tool_name":"Monitor","tool_input":{"command":"while true; do git commit -m wip; sleep 30; done"}}'
+run_test "$RULES_DIR" "Monitor log tail stays silent"  allow '{"tool_name":"Monitor","tool_input":{"command":"tail -f app.log | grep --line-buffered ERROR"}}'
+run_test "$RULES_DIR" "Monitor ws form has no command" allow '{"tool_name":"Monitor","tool_input":{"ws":{"url":"wss://example.com/stream"}}}'
+
+echo ""
 echo "=== compound-command ask escalation ==="
 # A piped/chained bash command whose segments each match a host allow rule can be
 # auto-approved by Claude Code, pre-empting the hook's ask (deny is still honored).

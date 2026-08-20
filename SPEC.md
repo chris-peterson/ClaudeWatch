@@ -3,7 +3,7 @@
 ClaudeWatch is a Claude Code plugin that enforces Bash command and script
 safety via a `PreToolUse` hook. A generic engine evaluates regex rules loaded
 from self-contained YAML rule sets and emits a single coalesced decision
-(block / ask / allow) for each Bash, Write, or Edit invocation. Rules may
+(block / ask / allow) for each Bash, Monitor, Write, or Edit invocation. Rules may
 target the bash command string or the body of a script file being written or
 edited, so destructive intent is caught both inline (`pwsh -Command "..."`)
 and at the moment a script file is authored.
@@ -37,13 +37,13 @@ Unwanted (`If…then`).
 
 **Core contract:** Given tool input on stdin, the engine deterministically
 emits exactly one of `{deny, ask, no-output}` and exits 0. The engine handles
-three tool inputs: `Bash` (matched against the bash command string), `Write`
-(matched against the new file content), and `Edit` (matched against the full
-post-edit file content).
+these tool inputs: `Bash` and `Monitor` (both matched against the shell command
+string they carry), `Write` (matched against the new file content), and `Edit`
+(matched against the full post-edit file content).
 
 - **[EN-01]** The engine shall read tool input from stdin as a single JSON object.
-- **[EN-02]** When `tool_name` is not one of `"Bash"`, `"Write"`, `"Edit"`, the engine shall produce no output and exit 0.
-- **[EN-03]** When the relevant input field for the tool is empty or absent, the engine shall produce no output and exit 0. The relevant field is `tool_input.command` for `Bash`, `tool_input.content` for `Write`, and `tool_input.new_string` (combined with `tool_input.file_path`) for `Edit`.
+- **[EN-02]** When `tool_name` is not one of `"Bash"`, `"Monitor"`, `"Write"`, `"Edit"`, the engine shall produce no output and exit 0.
+- **[EN-03]** When the relevant input field for the tool is empty or absent, the engine shall produce no output and exit 0. The relevant field is `tool_input.command` for `Bash` and `Monitor`, `tool_input.content` for `Write`, and `tool_input.new_string` (combined with `tool_input.file_path`) for `Edit`.
 - **[EN-04]** If stdin is not valid JSON, then the engine shall produce no output and exit 0.
 - **[EN-04a]** If stdin is not valid JSON, then the engine shall write the parse error to stderr before exiting so the failure is visible in transcripts.
 - **[EN-05]** The engine shall accept a rules path as its first CLI argument.
@@ -56,6 +56,7 @@ post-edit file content).
 - **[EN-11]** The engine shall not require any third-party Python packages at runtime.
 - **[EN-12]** When evaluating a `Write` input, the engine shall match rules against the value of `tool_input.content`.
 - **[EN-13]** When evaluating an `Edit` input, the engine shall read the file at `tool_input.file_path`, apply the `old_string` → `new_string` substitution (all occurrences if `tool_input.replace_all` is true, otherwise the first occurrence), and match rules against the resulting full content. If the file cannot be read, the engine shall match against `tool_input.new_string` alone.
+- **[EN-14]** When evaluating a `Monitor` input, the engine shall match rules against the value of `tool_input.command` and treat it as a `bash` input throughout — same rule targets ([RL-11]), same command-shape logging ([LOG-03]), same compound-command escalation ([OUT-08]). Rationale: the Monitor tool runs its `command` in the same shell environment as `Bash`, so a Monitor call the engine does not read is an unscreened shell. A Monitor invocation that carries a `ws` object instead of a `command` has no shell command to screen and falls under [EN-03].
 
 ### Decision logging (LOG)
 
@@ -66,7 +67,7 @@ whether or not logging is enabled.
 
 - **[LOG-01]** By default — when `CLAUDEWATCH_LOG` is unset, or set to `1`/`true`/`on`/`yes` (case-insensitive) — the engine shall append one JSON record per evaluated input to the default path `~/.claude/claudewatch/decisions.jsonl`. Where `CLAUDEWATCH_LOG` is set to any other non-disabling value, the engine shall treat it as the destination path and append records there.
 - **[LOG-02]** Where `CLAUDEWATCH_LOG` is set to `off`, `0`, `false`, `none`, or the empty string (case-insensitive), the engine shall write no log, and its decision and exit behavior shall be unchanged. This is the opt-out.
-- **[LOG-03]** Each log record shall include the decision (`allow`/`ask`/`deny`), the matched rule reasons, a UTC timestamp, and the `session_id`, `cwd`, and active `permission_mode` from the hook input. For a `Bash` input the record shall include the *command shape* (field `command_shape`) — the program name plus its leading subcommand tokens, with any leading `VAR=value` assignments and `sudo` dropped and the token run stopping at the first flag, path, or value (e.g. `git push --force origin main` → `git push`, `SECRET=… mysql -p… db` → `mysql`) — rather than the raw command string. The shape is what `/ClaudeWatch:learn` groups by ([SK-14]); recording it rather than the full command keeps inline secrets (credentials in flags, URLs, or assignments) out of the durable, plaintext log. For a `Write`/`Edit` input the record shall include the target file path rather than the file content.
+- **[LOG-03]** Each log record shall include the decision (`allow`/`ask`/`deny`), the matched rule reasons, a UTC timestamp, and the `session_id`, `cwd`, and active `permission_mode` from the hook input. For a `Bash` or `Monitor` input the record shall include the *command shape* (field `command_shape`) — the program name plus its leading subcommand tokens, with any leading `VAR=value` assignments and `sudo` dropped and the token run stopping at the first flag, path, or value (e.g. `git push --force origin main` → `git push`, `SECRET=… mysql -p… db` → `mysql`) — rather than the raw command string. The shape is what `/ClaudeWatch:learn` groups by ([SK-14]); recording it rather than the full command keeps inline secrets (credentials in flags, URLs, or assignments) out of the durable, plaintext log. For a `Write`/`Edit` input the record shall include the target file path rather than the file content.
 - **[LOG-04]** Logging shall not influence the decision and shall not change the process exit code. If a log write fails, then the engine shall report the failure to stderr and otherwise continue, still emitting its decision.
 - **[LOG-05]** The engine shall restrict the decision log to owner-only access — file mode `0600` and its parent directory mode `0700` — applied on each write so a pre-existing wider mode is corrected, so that the plaintext log is not readable by other accounts on the host. A failure to set the mode shall be handled as a log-write failure per [LOG-04].
 - **[LOG-06]** The log shall begin with a header line `{"schema": N}` declaring the log's schema version, distinct from the per-input records of [LOG-01]. The current version is `2` (records store the command shape per [LOG-03]); version `1` is the pre-shape format that recorded the raw command string. On write, where the existing log has no header or declares a version other than the current one, the engine shall discard the existing log and start a fresh one with the current header, so that a log written under an earlier schema — which may contain raw commands with inline secrets — is not carried forward across an upgrade. Consumers of the log (the analyzer [SK-13] and the reset tool [SK-19]) shall ignore the header line. The discard applies to the active log only; archived logs ([SK-19]) are user-retained and left untouched.
@@ -98,7 +99,7 @@ Rules are the matchable units within a rule set.
 - **[RL-08]** If an `except` field appears on a `block` rule, then the engine shall log a warning to stderr and ignore the field; the block rule shall still fire on `pattern` match.
 - **[RL-09]** If a rule's `except` regex is invalid, then the engine shall emit a `deny` with the regex error and continue.
 - **[RL-10]** Each rule may declare an optional `target` field with value `bash` or `file-content`. If omitted, the rule defaults to `target: bash`.
-- **[RL-11]** When evaluating a `Bash` input, the engine shall evaluate only `target: bash` rules.
+- **[RL-11]** When evaluating a `Bash` or `Monitor` input, the engine shall evaluate only `target: bash` rules.
 - **[RL-12]** When evaluating a `Write` or `Edit` input, the engine shall evaluate only `target: file-content` rules whose containing rule set's `extensions` list matches the input's file extension.
 - **[RL-13]** If a rule's `target` value is neither `bash` nor `file-content`, then the engine shall emit a `deny` with a configuration-error reason naming the rule.
 - **[RL-14]** If a YAML line in a rule set does not match any recognized field at its indent level, then the engine shall log a warning to stderr naming the rule set, the rule (when applicable), and the unrecognized line; the engine shall continue processing the remaining lines. This surfaces typos like `refrence:` instead of `ref:` that would otherwise be silently dropped.
@@ -117,11 +118,11 @@ The engine emits at most one decision per invocation.
 - **[OUT-05]** When no rule matches, the engine shall produce no stdout output (allow-by-default).
 - **[OUT-06]** *(retired in 0.18.0)* — ~~the ask prompt rendered the `<reason>` prose as an OSC 8 terminal hyperlink to the `ref`, with `CLAUDEWATCH_HYPERLINKS` as the opt-out.~~ Claude Code 2.1.235 began sanitizing hook-supplied reason strings, replacing every control character with U+FFFD, so the escape reached the user as visible garbage instead of a link. Both paths now use the canonical ` — <ref>` form of `[OUT-02]`, and `CLAUDEWATCH_HYPERLINKS` is gone.
 - **[OUT-07]** A **deny** decision's `permissionDecisionReason` shall end with the ` [plugin:ClaudeWatch]` source tag — but the logged reasons (`[LOG-03]`) shall not. Claude Code annotates ask prompts with the originating plugin but leaves deny errors unattributed, so the engine appends the tag itself on the deny path to keep the source visible. Ask decisions shall not carry the tag (the host supplies it).
-- **[OUT-08]** When the coalesced decision for a `Bash` input is `ask` and the command is *compound* — it contains a shell control operator (`|`, `;`, newline, `&&`, `$(`, or backtick) outside any single- or double-quoted span — the engine shall escalate the decision to `deny` and prepend a note stating the ask was escalated because a piped or chained command can be auto-approved segment-by-segment by the host allow list (skipping the confirmation) and that the guarded command should be run on its own to be prompted. Rationale: Claude Code does not honor a `PreToolUse` hook's `ask` for a compound command whose segments each match a host `allow` rule — it auto-approves the pipeline before the prompt surfaces — so an un-escalated `ask` is silently bypassed; a `deny` is honored through the pipe. The escalation applies only to an `ask` decision (a `deny` already survives, and `allow`/no-match stays silent per [OUT-05]) and only to `Bash` inputs (`Write`/`Edit` are single operations, not shell pipelines). Operators inside quoted spans are string data, not command boundaries, and shall not trigger escalation.
+- **[OUT-08]** When the coalesced decision for a `Bash` or `Monitor` input is `ask` and the command is *compound* — it contains a shell control operator (`|`, `;`, newline, `&&`, `$(`, or backtick) outside any single- or double-quoted span — the engine shall escalate the decision to `deny` and prepend a note stating the ask was escalated because a piped or chained command can be auto-approved segment-by-segment by the host allow list (skipping the confirmation) and that the guarded command should be run on its own to be prompted. Rationale: Claude Code does not honor a `PreToolUse` hook's `ask` for a compound command whose segments each match a host `allow` rule — it auto-approves the pipeline before the prompt surfaces — so an un-escalated `ask` is silently bypassed; a `deny` is honored through the pipe. The escalation applies only to an `ask` decision (a `deny` already survives, and `allow`/no-match stays silent per [OUT-05]) and only to shell-command inputs — `Bash` and `Monitor` ([EN-14]); `Write`/`Edit` are single operations, not shell pipelines. A `Monitor` command runs unattended and repeats on one approval, so an ask-tier command inside one escalates on the same terms; the way to be prompted is the same, run the guarded command as its own `Bash` call. Operators inside quoted spans are string data, not command boundaries, and shall not trigger escalation.
 
 ## 5. Hook Wiring (HK)
 
-- **[HK-01]** The plugin shall register `PreToolUse` hooks that invoke the engine against the plugin's `watches/` directory for the `Bash`, `Write`, and `Edit` tools. Matchers may be combined via regex alternation (e.g. `matcher: "Write|Edit"`).
+- **[HK-01]** The plugin shall register `PreToolUse` hooks that invoke the engine against the plugin's `watches/` directory for the `Bash`, `Monitor`, `Write`, and `Edit` tools. Matchers may be combined via regex alternation (e.g. `matcher: "Write|Edit"`).
 - **[HK-02]** *(retired in 0.18.0)* — ~~the plugin shall register a `SessionStart` hook for plugin-update self-checks.~~ Never implemented; the placeholder hook was removed with it. The ambient-guidance `SessionStart` hook of [HK-04] is unaffected.
 - **[HK-03]** The plugin shall declare its hooks in `hooks/hooks.json`.
 - **[HK-04]** The plugin shall register a `SessionStart` hook that emits ambient guidance into the session context advising that a consequential command be run as its own Bash call rather than piped or chained, so the compound-command escalation ([OUT-08]) is avoided before it triggers. The guidance shall be sourced from `rules/*.md` so it can be edited without changing the hook.
@@ -160,7 +161,7 @@ of proposed permission changes, so the user vets accumulated prompts once
 rather than per command.
 
 - **[SK-13]** Where the user invokes `/ClaudeWatch:learn`, the skill shall analyze the decision log and present its proposals. If no log exists, the skill shall make no changes and shall report why: when logging is disabled (`CLAUDEWATCH_LOG` set to an opt-out value per [LOG-02]) it shall warn that disabling logging disables `/ClaudeWatch:learn` and explain how to re-enable; otherwise (logging on by default, but no records yet) it shall explain that no sessions have run with the hook active.
-- **[SK-14]** The skill shall present three groups: **allow candidates** (frequently-allowed commands not covered by the current allow list), **ask candidates** (commands ClaudeWatch repeatedly asks about, with the matched rule), and a **deny summary** (blocked commands grouped by reason, informational).
+- **[SK-14]** The skill shall present three groups: **allow candidates** (frequently-allowed commands not covered by the current allow list), **ask candidates** (commands ClaudeWatch repeatedly asks about, with the matched rule), and a **deny summary** (blocked commands grouped by reason, informational). An allow candidate shall name the tool its records came from and propose a permission rule for that tool (`Bash(…)` or `Monitor(…)`), and shall be judged already-covered only against existing rules for the same tool: the host treats the two as separate rule families, so a `Bash` rule does not cover the same command issued through `Monitor`.
 - **[SK-15]** The skill shall accept an optional time window (e.g. `--since 1d`) and forward it to the analysis.
 - **[SK-16]** Before writing any change, the skill shall present the exact edits and require explicit confirmation, and shall apply only the items the user approves.
 - **[SK-17]** The skill shall apply approved allow-list additions to a `settings.json` whose scope (user or project) the user selects, shall route rule changes (`except` additions, demotions) through `/ClaudeWatch:rules`, and shall not modify deny-summary items automatically.
@@ -230,7 +231,7 @@ These describe how the current implementation satisfies the spec. They are
   list syntax (`['.ps1', '.psm1']`) for the top-level `extensions` field.
 - The hook command line is
   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches`,
-  invoked from two `PreToolUse` matchers: `Bash` and `Write|Edit`.
+  invoked from two `PreToolUse` matchers: `Bash|Monitor` and `Write|Edit`.
 - The ambient-guidance emission ([HK-04]) is a second SessionStart hook,
   `hooks/emit-rules.sh`, which prints a `# Ambient rules from the ClaudeWatch
   plugin` header followed by each `rules/*.md` file to stdout. Claude Code

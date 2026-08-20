@@ -54,11 +54,13 @@ def parse_duration(text):
 
 
 def load_allow_prefixes(settings_path):
-    """Return a list of (prefix, raw_pattern) from settings.json Bash allow rules.
+    """Return a list of (tool, prefix, raw_pattern) from settings.json allow rules.
 
-    Converts `Bash(git push:*)` / `Bash(cat *)` into the literal prefix a command
-    must start with to be considered already-allowed. This is an approximation of
-    Claude Code's matcher, used only to suppress already-allowed suggestions.
+    Converts `Bash(git push:*)` / `Monitor(cat *)` into the literal prefix a
+    command must start with to be considered already-allowed. This is an
+    approximation of Claude Code's matcher, used only to suppress already-allowed
+    suggestions. The tool is carried through because the two rule families are
+    separate: a `Bash(…)` rule does not cover the same command via `Monitor`.
     """
     path = os.path.expanduser(settings_path)
     if not os.path.isfile(path):
@@ -67,18 +69,18 @@ def load_allow_prefixes(settings_path):
         settings = json.load(f)
     prefixes = []
     for rule in settings.get("permissions", {}).get("allow", []):
-        m = re.fullmatch(r"Bash\((.*)\)", rule)
+        m = re.fullmatch(r"(Bash|Monitor)\((.*)\)", rule)
         if not m:
             continue
-        inner = m.group(1)
+        inner = m.group(2)
         prefix = re.split(r":\*|\*", inner, maxsplit=1)[0].rstrip()
-        prefixes.append((prefix, rule))
+        prefixes.append((m.group(1), prefix, rule))
     return prefixes
 
 
-def is_already_allowed(command, allow_prefixes):
-    for prefix, _ in allow_prefixes:
-        if prefix and command.startswith(prefix):
+def is_already_allowed(tool, command, allow_prefixes):
+    for rule_tool, prefix, _ in allow_prefixes:
+        if rule_tool == tool and prefix and command.startswith(prefix):
             return True
     return False
 
@@ -155,7 +157,11 @@ def analyze(records, allow_prefixes, min_count, max_samples):
         src = rec.get("command_shape") or rec.get("command")
         if not src:
             continue  # file-content (Write/Edit) records have no command to group
-        shape, pattern = command_shape(src)
+        # Bash and Monitor both carry shell commands, but their host permission
+        # rules are separate families, so an allow candidate is grouped and
+        # proposed per tool. Legacy records predate the Monitor matcher.
+        tool = rec.get("tool") or "Bash"
+        shape, pattern = command_shape(src, tool)
 
         if decision == "allow":
             # Suppress on the shape, not the raw src: grouping keys on the shape
@@ -163,9 +169,9 @@ def analyze(records, allow_prefixes, min_count, max_samples):
             # must too — else a command like `FOO=1 echo …` shapes to `echo` but
             # its raw form doesn't start with the `echo` prefix and gets wrongly
             # re-proposed despite `Bash(echo *)` already allowing it.
-            if is_already_allowed(shape, allow_prefixes):
+            if is_already_allowed(tool, shape, allow_prefixes):
                 continue
-            g = allow_groups[shape]
+            g = allow_groups[(tool, shape)]
             g["count"] += 1
             g["pattern"] = pattern
             if rec.get("mode") == "auto":
@@ -189,9 +195,9 @@ def analyze(records, allow_prefixes, min_count, max_samples):
                     g["samples"].append(shape)
 
     allow_candidates = [
-        {"shape": shape, "suggested_allow": g["pattern"], "count": g["count"],
+        {"tool": tool, "shape": shape, "suggested_allow": g["pattern"], "count": g["count"],
          "auto_executed": g["auto"], "distinct_dirs": len(g["cwds"]), "samples": g["samples"]}
-        for shape, g in allow_groups.items() if g["count"] >= min_count
+        for (tool, shape), g in allow_groups.items() if g["count"] >= min_count
     ]
     except_candidates = [
         {"shape": shape, "count": g["count"], "reasons": sorted(g["reasons"]),
@@ -203,7 +209,7 @@ def analyze(records, allow_prefixes, min_count, max_samples):
         for reason, g in deny_groups.items()
     ]
 
-    allow_candidates.sort(key=lambda x: (-x["count"], x["shape"]))
+    allow_candidates.sort(key=lambda x: (-x["count"], x["tool"], x["shape"]))
     except_candidates.sort(key=lambda x: (-x["count"], x["shape"]))
     deny_summary.sort(key=lambda x: (-x["count"], x["reason"]))
 

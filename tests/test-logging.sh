@@ -47,6 +47,25 @@ else
 fi
 rm -f "$LOGFILE"
 
+echo "--- a Monitor decision logs under its own tool name (LOG-03) ---"
+MONLOG=$(mktemp /tmp/cw-monitor.XXXXXX.jsonl)
+echo '{"tool_name":"Monitor","tool_input":{"command":"aws logs tail /aws/ecs/foo --follow"}}' \
+  | CLAUDEWATCH_LOG="$MONLOG" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+TOTAL=$((TOTAL + 1))
+# `tool` is what tells the analyzer which permission-rule family a candidate
+# belongs to, and the shape reduction applies to a Monitor command the same way.
+if python3 -c '
+import json, sys
+rec = json.loads(open(sys.argv[1]).read().splitlines()[-1])
+ok = rec.get("tool") == "Monitor" and rec.get("command_shape") == "aws logs tail" and "command" not in rec
+sys.exit(0 if ok else 1)
+' "$MONLOG" 2>/dev/null; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: Monitor record carries tool=Monitor and the command shape"
+else
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: Monitor record carries tool=Monitor and the command shape"
+fi
+rm -f "$MONLOG"
+
 echo "--- log file and dir are owner-only (LOG-05) ---"
 HOMEDIR=$(mktemp -d /tmp/cw-perms.XXXXXX)
 DEFAULT_LOG="$HOMEDIR/.claude/claudewatch/decisions.jsonl"

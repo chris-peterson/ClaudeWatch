@@ -43,7 +43,7 @@ suite:
       avoid-compound-commands: Before you pipe or chain, check the lead command
     hooks:
       emit-rules: SessionStart — Emit ClaudeWatch's ambient guidance into context.
-      hooks: 'Hook wiring: PreToolUse→watchdog (Bash, Write|Edit); SessionStart→emit-rules.'
+      hooks: 'Hook wiring: PreToolUse→watchdog (Bash|Monitor, Write|Edit); SessionStart→emit-rules.'
   # <<< shipyard:describe <<<
   examples:
     - label: "/ClaudeWatch:rules"

@@ -81,9 +81,11 @@ Then render the JSON as three tables. Lead with the one that removes the most
 prompts.
 
 - **Allow candidates** — commands ClaudeWatch already allows that are *not*
-  covered by your allow list, so Claude Code prompts on them. Columns: shape,
-  count, distinct dirs, suggested `allow` pattern. These are the prompt-fatigue
-  wins.
+  covered by your allow list, so Claude Code prompts on them. Columns: tool,
+  shape, count, distinct dirs, suggested `allow` pattern. These are the
+  prompt-fatigue wins. `Bash` and `Monitor` are separate rule families in the
+  host, so the same shape can appear once per tool and each row's suggested
+  pattern names its own; add them as given rather than folding them into one.
 - **Ask candidates** — commands ClaudeWatch repeatedly *asks* about. Columns:
   shape, count, the matched rule(s). For each, the choice is: add an `except`
   for a demonstrably-safe variant, or leave it (the prompt is doing its job).

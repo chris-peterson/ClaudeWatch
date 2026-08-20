@@ -1,6 +1,6 @@
 # <img src="docs/favicon.svg" alt="ClaudeWatch" width="64" height="64"> ClaudeWatch
 
-A Claude Code plugin that enforces command and script safety rules via a `PreToolUse` hook on `Bash`, `Write`, and `Edit`.
+A Claude Code plugin that enforces command and script safety rules via a `PreToolUse` hook on `Bash`, `Monitor`, `Write`, and `Edit`.
 
 Claude Code's built-in permission system uses naive string matching that [fails for compound commands, heredocs, and flag reordering](https://github.com/anthropics/claude-code/issues/30519). `ClaudeWatch` solves this with Python regex rules matched anywhere in the command string (or in the body of a script being written/edited) via `re.search()`.
 
@@ -45,7 +45,9 @@ ClaudeWatch's regex matching reaches anywhere in the command string and into the
 
 Broadening the allowlist is safe because a hook decision outranks an `allow` rule: ClaudeWatch's `ask` and `deny` still fire even when your allowlist would otherwise let the command through. The allow rule only takes effect where ClaudeWatch stays silent — a silent hook defers to Claude Code's normal permission flow rather than auto-approving.
 
-One nuance for compound commands. Claude Code does not honor a hook `ask` for a piped or chained command (e.g. `git push --force-with-lease 2>&1 | tail`) whose segments each match an allow rule — it auto-approves the pipeline before the prompt surfaces, so the confirm is skipped. A `deny`, by contrast, is honored through a pipe. So that an `ask`-tier command isn't silently bypassed when piped, ClaudeWatch escalates an `ask` to a `deny` whenever the command is compound, with a message to re-run the guarded command on its own to get the prompt. Bare commands prompt normally; the escalation only changes the piped/chained form.
+The `Monitor` tool runs its command in the same shell as `Bash`, so ClaudeWatch screens it on the same terms and its matcher is `Bash|Monitor`. Claude Code keeps the two permission families apart, though: a command you want frictionless in both places needs a `Monitor(…)` rule alongside the `Bash(…)` one. `/ClaudeWatch:learn` proposes each candidate for the tool its records came from, so the suggestion already names the right one.
+
+One nuance for compound commands. Claude Code does not honor a hook `ask` for a piped or chained command (e.g. `git push --force-with-lease 2>&1 | tail`) whose segments each match an allow rule — it auto-approves the pipeline before the prompt surfaces, so the confirm is skipped. A `deny`, by contrast, is honored through a pipe. So that an `ask`-tier command isn't silently bypassed when piped, ClaudeWatch escalates an `ask` to a `deny` whenever the command is compound, with a message to re-run the guarded command on its own to get the prompt. Bare commands prompt normally; the escalation only changes the piped/chained form. A `Monitor` command escalates on the same terms, since it runs unattended and repeats on a single approval: run the guarded step as its own `Bash` call rather than folding it into a watch loop.
 
 To keep agents out of that escalation in the first place, a `SessionStart` hook (`hooks/emit-rules.sh`) injects a short ambient note advising that consequential steps be run as their own Bash call rather than chained. The content lives in `rules/*.md`; the escalation is the backstop, the note is the nudge that fires before it.
 
@@ -61,7 +63,7 @@ Deciding *which* patterns to add to the allowlist is itself the chore. The engin
 { "env": { "CLAUDEWATCH_LOG": "~/.claude/claudewatch/decisions.jsonl" } }
 ```
 
-For a `Bash` decision the log records the command *shape* — the program plus its leading subcommand tokens (`git push`, `aws s3 cp`), stopping at the first flag, path, or value — rather than the full command, which keeps inline secrets (credentials in flags, URLs, or `VAR=value` prefixes) out of the plaintext log. The shape is what `/ClaudeWatch:learn` groups by, so nothing is lost for the workflow. The log file and its directory are owner-only (`0600`/`0700`).
+For a `Bash` or `Monitor` decision the log records the command *shape* — the program plus its leading subcommand tokens (`git push`, `aws s3 cp`), stopping at the first flag, path, or value — rather than the full command, which keeps inline secrets (credentials in flags, URLs, or `VAR=value` prefixes) out of the plaintext log. The shape is what `/ClaudeWatch:learn` groups by, so nothing is lost for the workflow. The log file and its directory are owner-only (`0600`/`0700`).
 
 Then `/ClaudeWatch:learn` aggregates the log into a batch proposal: frequently-allowed commands that aren't in your allowlist yet (promote them), ask rules you keep approving (add an `except`), and blocks that may be in your way. `scripts/analyze-decisions.py` does the read-only analysis; the skill drives the per-item approval. Because it works from the hook's own decisions rather than scanning transcripts heuristically, it distinguishes allowed / asked / blocked instead of guessing what looks read-only. You vet a window's worth of prompts once instead of one at a time. The proposal leads with the window it covers (records, sessions, span) so you can weigh it, and once you've applied changes the skill offers to reset the log (`scripts/reset-decisions.py`, archives by default) so the next pass measures from the new baseline rather than re-surfacing what you just handled.
 

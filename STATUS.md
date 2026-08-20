@@ -4,9 +4,9 @@ Tracking status of the requirements declared in [SPEC.md](SPEC.md). Updated
 whenever an audit (`/spec-audit`) is run, when implementation lands, or when
 the spec is revised.
 
-**Last audit:** 2026-06-22
+**Last audit:** 2026-08-20
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 84/84 normative requirements (100%).
+**Coverage:** 85/85 normative requirements (100%).
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
 for the contract, `scripts/watchdog.py` for engine behavior, and the per-set
@@ -18,22 +18,22 @@ spot; broader clusters cite the file and its tests.
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| EN-01..EN-13 | Engine lifecycle, IO, tool dispatch, error handling | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
+| EN-01..EN-14 | Engine lifecycle, IO, tool dispatch (Bash, Monitor, Write, Edit), error handling | Covered | `scripts/watchdog.py` (`_resolve_input`) + `tests/test-engine.sh` |
 | EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.py:335` |
 | EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py:343-346` |
 | LOG-01..LOG-06 | Decision logging side channel: on by default (`CLAUDEWATCH_LOG=off` to opt out), records the command shape rather than the raw command, owner-only perms (0600/0700), schema-versioned header that discards pre-shape logs on upgrade | Covered | `scripts/watchdog.py` (`_log_event`, `command_shape`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | RL-01..RL-17 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning, the `unless_condition`/`unless_regex` exemptions and their `is_in_project_tree` / `is_ephemeral_scratch` predicates | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-watch-files.sh` |
-| OUT-01..OUT-05, OUT-07, OUT-08 | Output decisions, formatting, aggregation, allow-by-default, deny source tag, compound-command ask→deny escalation | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
+| OUT-01..OUT-05, OUT-07, OUT-08 | Output decisions, formatting, aggregation, allow-by-default, deny source tag, compound-command ask→deny escalation across Bash and Monitor | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
 | OUT-06 | Ref rendered as an OSC 8 hyperlink *(retired in 0.18.0)* | Removed | Claude Code 2.1.235 replaces control characters in a hook's reason with U+FFFD |
-| HK-01 | PreToolUse hooks for Bash/Write/Edit | Covered | `hooks/hooks.json` |
+| HK-01 | PreToolUse hooks for Bash, Monitor, Write, Edit | Covered | `hooks/hooks.yml` → `hooks/hooks.json` |
 | HK-02 | SessionStart plugin-update self-check *(retired in 0.18.0)* | Removed | Never implemented; the placeholder hook was deleted with the requirement |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |
 | HK-04 | SessionStart ambient guidance emission | Covered | `hooks/emit-rules.sh`, `rules/*.md`, `tests/test-ambient.sh` |
 | EXT-01..EXT-03 | Auto-discovery, disable-by-rename, no-code-change | Covered | `scripts/watchdog.py`, `tests/test-engine.sh` |
 | SK-01 | `/ClaudeWatch:help` overview *(retired in 0.16.0)* | Removed | README + docs site |
 | SK-02..SK-12 | `/ClaudeWatch:rules` interactive editor | Covered | `skills/rules/SKILL.md` |
-| SK-13..SK-17 | `/ClaudeWatch:learn` decision-log analysis | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` |
+| SK-13..SK-17 | `/ClaudeWatch:learn` decision-log analysis, allow candidates proposed per tool (`Bash(…)` vs `Monitor(…)`) | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` (`analyze`, `load_allow_prefixes`) + `tests/test-analyze.sh` |
 | DOC-01, DOC-02, DOC-04, DOC-05 | Docsify site, `just docs` regen (rules + prompts pages), YAML schema reference | Covered | `docs/`, `SCHEMA.md`, `build/gen-rules-doc.py`, `justfile` |
 | DIST-01 | Expose install metadata in manifest | Covered | `.claude-plugin/plugin.json` (name, version, description, repository, license) — hosting/marketplace mechanism is out of scope per SPEC.md |
 | DIST-02 | `.claude-plugin/plugin.json` manifest | Covered | `.claude-plugin/plugin.json` |
@@ -45,6 +45,12 @@ spot; broader clusters cite the file and its tests.
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just docs-preview` | Covered | `justfile` + `tests/` |
 
 ## Audit history
+
+### 2026-08-20 — Coverage refresh (spec-status)
+
+STATUS.md updated: +1 ID (EN-14, Monitor screened as a bash input), normative count 84 → 85. Rows amended for the Monitor matcher (HK-01), the escalation now spanning Bash and Monitor (OUT-08), and per-tool allow candidates in `/ClaudeWatch:learn` (SK-14).
+
+The table's ID inventory is behind the spec independently of this change: SPEC.md now declares 93 normative IDs (95 `[XX-NN]` lines less the two retired ones, OUT-06 and HK-02), and the clustered rows above do not reach SK-18/SK-19 or the current RL range. The count in the header was carried forward from the last audit rather than recomputed; a full reconciliation needs `/sextant:spec-sync`.
 
 ### 2026-06-22 — Coverage refresh (spec-status)
 

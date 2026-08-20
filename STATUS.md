@@ -6,9 +6,7 @@ the spec is revised.
 
 **Last audit:** 2026-06-22
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 84/84 normative requirements (100%) + 3 deferred targets (FUT-01..FUT-03).
-FUT-04..FUT-06 are deferred-discussion notes (rule-edit durability across upgrades,
-repo-scoped git trust, per-repo self-marketplace), not numbered targets.
+**Coverage:** 83/83 normative requirements (100%).
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
 for the contract, `scripts/watchdog.py` for engine behavior, and the per-set
@@ -29,7 +27,7 @@ spot; broader clusters cite the file and its tests.
 | OUT-01..OUT-05, OUT-07, OUT-08 | Output decisions, formatting, aggregation, allow-by-default, deny source tag, compound-command ask→deny escalation | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
 | OUT-06 | Ref rendered as an OSC 8 hyperlink *(retired in 0.18.0)* | Removed | Claude Code 2.1.235 replaces control characters in a hook's reason with U+FFFD |
 | HK-01 | PreToolUse hooks for Bash/Write/Edit | Covered | `hooks/hooks.json` |
-| HK-02 | SessionStart hook (no-op placeholder) | Covered | `hooks/hooks.json`, `hooks/cli-freshness.sh` |
+| HK-02 | SessionStart plugin-update self-check *(retired in 0.18.0)* | Removed | Never implemented; the placeholder hook was deleted with the requirement |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |
 | HK-04 | SessionStart ambient guidance emission | Covered | `hooks/emit-rules.sh`, `rules/*.md`, `tests/test-ambient.sh` |
 | EXT-01..EXT-03 | Auto-discovery, disable-by-rename, no-code-change | Covered | `scripts/watchdog.py`, `tests/test-engine.sh` |
@@ -45,9 +43,6 @@ spot; broader clusters cite the file and its tests.
 | SH-03 | `ref` URLs on rules | Covered | All shipped `watches/*.yml` |
 | SH-04 | Per-set test files | Covered | `tests/test-watch-*.sh` |
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just docs-preview` | Covered | `justfile` + `tests/` |
-| FUT-01 | SessionStart self-check | Deferred | `hooks/cli-freshness.sh` is intentional no-op |
-| FUT-02 | `new` rule-set scaffolds a test file | Deferred — partially covered | `skills/rules/SKILL.md` already offers this; consider promoting |
-| FUT-03 | Multi-line YAML strings / anchors | Deferred | Not needed by current rules |
 
 ## Audit history
 

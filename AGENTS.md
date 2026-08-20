@@ -112,21 +112,20 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 descriptor. `.claude-plugin/plugin.json` is **generated** from it by
 [`scripts/gen-plugin-json.py`](scripts/gen-plugin-json.py) (`just plugin-json`) — don't hand-edit
 `plugin.json`. The `suite:` block also feeds the bridge.ai marketplace SPA.
-A pre-commit hook (`just install-hooks`) regenerates `plugin.json` whenever
-`plugin.yml` is staged, so the two never drift in source control.
+Run `just generate` after editing `plugin.yml` to refresh the projection, and
+`just check` to confirm the committed artifacts still match their source.
 
-This is a **git** hook, not a Claude Code project hook, on purpose. The
-no-drift property is a property of the *commit*, so it has to hold no matter
-how `plugin.yml` was edited — a human in an editor, a rebase, or a scripted/CI
-bump — none of which fire a Claude `Write`/`Edit` hook. A
-Claude hook would only cover the case where Claude itself made the edit, which
-is the wrong boundary. The release workflow regenerates `plugin.json` from
-`plugin.yml` when it cuts a release (`release.yml`), so the shipped descriptor
-always matches its source; the git hook is the local convenience that keeps
-`main` in sync between releases. The rule of thumb: an *agent nudge* (like
-the dev-time `remind-rules-index.py` reminder above) is a fine fit for a Claude
-hook; a *correctness invariant that must hold regardless of editor* belongs at
-the commit/CI boundary.
+**Nothing blocks a stale `plugin.json` from landing on `main`.** The Preview
+workflow (`.github/workflows/preview.yml`) runs `shipyard generate --dry-run` on
+every pull request, but that command prints the pending projection as a diff and
+exits 0 — it reports drift, it does not fail on it. Read that step's output when
+a change touches `plugin.yml`, `skills/`, `rules/`, or `hooks/`; a diff there
+means someone skipped `just generate`.
+
+What is guaranteed is the *shipped* descriptor: `release.yml` regenerates
+`plugin.json` from `plugin.yml` when it cuts a release, so no release can ship a
+descriptor that disagrees with its source. The window is `main` between
+releases.
 
 ## Releasing
 
@@ -158,14 +157,10 @@ what `claude plugin update` reads.
   per se — but the documentation references unix conventions. If
   cross-platform support becomes a goal, that's a spec change, not a quick
   fix.
-- **`SessionStart` hook is a no-op placeholder.** `hooks/cli-freshness.sh`
-  exists for symmetry across the chris-peterson plugin namespace and to
-  reserve a spot for future plugin-update self-checks. Do not delete it
-  silently — see [FUT-01] in `SPEC.md`.
 - **YAML parser is minimal.** It handles the format ClaudeWatch ships and
   nothing more. Multi-line strings, anchors, and `!!tag` constructs are not
-  supported. If you need them, that's a spec discussion (see [FUT-03]),
-  not a copy-paste of PyYAML.
+  supported. If you need them, that's a spec discussion, not a copy-paste of
+  PyYAML.
 
 ## Reading order for new contributors
 

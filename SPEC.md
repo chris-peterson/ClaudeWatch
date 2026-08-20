@@ -26,7 +26,6 @@ Requirement IDs use `[XX-NN]`. Categories:
 - **DIST** — Distribution / install
 - **SH** — Shipped rule sets
 - **DEV** — Development workflow
-- **FUT** — Deferred / future
 
 Requirements use [EARS syntax](https://alistairmavin.com/ears) — Ubiquitous (no
 keyword), State-Driven (`While`), Event-Driven (`When`), Optional (`Where`),
@@ -122,7 +121,7 @@ The engine emits at most one decision per invocation.
 ## 5. Hook Wiring (HK)
 
 - **[HK-01]** The plugin shall register `PreToolUse` hooks that invoke the engine against the plugin's `watches/` directory for the `Bash`, `Write`, and `Edit` tools. Matchers may be combined via regex alternation (e.g. `matcher: "Write|Edit"`).
-- **[HK-02]** The plugin shall register a `SessionStart` hook for plugin-update self-checks. (Currently a no-op placeholder — see [FUT-01].)
+- **[HK-02]** *(retired in 0.18.0)* — ~~the plugin shall register a `SessionStart` hook for plugin-update self-checks.~~ Never implemented; the placeholder hook was removed with it. The ambient-guidance `SessionStart` hook of [HK-04] is unaffected.
 - **[HK-03]** The plugin shall declare its hooks in `hooks/hooks.json`.
 - **[HK-04]** The plugin shall register a `SessionStart` hook that emits ambient guidance into the session context advising that a consequential command be run as its own Bash call rather than piped or chained, so the compound-command escalation ([OUT-08]) is avoided before it triggers. The guidance shall be sourced from `rules/*.md` so it can be edited without changing the hook.
 
@@ -231,10 +230,6 @@ These describe how the current implementation satisfies the spec. They are
 - The hook command line is
   `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches`,
   invoked from two `PreToolUse` matchers: `Bash` and `Write|Edit`.
-- The SessionStart hook (`hooks/cli-freshness.sh`) is intentionally a no-op
-  placeholder for future plugin-update self-checks; ClaudeWatch does not
-  install a CLI shim, so the freshness-check pattern used by sibling plugins
-  (`beacon`, `tack`, `logbook`) does not apply here.
 - The ambient-guidance emission ([HK-04]) is a second SessionStart hook,
   `hooks/emit-rules.sh`, which prints a `# Ambient rules from the ClaudeWatch
   plugin` header followed by each `rules/*.md` file to stdout. Claude Code
@@ -262,12 +257,3 @@ These describe how the current implementation satisfies the spec. They are
   pattern matching itself runs on the full, unstripped command, so quote
   stripping does not affect which rules fire — only whether a matched `ask` is
   escalated.
-
-## 13. Future / Deferred (FUT)
-
-- **[FUT-01]** Where a plugin-update self-check is implemented, the SessionStart hook shall verify `watchdog.py` emits the expected `hookSpecificOutput.permissionDecision` schema.
-- **[FUT-02]** Where the user adds a custom rule set via `/ClaudeWatch:rules new`, the skill should offer to scaffold a matching test file in `tests/`.
-- **[FUT-03]** Where multi-line YAML strings or nested anchors are required, the parser may switch to PyYAML; currently the minimal parser does not support these constructs.
-- **[FUT-04]** Where the user customizes rules on an installed plugin via `/ClaudeWatch:rules` (including the `except` and demotion edits proposed by `/ClaudeWatch:learn`, which route through that skill), those edits shall survive plugin version upgrades. The skill writes to `${CLAUDE_PLUGIN_ROOT}/watches`, which for an installed plugin resolves to the version-scoped cache directory (e.g. `~/.claude/plugins/cache/chris-peterson/ClaudeWatch/0.8.0/watches/`); an upgrade installs a fresh version directory with its own shipped rules and the hook reads from the new root, orphaning prior edits. The decision log ([LOG-01]) already shows the durable shape: it lives in a fixed user directory (`~/.claude/claudewatch/`) outside the cache and so persists across upgrades. The gap closes by giving rule customizations the same treatment — a user rules directory alongside it (`~/.claude/claudewatch/watches/`) that the engine loads in addition to the shipped set (user rules winning on conflict), or a migration step on upgrade. Until then, only allow-list outputs of `/ClaudeWatch:learn` (written to `settings.json`) are durable on an installed plugin; rule edits are not. Edits made when running from a working copy via `claude --plugin-dir .` (per [DIST-03]) are already durable because `${CLAUDE_PLUGIN_ROOT}` is the git-tracked checkout, not the cache.
-- **[FUT-05]** Where the user designates specific repositories as trusted for otherwise-prompted git operations (e.g. a personal knowledge repo or a dashboard repo where unattended `commit`/`push` is acceptable), the engine should suppress `watch-git`'s `ask` decisions for commands targeting those repos while still applying them everywhere else. This is *repo-scoped* allow configuration, distinct from the command-shape allow-list in `settings.json` (which blanket-allows a command in every directory) and from `except` (which exempts a command *variant*, not a *location*). The trusted set keys on the resolved target repo — the `git -C <path>` argument when present, otherwise the invocation's working directory — matched by path prefix or by remote URL. Determinism (core contract #1) holds because the target repo is a pure function of the hook input (the command string plus the cwd Claude Code already passes), with no clock or network on the decision path. The configuration must survive plugin upgrades, so it lives in the durable user directory described in [FUT-04] (`~/.claude/claudewatch/`), not in the version-scoped cache. Open questions: whether the match key is filesystem path, remote URL, or both (a path moves; a remote is stable but absent for never-pushed repos); whether trust is scoped per rule set (`watch-git` only) or is a general repo-scoped allow applying to any rule; and whether `push --force`-class **block** rules are ever in scope (likely not — "no recovery" should not be repo-waivable).
-- **[FUT-06]** Where persistent standalone install (without the central chris-peterson marketplace) becomes a goal, the repo may ship its own single-plugin `.claude-plugin/marketplace.json` (`source: "./"`) so users can `/plugin marketplace add <this-repo>` and `/plugin install`. Claude Code has no bare git-URL install; a marketplace descriptor is the only path to a *persistent* install, and [DIST-01] currently holds distribution out of scope. This must be a **generated artifact** from `plugin.yml`'s existing `marketplace:` block (the same single source of truth as `plugin.json`), never hand-authored. Deferred: `claude --plugin-dir .` ([DIST-03]) already covers clone-and-run standalone use, so the marginal gain is low until a persistent install is actually wanted.

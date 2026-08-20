@@ -1,30 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- **New `is_recoverable` predicate for `unless_condition`** (`scripts/watchdog.py`),
-  available for any rule set to reference. `is_relative_to_cwd` only checks
-  that a deletion target is spatially under `cwd`, on the *assumption* that
-  makes it recoverable from git history — that assumption is never actually
-  verified, so a bare, non-version-controlled working directory (e.g. a
-  workspace root whose children are individually git repos, but the root
-  itself isn't) gets silently exempted anyway. `is_recoverable` requires the
-  target to be under `cwd` **and** to actually be inside a real git work tree
-  or tracked by chezmoi, closing that gap. This is additive: no shipped rule
-  in `watches/` is changed to use it — `is_relative_to_cwd` remains the
-  default for `rm -rf`/`rm -r` in `watch-files.yml`, unchanged. Adopting
-  `is_recoverable` for a specific rule set (shipped or local) is left to the
-  maintainer's judgment, or to a user's own local rule override once
-  something like the durable user-rules-directory in FUT-04 exists.
-  Requires two new filesystem/subprocess calls (`git rev-parse
-  --is-inside-work-tree`, `chezmoi managed`) that `is_relative_to_cwd`
-  deliberately avoided to stay pure-string/deterministic (SPEC.md RL-16) —
-  an accepted tradeoff specific to this opt-in predicate, not a change to the
-  determinism contract for anything shipped. Covered by
-  `tests/test-predicate-is-recoverable.sh` against a demo-only fixture rule
-  set (`tests/fixtures/watch-is-recoverable-demo.yml`); `is_relative_to_cwd`'s
-  own existing test coverage in `tests/test-watch-files.sh` is untouched.
-
 ## 0.17.2
 
 Plugin metadata and skill-hygiene fixes from a plugin-dev best-practices scan.

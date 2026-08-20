@@ -36,7 +36,6 @@ import json
 import os
 import re
 import shlex
-import subprocess
 import sys
 
 
@@ -363,9 +362,8 @@ def _resolved_targets_in_tree(command, cwd):
     net the exemption relies on does not cover wiping the whole tree or its
     history.
 
-    Returning the resolved paths rather than a verdict is what lets
-    `_targets_recoverable` ask git about the same targets this proved in-tree,
-    instead of resolving them a second time and risking a different answer.
+    Returns the resolved paths rather than a verdict so `_targets_recoverable`
+    interrogates exactly what this proved in-tree.
     """
     roots = _exempt_roots(cwd)
     if not roots:
@@ -398,13 +396,11 @@ def _resolved_targets_in_tree(command, cwd):
 
 
 def _targets_under_cwd(command, cwd):
-    """Whether every deletion target of an `rm` command sits under an exempt root.
+    """Whether an `rm` command's targets all sit under an exempt root ([RL-16]).
 
-    Backs the `is_in_project_tree` unless-condition: an in-tree `rm -r` is
-    *assumed* recoverable from git history, so it need not prompt, while a
-    delete reaching outside the tree still does. The assumption is unchecked —
-    `_targets_recoverable` is the opt-in variant that verifies it instead of
-    inferring it from location.
+    The in-tree premise — that git history can restore the delete — is assumed
+    here, not checked; `_targets_recoverable` is the opt-in variant that
+    verifies it.
     """
     return _resolved_targets_in_tree(command, cwd) is not None
 
@@ -445,69 +441,104 @@ def _targets_are_ephemeral_scratch(command, cwd):
     return True
 
 
-def _is_in_git_worktree(path):
-    """Whether `path`'s containing directory is inside a real git work tree.
+_PROBE_TIMEOUT = 3
 
-    Requires a filesystem/subprocess call (`git -C <dir> rev-parse
-    --is-inside-work-tree`) — unlike `_targets_under_cwd`, this cannot be pure
-    string analysis, because "is this actually a git repo" is not knowable
-    from the command text alone. Fails closed (returns False) on any error —
-    git not on PATH, timeout, non-repo — so a check that can't be completed
-    never silently grants the exemption.
+
+def _probe(argv):
+    """Run a read-only command and return its stdout, or None if it gave no answer.
+
+    None covers every way a check can fail to complete — the tool is absent, it
+    timed out, it exited non-zero — because callers treat them identically:
+    a check that cannot run never grants an exemption. Folding the exit status
+    into the return value is what keeps those call sites to one guard each.
+
+    `subprocess` is imported here rather than at module scope: only the opt-in
+    `is_recoverable` predicate reaches this, and the import costs several
+    milliseconds that every other hook invocation would otherwise pay.
     """
+    import subprocess
+
     try:
-        result = subprocess.run(
-            ["git", "-C", os.path.dirname(path) or ".", "rev-parse", "--is-inside-work-tree"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        return result.returncode == 0 and result.stdout.strip() == "true"
+        result = subprocess.run(argv, capture_output=True, text=True, timeout=_PROBE_TIMEOUT)
     except Exception:
-        return False
+        return None
+    return result.stdout if result.returncode == 0 else None
 
 
-def _is_chezmoi_managed(path):
-    """Whether `path` itself (not just some descendant) is tracked by chezmoi.
+def _git(cwd, *args):
+    """Read-only git in `cwd` — stdout, or None if it gave no answer."""
+    return _probe(["git", "-C", cwd, *args])
 
-    `chezmoi managed --path-style=absolute <path>` lists managed entries at or
-    under `path`; an exact line match against the resolved path (not merely
-    non-empty output) confirms the path itself is managed, rather than being
-    an untracked file that happens to sit under a directory with unrelated
-    managed content elsewhere. Fails closed (returns False) on any error —
-    chezmoi not installed, timeout, not a chezmoi-managed machine — same
-    reasoning as `_is_in_git_worktree`. Harmless on machines that don't use
-    chezmoi: the subprocess call fails, this returns False, and callers fall
-    through to whatever the other recoverability check decides.
+
+def _is_submodule(ls_files_stage_line):
+    """Whether a `git ls-files --stage` line describes a submodule.
+
+    Each line is `<mode> <sha> <stage>\t<path>`, and git records a submodule as
+    a "gitlink" — mode 160000, the one mode that points at another repository
+    rather than at content in this one. That matters here because a gitlink is
+    tracked, so it satisfies a tracked-ness check, while the work inside the
+    submodule is in a different repository that the superproject's commands
+    never look into.
     """
-    try:
-        result = subprocess.run(
-            ["chezmoi", "managed", "--path-style=absolute", path],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        if result.returncode != 0:
+    return ls_files_stage_line.split()[:1] == ["160000"]
+
+
+def _git_recoverable(roots, targets):
+    """Whether git could restore every one of `targets` after a recursive delete.
+
+    Two questions, and the call count does not grow with the number of targets —
+    both commands take every target as pathspecs in one invocation. That matters
+    because this runs on the PreToolUse path, where each call is latency the user
+    waits through before their prompt appears.
+
+    1. Is every target tracked, and is none of them a submodule? `ls-files
+       --stage --error-unmatch` exits non-zero on the first pathspec matching no
+       tracked file — which also answers "is this a work tree at all", since it
+       fails the same way outside one — and `--stage` reports each entry's mode
+       in the same output, so a gitlink (`160000`) costs no extra call. A
+       submodule is declined rather than answered for: the superproject's index
+       records only which commit it points at, and neither of these commands
+       reaches inside it, so uncommitted work in there is invisible here.
+    2. Does any target hold content git would not bring back? `ls-files --others
+       --modified` lists, in one pass, files that are untracked, ignored (no
+       `--exclude-standard`), or tracked-but-edited. All three are lost with a
+       directory — a stray build artifact and an uncommitted edit alike — so any
+       of them means the delete is not recoverable.
+
+    `git` runs from the first root it recognizes, not from `cwd`. A target can be
+    proved in-tree via the project root while `cwd` sits somewhere else entirely
+    (see `_exempt_roots`), and asking `cwd`'s repo about a path it doesn't
+    contain answers the wrong question.
+
+    `ls-files` rather than `status`: status refreshes and rewrites `.git/index`,
+    taking `index.lock` on what is meant to be a read-only probe, and would race
+    a concurrent git operation in the user's own terminal.
+    """
+    for root in roots:
+        listing = _git(root, "ls-files", "--stage", "--error-unmatch", "--", *targets)
+        if listing is None:
+            continue
+        if any(_is_submodule(line) for line in listing.splitlines()):
             return False
-        return path in result.stdout.splitlines()
-    except Exception:
-        return False
+        unrestorable = _git(root, "ls-files", "--others", "--modified", "--", *targets)
+        return unrestorable is not None and not unrestorable.strip()
+    return False
 
 
 def _targets_recoverable(command, cwd):
     """Whether every deletion target is in-tree AND actually recoverable.
 
-    Backs the opt-in `is_recoverable` unless-condition. Where
+    Backs the opt-in `is_recoverable` unless-condition ([RL-18]). Where
     `is_in_project_tree` treats "under an exempt root" as standing in for
-    "recoverable from git history", this checks the second thing: each target
-    must sit inside a real git work tree, or be tracked by chezmoi. Location is
-    a proxy that fails exactly where it matters — a workspace root grouping
-    several checkouts is not itself a repo, so a delete there has no history
-    behind it.
+    "recoverable from git history", this checks that directly — git must be
+    able to restore every target. Location is a proxy that fails exactly where
+    it matters: a workspace root grouping several checkouts is not itself a
+    repo, so a delete there has no history behind it.
 
-    Unlike its pure-string sibling this touches the filesystem, which is why it
-    is a separate predicate no shipped rule references rather than a change to
-    what `is_in_project_tree` does.
+    Git is the only backend. A path some other tool could restore — a dotfile
+    manager's target, say — is not exempted here; `unless_regex` on the path is
+    how a rule set expresses a known-safe location it knows about and the
+    engine does not.
 
     Scratch paths under `/tmp` and friends never reach here — `watch-files`
     exempts them by `unless_regex` first, and requiring ephemeral space to be
@@ -516,7 +547,7 @@ def _targets_recoverable(command, cwd):
     targets = _resolved_targets_in_tree(command, cwd)
     if targets is None:
         return False
-    return all(_is_in_git_worktree(t) or _is_chezmoi_managed(t) for t in targets)
+    return _git_recoverable(_exempt_roots(cwd), targets)
 
 
 # Named predicates an `unless_condition` entry can reference. Each takes the bash

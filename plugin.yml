@@ -42,9 +42,8 @@ suite:
     rules:
       avoid-compound-commands: Before you pipe or chain, check the lead command
     hooks:
-      cli-freshness: SessionStart — No-op; ClaudeWatch ships no CLI.
       emit-rules: SessionStart — Emit ClaudeWatch's ambient guidance into context.
-      hooks: 'Hook wiring: PreToolUse→watchdog (Bash, Write|Edit); SessionStart→cli-freshness, emit-rules.'
+      hooks: 'Hook wiring: PreToolUse→watchdog (Bash, Write|Edit); SessionStart→emit-rules.'
   # <<< shipyard:describe <<<
   examples:
     - label: "/ClaudeWatch:rules"

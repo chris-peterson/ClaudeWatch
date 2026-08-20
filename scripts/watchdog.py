@@ -18,14 +18,10 @@ by default — the side channel the /ClaudeWatch:learn workflow reads. Set
 CLAUDEWATCH_LOG to a path to log elsewhere, or to "off" (also 0/false/none/empty)
 to disable it. Logging never affects the decision itself.
 
-The ask-prompt reason reads `<rule>: <reason>`, where the reason prose is a
-clickable OSC 8 terminal hyperlink to the rule's `ref` — so the verbose URL
-stays out of the line. Set CLAUDEWATCH_HYPERLINKS to "off" (also
-0/false/none/empty) to keep the plain `— <url>` form instead. Deny messages
-always use the plain `— <url>` form: Claude Code renders them through its error
-path, which strips OSC 8 without linking it. Deny messages also append the
-`[plugin:ClaudeWatch]` source tag that Claude Code shows on ask prompts but
-omits on deny errors. The logged reasons stay plain text regardless — no tag.
+Every reason reads `<rule>: <reason> — <ref>`, in the prompt and in the log
+alike. Deny messages additionally append the `[plugin:ClaudeWatch]` source tag
+that Claude Code shows on ask prompts but omits on deny errors; the logged
+reasons carry no tag.
 """
 
 import glob
@@ -205,10 +201,8 @@ def _violation(rule):
     """A matched violation as structured data.
 
     `prefix` is the rule's `name` (the rule-set name is redundant once the
-    reason links to the ref, so it's dropped); `reason` is the human prose;
-    `ref` is the doc URL (or "" when absent). Keeping them apart lets the
-    prompt make the *prose* the hyperlink while the log stays plain
-    (`_message_plain`).
+    reason carries the ref, so it's dropped); `reason` is the human prose;
+    `ref` is the doc URL (or "" when absent).
     """
     return {"prefix": rule.get("name") or "", "reason": rule["reason"], "ref": rule.get("ref") or ""}
 
@@ -221,54 +215,16 @@ def _error_violation(text):
 def _message_plain(v):
     """Canonical one-line message: `<prefix>: <reason>[ — <ref>]`.
 
-    This is what gets written to the decision log, so the `/ClaudeWatch:learn`
-    side channel always reads plain text — never escape sequences.
+    Used for both the displayed reason and the decision log the
+    `/ClaudeWatch:learn` side channel reads.
     """
     head = f"{v['prefix']}: {v['reason']}" if v["prefix"] else v["reason"]
     return f"{head} — {v['ref']}" if v["ref"] else head
 
 
-_OSC8 = "\x1b]8;;"
-_ST = "\x1b\\"
-
 # Source attribution Claude Code shows on ask prompts but omits on deny errors;
 # appended to deny reasons so the user always sees which plugin made the call.
 _PLUGIN_TAG = "[plugin:ClaudeWatch]"
-
-
-def _hyperlink(url, text):
-    """Wrap `text` in an OSC 8 terminal hyperlink pointing at `url`."""
-    return f"{_OSC8}{url}{_ST}{text}{_OSC8}{_ST}"
-
-
-_HYPERLINKS_OFF_VALUES = frozenset(("off", "0", "false", "none", ""))
-
-
-def _hyperlinks_enabled():
-    """Whether the displayed reason renders refs as terminal hyperlinks.
-
-    On by default. Set CLAUDEWATCH_HYPERLINKS to off/0/false/none/empty
-    (case-insensitive) to fall back to the plain `— <url>` form — for
-    terminals without OSC 8 support or anyone who prefers the bare URL.
-    """
-    raw = os.environ.get("CLAUDEWATCH_HYPERLINKS")
-    if raw is None:
-        return True
-    return raw.strip().lower() not in _HYPERLINKS_OFF_VALUES
-
-
-def _message_display(v, hyperlinks):
-    """The reason line shown in the permission prompt.
-
-    With hyperlinks on and a ref present, the reason prose itself becomes the
-    clickable link to the ref — so it reads `<prefix>: <prose>` with the prose
-    clickable — keeping the verbose URL out of the line. Otherwise it matches
-    the plain log form.
-    """
-    if hyperlinks and v["ref"]:
-        linked = _hyperlink(v["ref"], v["reason"])
-        return f"{v['prefix']}: {linked}" if v["prefix"] else linked
-    return _message_plain(v)
 
 
 def _rule_target(rule):
@@ -744,15 +700,11 @@ def main():
     if decision == "ask" and input_kind == "bash" and _is_compound_command(input_text):
         decision, chosen = "deny", [_compound_escalation()] + chosen
 
-    # Log the canonical plain text; render hyperlinks only in the prompt.
-    _log_event(data, input_kind, input_text, decision, [_message_plain(v) for v in chosen])
+    messages = [_message_plain(v) for v in chosen]
+    _log_event(data, input_kind, input_text, decision, messages)
 
     if decision != "allow":
-        # Only the ask prompt renders OSC 8: Claude Code's error renderer (the
-        # deny path) strips the escape without making it clickable, which would
-        # drop the ref entirely. So deny keeps the plain `— <url>` form.
-        hyperlinks = decision == "ask" and _hyperlinks_enabled()
-        reason = "\n".join(_message_display(v, hyperlinks) for v in chosen)
+        reason = "\n".join(messages)
         # Claude Code tags ask prompts with the source plugin but leaves deny
         # errors unattributed, so append the tag ourselves on the deny path to
         # match — the user should always see which plugin made the call.

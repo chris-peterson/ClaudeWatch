@@ -44,7 +44,7 @@ t "rm -rf cache dir"    allow '{"tool_name":"Bash","tool_input":{"command":"rm -
 t "rm -rf /tmp"         allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/build-output"}}'
 t "rm -r /var/tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"rm -r /var/tmp/stale-dir"}}'
 
-echo "--- is_relative_to_cwd: in-tree recursive deletes allowed ---"
+echo "--- is_in_project_tree: in-tree recursive deletes allowed ---"
 t "rm -r in-tree relative"       allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r old-dir"}}'
 t "rm -rf in-tree relative dir"  allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -rf src/legacy"}}'
 t "rm -r in-tree dotted path"    allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r ./build"}}'
@@ -52,7 +52,7 @@ t "rm -rf in-tree absolute"      allow '{"tool_name":"Bash","cwd":"/work/repo","
 t "rm -r quoted in-tree path"    allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r \"my dir\""}}'
 t "rm -r multiple in-tree"       allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r a b c"}}'
 
-echo "--- is_relative_to_cwd: out-of-tree / unresolvable still prompts ---"
+echo "--- is_in_project_tree: out-of-tree / unresolvable still prompts ---"
 t "rm -r out-of-tree absolute"   ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r /etc/foo"}}'
 t "rm -r parent escape"          ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r ../sibling"}}'
 t "rm -rf home path"             ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -rf ~/Downloads/x"}}'
@@ -65,7 +65,33 @@ t "rm -r mixed in/out tree"      ask   '{"tool_name":"Bash","cwd":"/work/repo","
 t "rm -r in-tree, no cwd"        ask   '{"tool_name":"Bash","tool_input":{"command":"rm -r old-dir"}}'
 t "rm -r escape via subpath .."  ask   '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r src/../../etc"}}'
 
-echo "--- is_relative_to_cwd: compound in-tree delete escalates to block ---"
+echo "--- is_in_project_tree: project root anchors when cwd has moved ---"
+export CLAUDE_PROJECT_DIR=/work/repo
+t "rm -rf project-root absolute" allow '{"tool_name":"Bash","cwd":"/scratch/pad","tool_input":{"command":"rm -rf /work/repo/build"}}'
+t "rm -r project root itself"    ask   '{"tool_name":"Bash","cwd":"/scratch/pad","tool_input":{"command":"rm -rf /work/repo"}}'
+t "rm -rf .git under project"    ask   '{"tool_name":"Bash","cwd":"/scratch/pad","tool_input":{"command":"rm -rf /work/repo/.git"}}'
+t "rm -r outside both roots"     ask   '{"tool_name":"Bash","cwd":"/scratch/pad","tool_input":{"command":"rm -r /etc/foo"}}'
+unset CLAUDE_PROJECT_DIR
+export CLAUDE_PROJECT_DIR=/
+t "rm -rf project root is /"     ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /etc/foo"}}'
+unset CLAUDE_PROJECT_DIR
+
+echo "--- is_ephemeral_scratch: regenerable tool output allowed from any cwd ---"
+t "rm -rf playwright scratch"    allow '{"tool_name":"Bash","cwd":"/somewhere/else","tool_input":{"command":"rm -rf /work/repo/.playwright-mcp"}}'
+t "rm -rf scratch, no cwd"       allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf .playwright-mcp"}}'
+t "rm -r pycache"                allow '{"tool_name":"Bash","tool_input":{"command":"rm -r /work/repo/__pycache__"}}'
+t "rm -rf several scratch dirs"  allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf .pytest_cache .mypy_cache"}}'
+
+echo "--- is_ephemeral_scratch: anything else still prompts ---"
+t "rm -rf scratch plus source"   ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf .playwright-mcp /etc/foo"}}'
+t "rm -rf inside scratch dir"    ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /work/repo/.playwright-mcp/traces"}}'
+t "rm -rf scratch-like name"     ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /work/repo/playwright-mcp"}}'
+t "rm -rf scratch under glob"    ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf */.playwright-mcp"}}'
+
+echo "--- is_ephemeral_scratch: compound scratch delete escalates to block ---"
+t "rm -rf scratch chained"       block '{"tool_name":"Bash","tool_input":{"command":"rm -rf .playwright-mcp && echo done"}}'
+
+echo "--- is_in_project_tree: compound in-tree delete escalates to block ---"
 t "rm -r in-tree chained"        block '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r src && echo done"}}'
 
 echo "--- allow: safe operations ---"

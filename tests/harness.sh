@@ -12,6 +12,11 @@ RULES_DIR="$SCRIPT_DIR/../watches"
 # Disable it for the suite so rule tests don't pollute it; the logging tests
 # set CLAUDEWATCH_LOG per-invocation to override this.
 export CLAUDEWATCH_LOG=off
+# Claude Code exports CLAUDE_PROJECT_DIR to hook commands, and it anchors the
+# in-tree rm exemption ([RL-16]) — so running the suite from inside a session
+# would otherwise feed it a root the fixtures never asked for. Clear it here and
+# let the cases that exercise it export their own.
+unset CLAUDE_PROJECT_DIR
 PASS=0
 FAIL=0
 TOTAL=0

@@ -13,6 +13,10 @@ Supports three tool inputs:
   the on-disk file plus tool_input.old_string -> tool_input.new_string
   substitution (target: file-content rules)
 
+CLAUDE_PROJECT_DIR, which Claude Code exports to hook commands, is the only
+environment variable on the decision path: it bounds the in-tree `rm` exemption
+alongside the hook's own cwd (see `_exempt_roots`).
+
 Each decision is appended as a JSONL record to ~/.claude/claudewatch/decisions.jsonl
 by default — the side channel the /ClaudeWatch:learn workflow reads. Set
 CLAUDEWATCH_LOG to a path to log elsewhere, or to "off" (also 0/false/none/empty)
@@ -261,66 +265,162 @@ def _is_compound_command(command):
 # A path token whose on-disk location can't be resolved from the command text
 # alone: `~` (home, out of tree), `$` / backtick (unexpanded variable or command
 # substitution), `*?[` (glob), or a `..` segment (can escape the tree). A target
-# carrying any of these can't be proven in-tree, so the `is_relative_to_cwd`
+# carrying any of these can't be proven in-tree, so the `is_in_project_tree`
 # predicate declines and the ask stands.
 _UNRESOLVABLE_TARGET = re.compile(r"[~$`*?\[]|(?:^|/)\.\.(?:/|$)")
 
 
-def _targets_under_cwd(command, cwd):
-    """Whether every deletion target of an `rm` command resolves strictly under `cwd`.
+def _command_operands(command, program):
+    """The non-flag operands `program` was invoked with, or None if it wasn't.
 
-    Pure string analysis (no filesystem access) so the decision stays
-    deterministic. Backs the `is_relative_to_cwd` unless-condition: an in-tree
-    `rm -r` is recoverable from git history, so it need not prompt, while a
-    delete that reaches outside the working directory still does.
+    The engine hosts this rather than any one predicate because the syntax it
+    parses is POSIX utility convention — leading `VAR=value` assignments,
+    `sudo`, flags, the `--` terminator — not knowledge about `rm`. Which
+    program to look for is the caller's, so a predicate for a different
+    destructive tool reuses this instead of writing its own tokenizer and
+    drifting from these guards.
 
-    Returns False — decline the exemption, keep the ask — whenever in-tree-ness
-    can't be proven from the text: no cwd, a compound command, a parse failure,
-    a non-`rm` program, no targets, a target that is the working directory
-    itself or a `.git` directory, or any target carrying an unresolvable marker
-    (`~`, `$`, glob, `..`). Only an all-clear set of literal paths strictly
-    under cwd returns True. The working directory itself and any `.git`
-    directory are excluded because the git-history safety net the exemption
-    relies on does not cover wiping the whole tree or its history.
+    Returns None when no operands can be attributed: a compound command, a
+    parse failure, a different program, or an invocation with no operands.
     """
-    if not cwd:
-        return False
     # A compound command is handled by the ask->deny escalation ([OUT-08]); don't
-    # let the exemption pre-empt that, and don't try to reason about which tokens
+    # let an exemption pre-empt that, and don't try to reason about which tokens
     # belong to which segment.
     if _is_compound_command(command):
-        return False
+        return None
     try:
         tokens = shlex.split(command)
     except ValueError:
-        return False
+        return None
     # Skip leading `VAR=value` assignments and `sudo` to reach the program.
     i = 0
     while i < len(tokens) and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[i]) or tokens[i] == "sudo"):
         i += 1
-    if i >= len(tokens) or os.path.basename(tokens[i]) != "rm":
-        return False
+    if i >= len(tokens) or os.path.basename(tokens[i]) != program:
+        return None
 
-    targets = []
+    operands = []
     after_ddash = False
     for tok in tokens[i + 1:]:
         if not after_ddash and tok == "--":
             after_ddash = True
             continue
         if not after_ddash and tok.startswith("-"):
-            continue  # a flag, not a target
-        targets.append(tok)
+            continue  # a flag, not an operand
+        operands.append(tok)
+    return operands or None
+
+
+def _rm_targets(command):
+    """The deletion targets of a plain `rm`, or None when the command isn't one."""
+    return _command_operands(command, "rm")
+
+
+def _exempt_roots(cwd):
+    """The roots a delete may be confined to: the working directory and the project root.
+
+    `cwd` follows the session's shell, so it drifts out of the repo the moment
+    the session `cd`s into a scratch directory — and an in-repo delete issued
+    from there is no less recoverable for it. `CLAUDE_PROJECT_DIR` is the
+    project root Claude Code exports to hook commands, so it holds still while
+    `cwd` moves. Reading it keeps the decision deterministic in the sense the
+    core contract means: a per-invocation input supplied by the host, resolved
+    as a string, with no clock, network, or filesystem access.
+
+    `/` and the user's home directory are rejected as roots — a delete anywhere
+    beneath either is not what "confined to the working tree" is meant to cover.
+    """
+    home = os.path.normpath(os.path.expanduser("~"))
+    roots = []
+    for raw in (cwd, os.environ.get("CLAUDE_PROJECT_DIR")):
+        if not raw:
+            continue
+        root = os.path.normpath(raw)
+        if root in (os.sep, home) or not os.path.isabs(root):
+            continue
+        if root not in roots:
+            roots.append(root)
+    return roots
+
+
+def _targets_under_cwd(command, cwd):
+    """Whether every deletion target of an `rm` command resolves strictly under an exempt root.
+
+    Pure string analysis (no filesystem access) so the decision stays
+    deterministic. Backs the `is_in_project_tree` unless-condition: an in-tree
+    `rm -r` is recoverable from git history, so it need not prompt, while a
+    delete that reaches outside the tree still does. The roots are the hook's
+    `cwd` and the project root (see `_exempt_roots`); relative targets resolve
+    against `cwd`, the only root the shell itself would use.
+
+    Returns False — decline the exemption, keep the ask — whenever in-tree-ness
+    can't be proven from the text: no usable root, no attributable targets, a
+    target that is a root itself or a `.git` directory, or any target carrying
+    an unresolvable marker (`~`, `$`, glob, `..`). Only an all-clear set of
+    literal paths strictly under a root returns True. A root itself and any
+    `.git` directory are excluded because the git-history safety net the
+    exemption relies on does not cover wiping the whole tree or its history.
+    """
+    roots = _exempt_roots(cwd)
+    if not roots:
+        return False
+    targets = _rm_targets(command)
     if not targets:
         return False
 
-    cwd_norm = os.path.normpath(cwd)
+    # Relative targets are resolved by the shell against cwd, so only cwd can
+    # resolve them; an absolute target may sit under either root.
+    base = os.path.normpath(cwd) if cwd else None
     for tok in targets:
         if _UNRESOLVABLE_TARGET.search(tok):
             return False
-        resolved = os.path.normpath(tok if os.path.isabs(tok) else os.path.join(cwd_norm, tok))
-        if resolved == cwd_norm or not resolved.startswith(cwd_norm + os.sep):
+        if os.path.isabs(tok):
+            resolved = os.path.normpath(tok)
+        elif base:
+            resolved = os.path.normpath(os.path.join(base, tok))
+        else:
             return False
-        if ".git" in os.path.relpath(resolved, cwd_norm).split(os.sep):
+        for root in roots:
+            if resolved != root and resolved.startswith(root + os.sep) \
+                    and ".git" not in os.path.relpath(resolved, root).split(os.sep):
+                break
+        else:
+            return False
+    return True
+
+
+# Directories a tool writes and can write again: deleting one loses nothing that
+# isn't reproduced by re-running the tool, wherever on disk it sits. Names only —
+# a path *inside* one of these is not itself exempt, so the exemption can't be
+# widened by appending a subdirectory.
+_EPHEMERAL_SCRATCH_DIRS = frozenset((
+    ".playwright-mcp",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+))
+
+
+def _targets_are_ephemeral_scratch(command, cwd):
+    """Whether every deletion target of an `rm` command names a regenerable tool directory.
+
+    Backs the `is_ephemeral_scratch` unless-condition. Unlike
+    `is_in_project_tree` this ignores where the target sits — the premise is the
+    directory's *identity*, not its location, so a session that has `cd`'d
+    elsewhere still clears its own build cache without a prompt.
+
+    Matches on the final path segment against `_EPHEMERAL_SCRATCH_DIRS`, and
+    declines on the same unresolvable markers the in-tree predicate rejects, so
+    a glob or variable can never stand in for the name.
+    """
+    targets = _rm_targets(command)
+    if not targets:
+        return False
+    for tok in targets:
+        if _UNRESOLVABLE_TARGET.search(tok):
+            return False
+        if os.path.basename(os.path.normpath(tok)) not in _EPHEMERAL_SCRATCH_DIRS:
             return False
     return True
 
@@ -330,7 +430,8 @@ def _targets_under_cwd(command, cwd):
 # skipped. Keep this the single registry of valid condition names — an unknown
 # name surfaces as a config-error deny rather than silently never matching.
 _PREDICATES = {
-    "is_relative_to_cwd": _targets_under_cwd,
+    "is_in_project_tree": _targets_under_cwd,
+    "is_ephemeral_scratch": _targets_are_ephemeral_scratch,
 }
 
 
@@ -381,7 +482,7 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
     input_kind is "bash" or "file-content". input_text is the string to match
     against. file_extension is the lowercase extension (including the dot) of
     the target file, used to filter rule sets for file-content inputs. cwd is
-    the working directory from the hook input, used by the `is_relative_to_cwd`
+    the working directory from the hook input, used by the `is_in_project_tree`
     unless-condition to tell in-tree deletes from out-of-tree ones.
 
     Returns (blocks, asks) — lists of violation dicts (see `_violation`).

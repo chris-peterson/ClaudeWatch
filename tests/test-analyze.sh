@@ -107,6 +107,31 @@ else
   FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: CLAUDEWATCH_LOG=off reports logging disabled (got: ${OFFERR:-none})"
 fi
 
+echo "--- Bash and Monitor candidates are proposed per tool ---"
+# The same shell command reaching the host through Bash and through Monitor needs
+# two different permission rules, so candidates group per tool and a Bash allow
+# rule does not suppress the Monitor one.
+MLOG="$TMP/monitor.jsonl"
+MSETTINGS="$TMP/monitor-settings.json"
+cat > "$MSETTINGS" <<'EOF'
+{"permissions":{"allow":["Bash(gh pr checks:*)"]}}
+EOF
+cat > "$MLOG" <<'EOF'
+{"schema":2}
+{"ts":"2026-05-31T11:00:00+00:00","decision":"allow","tool":"Bash","command_shape":"gh pr checks","cwd":"/a"}
+{"ts":"2026-05-31T11:01:00+00:00","decision":"allow","tool":"Bash","command_shape":"gh pr checks","cwd":"/a"}
+{"ts":"2026-05-31T11:02:00+00:00","decision":"allow","tool":"Monitor","command_shape":"gh pr checks","cwd":"/a"}
+{"ts":"2026-05-31T11:03:00+00:00","decision":"allow","tool":"Monitor","command_shape":"gh pr checks","cwd":"/a"}
+EOF
+python3 "$ANALYZE" --log "$MLOG" --settings "$MSETTINGS" --min-count 2 > "$OUT" 2>/dev/null
+assert_json "the allow-listed Bash shape is suppressed" \
+  "all(not (c['tool']=='Bash' and c['shape']=='gh pr checks') for c in d['allow_candidates'])"
+assert_json "the same shape via Monitor is still proposed" \
+  "any(c['tool']=='Monitor' and c['shape']=='gh pr checks' and c['count']==2 for c in d['allow_candidates'])"
+assert_json "the Monitor candidate suggests a Monitor rule" \
+  "any(c['suggested_allow']=='Monitor(gh pr checks:*)' for c in d['allow_candidates'])"
+rm -f "$MLOG" "$MSETTINGS"
+
 rm -f "$LOG" "$SETTINGS" "$OUT"
 rmdir "$TMP" 2>/dev/null || true
 

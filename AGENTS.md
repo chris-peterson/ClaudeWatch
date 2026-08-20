@@ -7,8 +7,9 @@ non-trivial changes.
 
 ## What ClaudeWatch is
 
-A Claude Code plugin that wraps every Bash invocation in a `PreToolUse` hook
-and applies regex-based safety rules. The core safety advantage over Claude
+A Claude Code plugin that wraps every shell invocation — `Bash` and `Monitor`,
+which runs its command in the same shell — in a `PreToolUse` hook and applies
+regex-based safety rules. The core safety advantage over Claude
 Code's built-in deny rules is that patterns match **anywhere** in the command
 string (`re.search()`), so compound commands (`git add . && git push --force`),
 heredocs, and reordered flags are not bypassable by syntactic tricks.

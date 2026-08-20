@@ -1,9 +1,9 @@
 # Source of record for ClaudeWatch's hooks — shipyard generates hooks.json.
 hooks:
   - event: PreToolUse
-    matcher: Bash
+    matcher: Bash|Monitor
     command: 'python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches'
-    description: Screens the shell command against the watch rules before it runs.
+    description: Screens the shell command against the watch rules before it runs. Monitor is included because it runs its command in the same shell as Bash.
   - event: PreToolUse
     matcher: Write|Edit
     command: 'python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches'

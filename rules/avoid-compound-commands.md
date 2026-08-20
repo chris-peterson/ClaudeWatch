@@ -15,3 +15,9 @@ you nothing. When you need a value from one command in the next, run the first,
 read its result, then use it in a second call. Pipes between plainly-safe
 commands (`grep … | head`) stay fine — the escalation fires only when a guarded
 command is in the chain.
+
+The same applies to a `Monitor` command, which runs in the same shell and is
+screened the same way. A watch loop is compound by construction, so a guarded
+command inside one is escalated too — and it would run unattended, repeatedly,
+on a single approval. Keep monitors to the watching (`tail -f … | grep`, a
+status poll) and run the consequential step yourself as its own Bash call.

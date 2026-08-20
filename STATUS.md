@@ -6,7 +6,7 @@ the spec is revised.
 
 **Last audit:** 2026-06-22
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 85/85 normative requirements (100%) + 3 deferred targets (FUT-01..FUT-03).
+**Coverage:** 84/84 normative requirements (100%) + 3 deferred targets (FUT-01..FUT-03).
 FUT-04..FUT-06 are deferred-discussion notes (rule-edit durability across upgrades,
 repo-scoped git trust, per-repo self-marketplace), not numbered targets.
 
@@ -26,7 +26,8 @@ spot; broader clusters cite the file and its tests.
 | LOG-01..LOG-06 | Decision logging side channel: on by default (`CLAUDEWATCH_LOG=off` to opt out), records the command shape rather than the raw command, owner-only perms (0600/0700), schema-versioned header that discards pre-shape logs on upgrade | Covered | `scripts/watchdog.py` (`_log_event`, `command_shape`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | RL-01..RL-14 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
-| OUT-01..OUT-08 | Output decisions, formatting, aggregation, allow-by-default, ref hyperlinks (`CLAUDEWATCH_HYPERLINKS`), deny source tag, compound-command ask→deny escalation | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
+| OUT-01..OUT-05, OUT-07, OUT-08 | Output decisions, formatting, aggregation, allow-by-default, deny source tag, compound-command ask→deny escalation | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
+| OUT-06 | Ref rendered as an OSC 8 hyperlink *(retired in 0.18.0)* | Removed | Claude Code 2.1.235 replaces control characters in a hook's reason with U+FFFD |
 | HK-01 | PreToolUse hooks for Bash/Write/Edit | Covered | `hooks/hooks.json` |
 | HK-02 | SessionStart hook (no-op placeholder) | Covered | `hooks/hooks.json`, `hooks/cli-freshness.sh` |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |

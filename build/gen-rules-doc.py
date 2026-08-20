@@ -57,9 +57,10 @@ def unified_table(config):
 # Prompt-card styling, mimicking the Claude Code permission UI. Colors come
 # from the shared theme variables (Dracula palette) so the cards adapt to
 # light/dark mode — no hardcoded colors. Two shapes: an `ask` confirmation
-# prompt (purple top rule, blue reason link, Yes/No options) and a `block`
-# rejected-tool-result line (red bullet, red error with the plain `— <ref>`
-# URL and the `[plugin:ClaudeWatch]` tag, matching the engine's deny output).
+# prompt (purple top rule, Yes/No options) and a `block` rejected-tool-result
+# line (red bullet, red error plus the `[plugin:ClaudeWatch]` tag the engine
+# appends on deny). Both carry the canonical `— <ref>` URL; on the web page it
+# is clickable, which the terminal's plain text is not.
 PROMPT_STYLE = "\n".join([
     "<style>",
     ".cw-prompt {",
@@ -81,7 +82,7 @@ PROMPT_STYLE = "\n".join([
     ".cw-prompt-cmd { padding-left: 2ch; margin-top: 0.7em; color: var(--color-foreground); }",
     ".cw-prompt-hook { margin-top: 0.9em; color: var(--color-foreground); }",
     ".cw-prompt-msg { color: var(--color-foreground); }",
-    ".cw-prompt-msg a { color: var(--link-color); text-decoration: underline; }",
+    ".cw-prompt-msg a { color: inherit; text-decoration: underline; }",
     ".cw-prompt-attr { color: var(--color-comment); }",
     ".cw-prompt-q { margin-top: 0.9em; color: var(--color-foreground); }",
     ".cw-prompt-opts { color: var(--color-comment); }",
@@ -93,14 +94,14 @@ PROMPT_STYLE = "\n".join([
 ])
 
 
-def _reason_link(rule):
-    """The reason prose, linking to the rule's ref (the web equivalent of the
-    terminal's OSC 8 hyperlink). Plain text when the rule has no ref."""
+def _reason_with_ref(rule):
+    """The engine's canonical `<reason> — <ref>`, with the URL clickable."""
     reason = html.escape(rule["reason"])
     ref = rule.get("ref") or ""
-    if ref:
-        return f'<a href="{html.escape(ref)}" target="_blank" rel="noopener">{reason}</a>'
-    return reason
+    if not ref:
+        return reason
+    url = html.escape(ref)
+    return f'{reason} — <a href="{url}" target="_blank" rel="noopener">{url}</a>'
 
 
 def prompt_card(rule, section, extensions):
@@ -123,10 +124,9 @@ def prompt_card(rule, section, extensions):
         bullet_arg = name
 
     if section == "block":
-        # Mirror the engine's deny output: the plain `<name>: <reason> — <ref>`
-        # form (Claude Code's error renderer strips OSC 8, so the ref stays a
-        # bare URL rather than a hyperlink) plus the `[plugin:ClaudeWatch]` tag
-        # the engine appends so a blocked command still shows its source.
+        # Mirror the engine's deny output: `<name>: <reason> — <ref>` plus the
+        # `[plugin:ClaudeWatch]` tag the engine appends so a blocked command
+        # still shows its source.
         ref = rule.get("ref") or ""
         err = f"{name}: {reason}"
         if ref:
@@ -143,7 +143,7 @@ def prompt_card(rule, section, extensions):
         f'  <div class="cw-prompt-head">{head}</div>',
         f'  <div class="cw-prompt-cmd">{cmd}</div>',
         f'  <div class="cw-prompt-hook">Hook <strong>PreToolUse:{tool}</strong> requires confirmation for this command:</div>',
-        f'  <div class="cw-prompt-msg">{name}: {_reason_link(rule)} <span class="cw-prompt-dim">[plugin:ClaudeWatch]</span></div>',
+        f'  <div class="cw-prompt-msg">{name}: {_reason_with_ref(rule)} <span class="cw-prompt-dim">[plugin:ClaudeWatch]</span></div>',
         "  <div class=\"cw-prompt-attr\">Edit the plugin's hooks.json to update hooks</div>",
         '  <div class="cw-prompt-q">Do you want to proceed?</div>',
         '  <div class="cw-prompt-opts"><span class="cw-prompt-cursor">❯</span> 1. Yes\n  2. No</div>',
@@ -203,13 +203,10 @@ def main():
         "",
         "How each rule surfaces in Claude Code — an approximation, generated "
         "from the rule files in `watches/`. An **ask** rule pauses for your "
-        "confirmation before the command runs, with the reason linking to the "
-        "rule's reference. A **block** rule rejects the command outright: Claude "
+        "confirmation before the command runs and shows the reason with its "
+        "reference URL. A **block** rule rejects the command outright: Claude "
         "Code never prompts, and the rejected tool result shows the reason, the "
         "reference URL, and the source plugin.",
-        "",
-        "> [!TIP]",
-        "> In the confirmation prompt the reason prose is a clickable [OSC 8 hyperlink](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda) to the rule's reference; set `CLAUDEWATCH_HYPERLINKS=off` for the plain `— <url>` form. A blocked command's error always shows the plain URL — Claude Code's error display strips the hyperlink.",
         "",
         "\n\n".join(prompt_sections),
         "",

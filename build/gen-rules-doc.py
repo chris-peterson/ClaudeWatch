@@ -4,8 +4,13 @@
 shipyard's `build-docs` renders the standard pages (skills, prose rules, SPEC →
 spec.md, plugin-docs.json). This adds the two pages built from `watches/*.yml`
 that shipyard can't produce — the block/ask reference tables and the permission-
-prompt gallery. Run it after `shipyard build-docs`; both write into the `docs/`
-publish root.
+prompt gallery; both write into the `docs/` publish root.
+
+Run this BEFORE any shipyard command that renders or checks docs/ (`build-docs`,
+or `generate`, which calls it internally) — `docs/README.md` and
+`docs/_sidebar.md` link to `/rules` and `/prompts`, and shipyard link-checks the
+whole docs/ tree at the end of its own run. Those two pages have to already be
+on disk or the check fails them as dead links.
 """
 
 import html

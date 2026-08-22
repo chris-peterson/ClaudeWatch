@@ -1,3 +1,5 @@
+shipyard := "uvx --from 'git+https://github.com/chris-peterson/shipyard@v2' shipyard"
+
 default: test
 
 # run the unattended test suite
@@ -8,13 +10,13 @@ test:
 # read what the project job would commit, without keeping anything
 peek-projection:
     python3 build/gen-rules-doc.py
-    uvx --from 'git+https://github.com/chris-peterson/shipyard@v2' shipyard generate
+    {{shipyard}} generate
     git --no-pager diff --stat
 
-# render the docs site: shipyard's standard pages + the watches-derived rules/prompts
+# render the docs site: the watches-derived rules/prompts + shipyard's standard pages
 docs:
-    uvx --from 'git+https://github.com/chris-peterson/shipyard@v2' shipyard build-docs
     python3 build/gen-rules-doc.py
+    {{shipyard}} build-docs
 
 # preview the docs site locally
 docs-preview: docs

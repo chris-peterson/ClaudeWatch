@@ -346,50 +346,63 @@ def _exempt_roots(cwd):
     return roots
 
 
-def _targets_under_cwd(command, cwd):
-    """Whether every deletion target of an `rm` command resolves strictly under an exempt root.
+def _resolved_targets_in_tree(command, cwd):
+    """An `rm` command's targets as absolute paths, when all sit under an exempt root.
 
     Pure string analysis (no filesystem access) so the decision stays
-    deterministic. Backs the `is_in_project_tree` unless-condition: an in-tree
-    `rm -r` is recoverable from git history, so it need not prompt, while a
-    delete that reaches outside the tree still does. The roots are the hook's
-    `cwd` and the project root (see `_exempt_roots`); relative targets resolve
-    against `cwd`, the only root the shell itself would use.
+    deterministic. The roots are the hook's `cwd` and the project root (see
+    `_exempt_roots`); relative targets resolve against `cwd`, the only root the
+    shell itself would use.
 
-    Returns False — decline the exemption, keep the ask — whenever in-tree-ness
-    can't be proven from the text: no usable root, no attributable targets, a
-    target that is a root itself or a `.git` directory, or any target carrying
-    an unresolvable marker (`~`, `$`, glob, `..`). Only an all-clear set of
-    literal paths strictly under a root returns True. A root itself and any
-    `.git` directory are excluded because the git-history safety net the
-    exemption relies on does not cover wiping the whole tree or its history.
+    Returns None — nothing provable, so callers decline — whenever in-tree-ness
+    can't be established from the text: no usable root, no attributable
+    targets, a target that is a root itself or a `.git` directory, or any
+    target carrying an unresolvable marker (`~`, `$`, glob, `..`). A root
+    itself and any `.git` directory are excluded because the git-history safety
+    net the exemption relies on does not cover wiping the whole tree or its
+    history.
+
+    Returns the resolved paths rather than a verdict so `_targets_recoverable`
+    interrogates exactly what this proved in-tree.
     """
     roots = _exempt_roots(cwd)
     if not roots:
-        return False
+        return None
     targets = _rm_targets(command)
     if not targets:
-        return False
+        return None
 
     # Relative targets are resolved by the shell against cwd, so only cwd can
     # resolve them; an absolute target may sit under either root.
     base = os.path.normpath(cwd) if cwd else None
+    resolved_targets = []
     for tok in targets:
         if _UNRESOLVABLE_TARGET.search(tok):
-            return False
+            return None
         if os.path.isabs(tok):
             resolved = os.path.normpath(tok)
         elif base:
             resolved = os.path.normpath(os.path.join(base, tok))
         else:
-            return False
+            return None
         for root in roots:
             if resolved != root and resolved.startswith(root + os.sep) \
                     and ".git" not in os.path.relpath(resolved, root).split(os.sep):
                 break
         else:
-            return False
-    return True
+            return None
+        resolved_targets.append(resolved)
+    return resolved_targets
+
+
+def _targets_under_cwd(command, cwd):
+    """Whether an `rm` command's targets all sit under an exempt root ([RL-16]).
+
+    The in-tree premise — that git history can restore the delete — is assumed
+    here, not checked; `_targets_recoverable` is the opt-in variant that
+    verifies it.
+    """
+    return _resolved_targets_in_tree(command, cwd) is not None
 
 
 # Directories a tool writes and can write again: deleting one loses nothing that
@@ -428,6 +441,115 @@ def _targets_are_ephemeral_scratch(command, cwd):
     return True
 
 
+_PROBE_TIMEOUT = 3
+
+
+def _probe(argv):
+    """Run a read-only command and return its stdout, or None if it gave no answer.
+
+    None covers every way a check can fail to complete — the tool is absent, it
+    timed out, it exited non-zero — because callers treat them identically:
+    a check that cannot run never grants an exemption. Folding the exit status
+    into the return value is what keeps those call sites to one guard each.
+
+    `subprocess` is imported here rather than at module scope: only the opt-in
+    `is_recoverable` predicate reaches this, and the import costs several
+    milliseconds that every other hook invocation would otherwise pay.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(argv, capture_output=True, text=True, timeout=_PROBE_TIMEOUT)
+    except Exception:
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def _git(cwd, *args):
+    """Read-only git in `cwd` — stdout, or None if it gave no answer."""
+    return _probe(["git", "-C", cwd, *args])
+
+
+def _is_submodule(ls_files_stage_line):
+    """Whether a `git ls-files --stage` line describes a submodule.
+
+    Each line is `<mode> <sha> <stage>\t<path>`, and git records a submodule as
+    a "gitlink" — mode 160000, the one mode that points at another repository
+    rather than at content in this one. That matters here because a gitlink is
+    tracked, so it satisfies a tracked-ness check, while the work inside the
+    submodule is in a different repository that the superproject's commands
+    never look into.
+    """
+    return ls_files_stage_line.split()[:1] == ["160000"]
+
+
+def _git_recoverable(roots, targets):
+    """Whether git could restore every one of `targets` after a recursive delete.
+
+    Two questions, and the call count does not grow with the number of targets —
+    both commands take every target as pathspecs in one invocation. That matters
+    because this runs on the PreToolUse path, where each call is latency the user
+    waits through before their prompt appears.
+
+    1. Is every target tracked, and is none of them a submodule? `ls-files
+       --stage --error-unmatch` exits non-zero on the first pathspec matching no
+       tracked file — which also answers "is this a work tree at all", since it
+       fails the same way outside one — and `--stage` reports each entry's mode
+       in the same output, so a gitlink (`160000`) costs no extra call. A
+       submodule is declined rather than answered for: the superproject's index
+       records only which commit it points at, and neither of these commands
+       reaches inside it, so uncommitted work in there is invisible here.
+    2. Does any target hold content git would not bring back? `ls-files --others
+       --modified` lists, in one pass, files that are untracked, ignored (no
+       `--exclude-standard`), or tracked-but-edited. All three are lost with a
+       directory — a stray build artifact and an uncommitted edit alike — so any
+       of them means the delete is not recoverable.
+
+    `git` runs from the first root it recognizes, not from `cwd`. A target can be
+    proved in-tree via the project root while `cwd` sits somewhere else entirely
+    (see `_exempt_roots`), and asking `cwd`'s repo about a path it doesn't
+    contain answers the wrong question.
+
+    `ls-files` rather than `status`: status refreshes and rewrites `.git/index`,
+    taking `index.lock` on what is meant to be a read-only probe, and would race
+    a concurrent git operation in the user's own terminal.
+    """
+    for root in roots:
+        listing = _git(root, "ls-files", "--stage", "--error-unmatch", "--", *targets)
+        if listing is None:
+            continue
+        if any(_is_submodule(line) for line in listing.splitlines()):
+            return False
+        unrestorable = _git(root, "ls-files", "--others", "--modified", "--", *targets)
+        return unrestorable is not None and not unrestorable.strip()
+    return False
+
+
+def _targets_recoverable(command, cwd):
+    """Whether every deletion target is in-tree AND actually recoverable.
+
+    Backs the opt-in `is_recoverable` unless-condition ([RL-18]). Where
+    `is_in_project_tree` treats "under an exempt root" as standing in for
+    "recoverable from git history", this checks that directly — git must be
+    able to restore every target. Location is a proxy that fails exactly where
+    it matters: a workspace root grouping several checkouts is not itself a
+    repo, so a delete there has no history behind it.
+
+    Git is the only backend. A path some other tool could restore — a dotfile
+    manager's target, say — is not exempted here; `unless_regex` on the path is
+    how a rule set expresses a known-safe location it knows about and the
+    engine does not.
+
+    Scratch paths under `/tmp` and friends never reach here — `watch-files`
+    exempts them by `unless_regex` first, and requiring ephemeral space to be
+    version-controlled would defeat that exemption.
+    """
+    targets = _resolved_targets_in_tree(command, cwd)
+    if targets is None:
+        return False
+    return _git_recoverable(_exempt_roots(cwd), targets)
+
+
 # Named predicates an `unless_condition` entry can reference. Each takes the bash
 # command and the hook's `cwd` and returns True when the rule's ask should be
 # skipped. Keep this the single registry of valid condition names — an unknown
@@ -435,6 +557,7 @@ def _targets_are_ephemeral_scratch(command, cwd):
 _PREDICATES = {
     "is_in_project_tree": _targets_under_cwd,
     "is_ephemeral_scratch": _targets_are_ephemeral_scratch,
+    "is_recoverable": _targets_recoverable,
 }
 
 

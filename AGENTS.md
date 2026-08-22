@@ -16,15 +16,21 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 
 ## Core contracts (don't break these)
 
-1. **Determinism.** Given the same command, the same `cwd` and project root, and
-   the same `watches/` tree, the engine must always produce the same *decision*.
+1. **Determinism.** Given the same command, the same `cwd` and project root, the
+   same `watches/` tree, and the same on-disk state of the paths those name, the
+   engine must always produce the same *decision*.
    No clocks, no randomness, no network on the decision path. `cwd` and
    `CLAUDE_PROJECT_DIR` enter the decision only as the deterministic per-invocation
    inputs the `is_in_project_tree` predicate ([RL-15], [RL-16]) resolves `rm`
    targets against — pure string work, no filesystem access. `CLAUDE_PROJECT_DIR`
-   is the one environment variable on the decision path; the others
-   (`CLAUDEWATCH_LOG`, `CLAUDEWATCH_HYPERLINKS`) govern side channels and
-   presentation only. Decision logging (on by default, see
+   is the one environment variable on the decision path; `CLAUDEWATCH_LOG`
+   governs a side channel only. The one predicate that does read the filesystem
+   is `is_recoverable` ([RL-18]), which asks git whether a delete target could
+   be restored — a question with no textual answer. Its calls are
+   read-only, bounded, and fail closed, so the decision stays a function of the
+   command, the roots, and the on-disk state those name; a *second* predicate
+   wanting filesystem access is a spec change, not a local call.
+   Decision logging (on by default, see
    [LOG-01]–[LOG-04]; `CLAUDEWATCH_LOG=off` opts out) is a side channel: it
    stamps a timestamp and writes a file *after* the decision is computed, never
    feeding back into it. Keep it that way — the clock stays in `_log_event`, not

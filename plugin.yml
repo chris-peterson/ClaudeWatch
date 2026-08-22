@@ -1,6 +1,7 @@
 # Canonical descriptor for the ClaudeWatch plugin — edit here, never plugin.json.
-# Projects into .claude-plugin/plugin.json (via scripts/gen-plugin-json.py) and
-# the marketplace SPA (the suite: block). Schema: suite/plugin.schema.md.
+# CI's project job (.github/workflows/project.yml) projects this into
+# .claude-plugin/plugin.json and the marketplace SPA (the suite: block).
+# Schema: suite/plugin.schema.md.
 
 # Intentionally PascalCase, not the kebab-case convention: the name is
 # load-bearing in the command namespace (/ClaudeWatch:rules, /ClaudeWatch:learn)

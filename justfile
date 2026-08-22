@@ -4,31 +4,20 @@ default: test
 test:
     bash tests/test-watchdog.sh
 
-# regenerate all generated artifacts: shipyard projection + the watches-derived docs pages
-generate:
-    scripts/shipyard generate
-    python3 build/gen-rules-doc.py
-
-# validate source projects cleanly and preview the pending projection (no write)
-check:
-    scripts/shipyard generate --dry-run
+# CI is the only writer of the projection; `git restore .` discards this.
+# read what the project job would commit, without keeping anything
+peek-projection:
+    uvx --from 'git+https://github.com/chris-peterson/shipyard@v2' shipyard generate
+    git --no-pager diff --stat
 
 # render the docs site: shipyard's standard pages + the watches-derived rules/prompts
 docs:
-    scripts/shipyard build-docs
+    uvx --from 'git+https://github.com/chris-peterson/shipyard@v2' shipyard build-docs
     python3 build/gen-rules-doc.py
 
 # preview the docs site locally
 docs-preview: docs
     npx docsify-cli serve docs --open
-
-# regenerate .claude-plugin/plugin.json from plugin.yml (the canonical descriptor)
-plugin-json:
-    scripts/shipyard gen-plugin-json
-
-# resync plugin.yml suite.describe from the skills/rules/hooks sources
-describe:
-    scripts/shipyard gen-describe
 
 # launch an interactive session with the local plugin loaded
 try:

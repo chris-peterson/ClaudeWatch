@@ -35,7 +35,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: chris-peterson/shipyard
-          ref: v1
+          ref: v2
           path: .shipyard
       - uses: actions/configure-pages@v6
       - uses: actions/setup-python@v6

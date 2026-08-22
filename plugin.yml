@@ -8,7 +8,7 @@
 # and the pages URL, so renaming would break installed references. Accepted
 # convention exception — not a finding to re-raise.
 name: ClaudeWatch
-version: 0.17.2
+version: 0.18.0
 description: PreToolUse hook that screens shell commands and the code Claude writes to disk for safety, via 'claude-watchdog'
 author: chris-peterson
 repository: https://github.com/chris-peterson/ClaudeWatch

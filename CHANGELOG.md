@@ -1,5 +1,44 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- The `is_relative_to_cwd` unless-condition is now `is_in_project_tree`. A
+  custom rule set still naming the old one config-error **denies** every command
+  its rule matches, so rename it in your `watches/*.yml`.
+
+### Features
+
+- `Monitor` commands are screened against the same rules as `Bash` — it runs its
+  command in the same shell, so a guarded command in a watch loop is caught
+  rather than running unattended on one approval.
+- `rm -rf` on a regenerable tool directory — `__pycache__`, `.pytest_cache`,
+  `.mypy_cache`, `.ruff_cache`, `.playwright-mcp` — no longer prompts, wherever
+  on disk it sits. Names only: a path *inside* one is not exempt.
+- The in-tree `rm` exemption honors `CLAUDE_PROJECT_DIR` alongside the working
+  directory, so an in-repo delete still skips the prompt after the session has
+  `cd`'d into a scratch directory.
+- Rule authors get an opt-in `is_recoverable` condition, which asks git whether
+  it can actually restore the targets instead of trusting where they sit — a
+  workspace root grouping several checkouts is not itself a repo, and a delete
+  there has no history behind it.
+
+### Fixes
+
+- Permission prompts show the rule reference as plain text. Claude Code 2.1.235
+  routes the prompt's reason through a sanitizer that maps control characters to
+  U+FFFD, so the terminal-hyperlink escape reached the dialog as a literal
+  `]8;;<url>` wrapped in replacement characters
+  ([#22](https://github.com/chris-peterson/ClaudeWatch/issues/22)).
+
+### Other
+
+- Build and CI run on shipyard v2: `plugin.json`, `hooks.json`, and the docs
+  site are projected from `plugin.yml` and `hooks/hooks.yml` by CI, and `SPEC.md`
+  is published at `/spec`.
+- The `cli-freshness` SessionStart hook is retired.
+
 ## 0.17.2
 
 Plugin metadata and skill-hygiene fixes from a plugin-dev best-practices scan.

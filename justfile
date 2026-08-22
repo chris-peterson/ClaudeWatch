@@ -9,17 +9,16 @@ test:
 # CI is the only writer of the projection; `git restore .` discards this.
 # read what the project job would commit, without keeping anything
 peek-projection:
-    python3 build/gen-rules-doc.py
     {{shipyard}} generate
     git --no-pager diff --stat
 
-# render the docs site: the watches-derived rules/prompts + shipyard's standard pages
+# plugin.yml's docs: pre_render: has shipyard run gen-rules-doc.py itself first
+# render the docs site: shipyard's standard pages + the watches-derived rules/prompts
 docs:
-    python3 build/gen-rules-doc.py
     {{shipyard}} build-docs
 
 # preview the docs site locally
-docs-preview: docs
+preview-docs: docs
     npx docsify-cli serve docs --open
 
 # launch an interactive session with the local plugin loaded

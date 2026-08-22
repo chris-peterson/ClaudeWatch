@@ -67,3 +67,4 @@ suite:
 docs:
   code_languages: [bash, yaml, python]
   mermaid: false
+  pre_render: python3 build/gen-rules-doc.py

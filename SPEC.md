@@ -220,7 +220,7 @@ self-contained and removable by renaming its file to `*.yml.disabled`.
 - **[DEV-01]** `just test` shall run the full test suite via `tests/test-watchdog.sh`.
 - **[DEV-02]** The test suite shall exercise each shipped rule set independently and shall also exercise engine-level behavior (decision aggregation, error handling, file/directory rules paths).
 - **[DEV-03]** `just rules` shall launch an interactive Claude Code session with the local plugin loaded and the rules skill open.
-- **[DEV-04]** `just docs-preview` shall serve the generated docs locally for review.
+- **[DEV-04]** `just preview-docs` shall serve the generated docs locally for review.
 
 ## 12. Implementation Notes (non-normative)
 

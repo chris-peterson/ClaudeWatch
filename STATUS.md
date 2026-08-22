@@ -42,7 +42,7 @@ spot; broader clusters cite the file and its tests.
 | SH-02 | Filter regex on bash-target rule sets | Covered | All shipped `watches/*.yml` declaring `target: bash` rules |
 | SH-03 | `ref` URLs on rules | Covered | All shipped `watches/*.yml` |
 | SH-04 | Per-set test files | Covered | `tests/test-watch-*.sh` |
-| DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just docs-preview` | Covered | `justfile` + `tests/` |
+| DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just preview-docs` | Covered | `justfile` + `tests/` |
 
 ## Audit history
 

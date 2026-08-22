@@ -1,17 +1,5 @@
 name: Deploy docs
 
-# ClaudeWatch's docs are shipyard's standard rendered pages PLUS two pages
-# (rules.md, prompts.md) generated from watches/*.yml — the block/ask reference
-# tables and the permission-prompt gallery, which shipyard's build-docs can't
-# produce. So this can't use shipyard's reusable deploy-docs.yml (which runs
-# build-docs only): it renders the watches-derived pages, then the standard
-# ones, then publishes docs/.
-#
-# The watches-derived pages go first: build-docs link-checks the whole docs/
-# tree, including docs/README.md's and docs/_sidebar.md's links to /rules and
-# /prompts, which it doesn't render itself — those pages have to already be on
-# disk or the check fails them as dead links.
-
 on:
   push:
     branches: [main]
@@ -21,38 +9,6 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    env:
-      PYTHONPATH: .shipyard/src
-    steps:
-      - name: Check out the plugin
-        uses: actions/checkout@v6
-      - name: Check out shipyard tooling
-        uses: actions/checkout@v6
-        with:
-          repository: chris-peterson/shipyard
-          ref: v2
-          path: .shipyard
-      - uses: actions/configure-pages@v6
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-      - run: pip install pyyaml
-      - name: Render the watches-derived rules/prompts pages
-        run: python3 build/gen-rules-doc.py
-      - name: Render standard docs from source
-        run: python3 -m shipyard build-docs
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: docs
-      - id: deployment
-        uses: actions/deploy-pages@v5
+    uses: chris-peterson/shipyard/.github/workflows/deploy-docs.yml@v2

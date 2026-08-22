@@ -1,16 +1,32 @@
 name: Release
 
-# Delegates to shipyard's reusable release workflow (float to @actions during
-# consolidation). secrets: inherit passes MARKETPLACE_DISPATCH_TOKEN through.
+# Delegates to shipyard's reusable release workflow. secrets: inherit passes
+# MARKETPLACE_DISPATCH_TOKEN through.
+#
+# The bump level is the only input: shipyard derives the version from
+# plugin.yml, retitles CHANGELOG.md's `## Unreleased` section to it, commits,
+# and tags *that* commit — so plugin.json at the tag reports the version the
+# tag names.
+#
+# Write the notes before dispatching. Reading what landed is what tells you
+# the bump, so the notes and the level are one judgment:
+#   git log $(git describe --tags --abbrev=0)..main --no-merges
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: How far to advance the version
+        required: true
+        type: choice
+        options: [patch, minor, major]
 
 permissions:
   contents: write
 
 jobs:
   release:
-    uses: chris-peterson/shipyard/.github/workflows/release.yml@v1
+    uses: chris-peterson/shipyard/.github/workflows/release.yml@v2
+    with:
+      bump: ${{ inputs.bump }}
     secrets: inherit

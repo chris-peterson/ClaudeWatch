@@ -1,0 +1,32 @@
+name: Project
+
+# Every generated artifact has one writer, and it is this job. shipyard's
+# project action regenerates plugin.json, hooks.json, and plugin.yml's
+# suite.describe block from their sources and commits the result to the
+# branch, so a committed artifact matches its source at all times and the
+# diff a reviewer approves is the change that lands.
+#
+# plugin.yml's docs: pre_render: tells shipyard to run gen-rules-doc.py itself
+# before its own build-docs pass, so the /rules and /prompts pages it doesn't
+# render are on disk before its link check runs.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  project:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The default pull_request checkout leaves a merge commit in
+          # detached HEAD, and there is no branch there to push a projection to.
+          ref: ${{ github.head_ref }}
+
+      - uses: chris-peterson/shipyard/actions/project@v2

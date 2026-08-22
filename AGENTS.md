@@ -46,7 +46,8 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
    built-in YAML parser), so the plugin installs cleanly and evaluates rules
    fast in any environment Claude Code runs in — no pip step on the hot path.
    Build- and release-time tooling that never runs on the decision path (e.g.
-   `scripts/gen-plugin-json.py`) may use PyYAML; it runs only in dev and CI.
+   shipyard's `gen-plugin-json`, run by CI's project job) may use PyYAML; it
+   never runs in the hook.
 5. **Allow-by-default.** When no rule matches, the engine produces no stdout
    output. Silence is allow.
 
@@ -128,46 +129,62 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 ## plugin.yml is canonical
 
 `plugin.yml` (repo root) is the single source of truth for the plugin's
-descriptor. `.claude-plugin/plugin.json` is **generated** from it by
-[`scripts/gen-plugin-json.py`](scripts/gen-plugin-json.py) (`just plugin-json`) — don't hand-edit
-`plugin.json`. The `suite:` block also feeds the bridge.ai marketplace SPA.
-Run `just generate` after editing `plugin.yml` to refresh the projection, and
-`just check` to confirm the committed artifacts still match their source.
+descriptor. `.claude-plugin/plugin.json` is **generated** from it — don't
+hand-edit `plugin.json`. The `suite:` block also feeds the bridge.ai
+marketplace SPA.
 
-**Nothing blocks a stale `plugin.json` from landing on `main`.** The Preview
-workflow (`.github/workflows/preview.yml`) runs `shipyard generate --dry-run` on
-every pull request, but that command prints the pending projection as a diff and
-exits 0 — it reports drift, it does not fail on it. Read that step's output when
-a change touches `plugin.yml`, `skills/`, `rules/`, or `hooks/`; a diff there
-means someone skipped `just generate`.
+**CI is the only writer.** `.github/workflows/project.yml` runs shipyard's
+`project` action on every push, which regenerates `plugin.json`, `hooks.json`,
+and `plugin.yml`'s `suite.describe` block from their sources and commits the
+result straight back to the branch — so a committed artifact matches its
+source at all times, and the diff a reviewer approves is the change that
+lands. Editing `plugin.yml`, `hooks/hooks.yml`, a skill, or a rule needs no
+local regeneration step; push, and the projection job's commit is what shows
+up next.
 
-What is guaranteed is the *shipped* descriptor: `release.yml` regenerates
-`plugin.json` from `plugin.yml` when it cuts a release, so no release can ship a
-descriptor that disagrees with its source. The window is `main` between
-releases.
+To see what the projection job would write without keeping it — useful when
+debugging a red run — use `just peek-projection`, then `git restore .` to
+discard.
+
+`release.yml` resyncs the generated artifacts once more as a backstop when it
+cuts a release, so `plugin.json` at a release tag is current even on the rare
+run where the project job didn't land first.
 
 ## Releasing
 
-A release is cut by **creating a GitHub Release** with tag `v<version>` and the
-release notes in the body — that's the only manual step. The next release is
-`current + 1` (minor bump for features, patch for fixes).
+Releasing is one `workflow_dispatch` on `.github/workflows/release.yml` whose
+only input is the bump level (`patch`, `minor`, `major`).
 
-Publishing the Release triggers `.github/workflows/release.yml`, which:
+Write the notes before dispatching — reading what landed is what tells you the
+bump, so the two are one judgment:
 
-1. derives the version from the tag (`v0.13.3` → `0.13.3`),
-2. runs the test suite — a red gate stops the release before anything lands,
-3. writes the version into `plugin.yml`, regenerates `plugin.json`, and
-   proxies the release notes into a new `CHANGELOG.md` section,
-4. commits and pushes that to `main`, and
-5. notifies the bridge.ai marketplace to rebuild its catalog via
+```bash
+git log $(git describe --tags --abbrev=0)..main --no-merges
+```
+
+Commit that section under `## Unreleased` in `CHANGELOG.md`, then dispatch
+with the bump level the notes imply. A missing or empty `## Unreleased`
+section fails the run.
+
+Dispatching triggers shipyard's reusable release workflow, which:
+
+1. derives the next version from `plugin.yml`,
+2. retitles `CHANGELOG.md`'s `## Unreleased` section to that version,
+3. resyncs the generated artifacts as a backstop (the project job already
+   committed them when the source changed, so this ordinarily finds nothing to
+   resync),
+4. commits the bump, then tags that commit — so `plugin.json` at the tag
+   reports the version the tag names,
+5. publishes the GitHub Release from the section it just wrote, and
+6. notifies the bridge.ai marketplace to rebuild its catalog via
    `repository_dispatch`.
 
 `main` is always the latest released state, and `version` in `plugin.yml`
-stays the source of truth — but it's now *written by* the release from the tag
-rather than hand-edited. The chris-peterson marketplace tracks ClaudeWatch as
-an unpinned git source (default-branch HEAD), so step 4's push to `main` is the
-moment consumers see the update; the tag and the marketplace notify are not
-what `claude plugin update` reads.
+stays the source of truth — but it's now *written by* the release rather than
+hand-edited. The chris-peterson marketplace tracks ClaudeWatch as an unpinned
+git source (default-branch HEAD), so step 4's commit to `main` is the moment
+consumers see the update; the tag and the marketplace notify are not what
+`claude plugin update` reads.
 
 ## Known constraints (do not paper over)
 

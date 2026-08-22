@@ -7,6 +7,7 @@ test:
 # CI is the only writer of the projection; `git restore .` discards this.
 # read what the project job would commit, without keeping anything
 peek-projection:
+    python3 build/gen-rules-doc.py
     uvx --from 'git+https://github.com/chris-peterson/shipyard@v2' shipyard generate
     git --no-pager diff --stat
 

@@ -5,6 +5,11 @@ name: Project
 # suite.describe block from their sources and commits the result to the
 # branch, so a committed artifact matches its source at all times and the
 # diff a reviewer approves is the change that lands.
+#
+# generate's build-docs pass fails if a docs/ link resolves to no published
+# page — including docs/README.md's and docs/_sidebar.md's links to /rules
+# and /prompts, which shipyard doesn't render. Rendering those two first puts
+# them on disk (docs/ isn't committed either way) before that check runs.
 
 on:
   push:
@@ -24,5 +29,8 @@ jobs:
           # The default pull_request checkout leaves a merge commit in
           # detached HEAD, and there is no branch there to push a projection to.
           ref: ${{ github.head_ref }}
+
+      - name: Render the watches-derived docs pages build-docs can't produce
+        run: python3 build/gen-rules-doc.py
 
       - uses: chris-peterson/shipyard/actions/project@v2

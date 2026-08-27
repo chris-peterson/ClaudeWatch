@@ -56,6 +56,14 @@ sys.exit(0 if ($expr) else 1)
   fi
 }
 
+analyze_case() {
+  local name="$1" settings="$2"   # log lines on stdin
+  printf '%s\n' "$settings" > "$TMP/$name-settings.json"
+  cat > "$TMP/$name.jsonl"
+  python3 "$ANALYZE" --log "$TMP/$name.jsonl" --settings "$TMP/$name-settings.json" \
+    --min-count 2 > "$OUT" 2>/dev/null
+}
+
 python3 "$ANALYZE" --log "$LOG" --settings "$SETTINGS" --min-count 2 > "$OUT" 2>/dev/null
 
 assert_json "gh pr view is an allow candidate (count 4)" \
@@ -132,7 +140,36 @@ assert_json "the Monitor candidate suggests a Monitor rule" \
   "any(c['suggested_allow']=='Monitor(gh pr checks:*)' for c in d['allow_candidates'])"
 rm -f "$MLOG" "$MSETTINGS"
 
-rm -f "$LOG" "$SETTINGS" "$OUT"
+echo "--- a rule whose wildcard sits mid-pattern suppresses nothing ---"
+# `Bash(git * main)` covers far less than the literal `git` it leads with, and
+# the reducer cannot tell which commands it does cover. Reducing it to `git`
+# would withhold every git candidate, so it contributes no literal instead.
+analyze_case wildcard '{"permissions":{"allow":["Bash(git * main)","Bash(bash *.claude/hooks/x.sh)"]}}' <<'EOF'
+{"schema":2}
+{"ts":"2026-05-31T12:00:00+00:00","decision":"allow","tool":"Bash","command_shape":"git status","cwd":"/a"}
+{"ts":"2026-05-31T12:01:00+00:00","decision":"allow","tool":"Bash","command_shape":"git status","cwd":"/a"}
+{"ts":"2026-05-31T12:02:00+00:00","decision":"allow","tool":"Bash","command_shape":"bash","cwd":"/a"}
+{"ts":"2026-05-31T12:03:00+00:00","decision":"allow","tool":"Bash","command_shape":"bash","cwd":"/a"}
+EOF
+assert_json "git status is proposed despite Bash(git * main)" \
+  "any(c['shape']=='git status' and c['count']==2 for c in d['allow_candidates'])"
+assert_json "bash is proposed despite Bash(bash *.claude/hooks/x.sh)" \
+  "any(c['shape']=='bash' and c['count']==2 for c in d['allow_candidates'])"
+
+echo "--- coverage lands on a token boundary ---"
+analyze_case boundary '{"permissions":{"allow":["Bash(git:*)"]}}' <<'EOF'
+{"schema":2}
+{"ts":"2026-05-31T13:00:00+00:00","decision":"allow","tool":"Bash","command_shape":"git status","cwd":"/a"}
+{"ts":"2026-05-31T13:01:00+00:00","decision":"allow","tool":"Bash","command_shape":"git status","cwd":"/a"}
+{"ts":"2026-05-31T13:02:00+00:00","decision":"allow","tool":"Bash","command_shape":"gitk","cwd":"/a"}
+{"ts":"2026-05-31T13:03:00+00:00","decision":"allow","tool":"Bash","command_shape":"gitk","cwd":"/a"}
+EOF
+assert_json "git status is suppressed by Bash(git:*)" \
+  "all(c['shape']!='git status' for c in d['allow_candidates'])"
+assert_json "gitk is proposed despite Bash(git:*)" \
+  "any(c['shape']=='gitk' and c['count']==2 for c in d['allow_candidates'])"
+
+rm -f "$TMP"/*
 rmdir "$TMP" 2>/dev/null || true
 
 print_results

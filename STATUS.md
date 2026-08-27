@@ -4,23 +4,23 @@ Tracking status of the requirements declared in [SPEC.md](SPEC.md). Updated
 whenever an audit (`/spec-audit`) is run, when implementation lands, or when
 the spec is revised.
 
-**Last audit:** 2026-08-20
+**Last audit:** 2026-08-27
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 86/86 normative requirements (100%).
+**Coverage:** 94/94 normative requirements (100%).
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
 for the contract, `scripts/watchdog.py` for engine behavior, and the per-set
 `tests/test-watch-*.sh` / `tests/test-engine.sh` for executable verification.
-Specific line numbers are given only where a single requirement pins to one
-spot; broader clusters cite the file and its tests.
+Each pointer names the file and its enclosing symbol; broader clusters cite
+the file and its tests.
 
 ## Status table
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
 | EN-01..EN-14 | Engine lifecycle, IO, tool dispatch (Bash, Monitor, Write, Edit), error handling | Covered | `scripts/watchdog.py` (`_resolve_input`) + `tests/test-engine.sh` |
-| EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.py:335` |
-| EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py:343-346` |
+| EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.py` (`main`) |
+| EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py` (`main`) |
 | LOG-01..LOG-06 | Decision logging side channel: on by default (`CLAUDEWATCH_LOG=off` to opt out), records the command shape rather than the raw command, owner-only perms (0600/0700), schema-versioned header that discards pre-shape logs on upgrade | Covered | `scripts/watchdog.py` (`_log_event`, `command_shape`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | RL-01..RL-18 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning, the `unless_condition`/`unless_regex` exemptions and their `is_in_project_tree` / `is_ephemeral_scratch` / `is_recoverable` predicates | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-watch-files.sh` |
@@ -33,7 +33,8 @@ spot; broader clusters cite the file and its tests.
 | EXT-01..EXT-03 | Auto-discovery, disable-by-rename, no-code-change | Covered | `scripts/watchdog.py`, `tests/test-engine.sh` |
 | SK-01 | `/ClaudeWatch:help` overview *(retired in 0.16.0)* | Removed | README + docs site |
 | SK-02..SK-12 | `/ClaudeWatch:rules` interactive editor | Covered | `skills/rules/SKILL.md` |
-| SK-13..SK-17 | `/ClaudeWatch:learn` decision-log analysis, allow candidates proposed per tool (`Bash(…)` vs `Monitor(…)`) | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` (`analyze`, `load_allow_prefixes`) + `tests/test-analyze.sh` |
+| SK-13..SK-17 | `/ClaudeWatch:learn` decision-log analysis, allow candidates proposed per tool (`Bash(…)` vs `Monitor(…)`) | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` (`analyze`, `load_allow_patterns`, `is_already_allowed`) + `tests/test-analyze.sh` |
+| SK-18, SK-19 | Window provenance on the analysis (records, sessions, span); post-apply log reset, archiving by default with `--hard` delete | Covered | `scripts/analyze-decisions.py` (`summarize_window`), `scripts/reset-decisions.py` + `tests/test-reset-decisions.sh` |
 | DOC-01, DOC-02, DOC-04, DOC-05 | Docsify site, `just docs` regen (rules + prompts pages), YAML schema reference | Covered | `docs/`, `SCHEMA.md`, `build/gen-rules-doc.py`, `justfile` |
 | DIST-01 | Expose install metadata in manifest | Covered | `.claude-plugin/plugin.json` (name, version, description, repository, license) — hosting/marketplace mechanism is out of scope per SPEC.md |
 | DIST-02 | `.claude-plugin/plugin.json` manifest | Covered | `.claude-plugin/plugin.json` |
@@ -45,6 +46,10 @@ spot; broader clusters cite the file and its tests.
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just preview-docs` | Covered | `justfile` + `tests/` |
 
 ## Audit history
+
+### 2026-08-27 — Coverage refresh (spec-status)
+
+STATUS.md updated: +2 IDs (SK-18 window provenance, SK-19 log reset), header count 86 → 94 — the stale header had been carried forward across four audits while the table already covered 92. The EN-04a and EN-05a pointers converted from line numbers to file+symbol; both had drifted onto unrelated code. The SK-14 evidence names `is_already_allowed`, the token-boundary coverage check.
 
 ### 2026-08-20 — Coverage refresh (spec-status)
 

@@ -18,7 +18,7 @@ Three buckets:
                         need is blocked.
 
 Read-only, stdlib-only, no network. The allow-pattern match is an approximate
-prefix check (Claude Code's own matcher is the source of truth); it exists only
+coverage check (Claude Code's own matcher is the source of truth); it exists only
 to avoid re-proposing commands you already allow.
 """
 
@@ -53,34 +53,44 @@ def parse_duration(text):
     return timedelta(**{DURATION_UNITS[m.group(2)]: int(m.group(1))})
 
 
-def load_allow_prefixes(settings_path):
-    """Return a list of (tool, prefix, raw_pattern) from settings.json allow rules.
+def load_allow_patterns(settings_path):
+    """Return a list of (tool, literal, open_ended) from settings.json allow rules.
 
-    Converts `Bash(git push:*)` / `Monitor(cat *)` into the literal prefix a
-    command must start with to be considered already-allowed. This is an
-    approximation of Claude Code's matcher, used only to suppress already-allowed
-    suggestions. The tool is carried through because the two rule families are
-    separate: a `Bash(…)` rule does not cover the same command via `Monitor`.
+    Reduces `Bash(git push:*)` / `Monitor(cat *)` to the literal a shape must
+    lead with, and a wildcard-free `Bash(git push)` to one it must equal. The
+    tool is carried through because the two rule families are separate: a
+    `Bash(…)` rule does not cover the same command via `Monitor`.
     """
     path = os.path.expanduser(settings_path)
     if not os.path.isfile(path):
         return []
     with open(path) as f:
         settings = json.load(f)
-    prefixes = []
+    patterns = []
     for rule in settings.get("permissions", {}).get("allow", []):
         m = re.fullmatch(r"(Bash|Monitor)\((.*)\)", rule)
         if not m:
             continue
-        inner = m.group(2)
-        prefix = re.split(r":\*|\*", inner, maxsplit=1)[0].rstrip()
-        prefixes.append((m.group(1), prefix, rule))
-    return prefixes
+        head, wildcard, tail = m.group(2).strip().partition("*")
+        # Pattern text after the wildcard (`Bash(git * main)`) constrains tokens
+        # the shape has already dropped, so nothing here can be compared against
+        # it. Contributing no literal errs toward proposing, per [SK-14].
+        if tail.strip():
+            continue
+        patterns.append((m.group(1), head.rstrip().rstrip(": "), bool(wildcard)))
+    return patterns
 
 
-def is_already_allowed(tool, command, allow_prefixes):
-    for rule_tool, prefix, _ in allow_prefixes:
-        if rule_tool == tool and prefix and command.startswith(prefix):
+def is_already_allowed(tool, shape, allow_patterns):
+    """True when an allow rule already covers this command shape.
+
+    `Bash(git:*)` covers `git status` and leaves `gitk` alone — a different
+    program the rule never named.
+    """
+    for rule_tool, literal, open_ended in allow_patterns:
+        if rule_tool != tool or not literal:
+            continue
+        if shape == literal or (open_ended and shape.startswith(literal + " ")):
             return True
     return False
 
@@ -142,7 +152,7 @@ def summarize_window(records):
     }
 
 
-def analyze(records, allow_prefixes, min_count, max_samples):
+def analyze(records, allow_patterns, min_count, max_samples):
     allow_groups = defaultdict(lambda: {"count": 0, "samples": [], "cwds": set(), "pattern": None, "auto": 0})
     ask_groups = defaultdict(lambda: {"count": 0, "samples": [], "reasons": set()})
     deny_groups = defaultdict(lambda: {"count": 0, "samples": []})
@@ -169,7 +179,7 @@ def analyze(records, allow_prefixes, min_count, max_samples):
             # must too — else a command like `FOO=1 echo …` shapes to `echo` but
             # its raw form doesn't start with the `echo` prefix and gets wrongly
             # re-proposed despite `Bash(echo *)` already allowing it.
-            if is_already_allowed(tool, shape, allow_prefixes):
+            if is_already_allowed(tool, shape, allow_patterns):
                 continue
             g = allow_groups[(tool, shape)]
             g["count"] += 1
@@ -277,8 +287,8 @@ def main():
             )
         sys.exit(2)
 
-    allow_prefixes = load_allow_prefixes(args.settings)
-    result = analyze(records, allow_prefixes, args.min_count, args.max_samples)
+    allow_patterns = load_allow_patterns(args.settings)
+    result = analyze(records, allow_patterns, args.min_count, args.max_samples)
     result["meta"] = {
         "log": os.path.expanduser(args.log),
         "records_considered": len(records),

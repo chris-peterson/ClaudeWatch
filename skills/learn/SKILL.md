@@ -164,9 +164,12 @@ caught while you weren't watching.
 
 ## Notes
 
-- The analyzer's allow-list match is an approximate prefix check; Claude Code's
+- The analyzer's allow-list match is an approximate coverage check; Claude Code's
   own matcher is the source of truth. Its only job is to avoid re-proposing
-  commands you already allow.
+  commands you already allow, so it errs toward proposing: a rule's literal
+  covers a command only on a token boundary (`Bash(git:*)` leaves `gitk` alone),
+  and a rule whose wildcard sits mid-pattern (`Bash(git * main)`) covers nothing
+  it can characterize, so it suppresses nothing.
 - `command_shape` groups by program plus its leading subcommand tokens, so
   `gh pr view` and `gh pr merge` are distinct candidates — promoting one does
   not silently allow the other.

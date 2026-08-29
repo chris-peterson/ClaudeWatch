@@ -6,9 +6,8 @@ default: test
 test:
     bash tests/test-watchdog.sh
 
-# CI is the only writer of the projection; `git restore .` discards this.
-# read what the project job would commit, without keeping anything
-peek-projection:
+# read what the projection job would commit, without keeping it; `git restore .` discards
+check:
     {{shipyard}} generate
     git --no-pager diff --stat
 

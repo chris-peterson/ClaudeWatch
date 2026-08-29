@@ -143,8 +143,7 @@ local regeneration step; push, and the projection job's commit is what shows
 up next.
 
 To see what the projection job would write without keeping it — useful when
-debugging a red run — use `just peek-projection`, then `git restore .` to
-discard.
+debugging a red run — use `just check`, then `git restore .` to discard.
 
 `release.yml` resyncs the generated artifacts once more as a backstop when it
 cuts a release, so `plugin.json` at a release tag is current even on the rare

@@ -16,6 +16,22 @@ icon: docs/favicon.svg
 license: MIT
 keywords: [claude, watch, safety, permissions, guardrail, hook, watchdog, installs, git-guardian]
 
+validate:
+  accept:
+    - warning: root
+      path: CLAUDE.md
+      because: >-
+        CLAUDE.md at the root is this repo's own agent instructions, not context
+        the plugin ships. It imports AGENTS.md and adds the Claude Code
+        specifics: the local test commands and the hook's stdin/stdout protocol.
+    - warning: name
+      path: .claude-plugin/plugin.json
+      because: >-
+        Renaming would break every installed copy. The name is the
+        enabledPlugins key, the marketplace entry, and the cache path each
+        session loads from. Claude Code accepts it as it stands; only the
+        claude.ai marketplace sync requires kebab-case.
+
 # → marketplace.json entry
 marketplace:
   category: security

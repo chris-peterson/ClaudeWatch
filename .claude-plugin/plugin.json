@@ -6,7 +6,6 @@
     "name": "chris-peterson"
   },
   "repository": "https://github.com/chris-peterson/ClaudeWatch",
-  "icon": "docs/favicon.svg",
   "license": "MIT",
   "keywords": [
     "claude",

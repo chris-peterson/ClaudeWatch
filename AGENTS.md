@@ -196,6 +196,13 @@ consumers see the update; the tag and the marketplace notify are not what
   nothing more. Multi-line strings, anchors, and `!!tag` constructs are not
   supported. If you need them, that's a spec discussion, not a copy-paste of
   PyYAML.
+- **Word normalization ([EN-15]) reaches the spellings that survive as a
+  literal word**, not obfuscation in general. `"git" commit`, `g\it commit` and
+  `git "commit"` all resolve to `git commit` before matching; a word assembled
+  at runtime does not, because nothing in the command text says what it will
+  be — `C=git; $C commit` is the shape to expect. A shell has unbounded ways to
+  spell a word, so treat the rules as a guard against the destructive command
+  an agent writes plainly, not as a sandbox against one trying to get past it.
 
 ## Reading order for new contributors
 

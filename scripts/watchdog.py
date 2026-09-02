@@ -247,7 +247,102 @@ _QUOTED_SPAN = re.compile(r"'[^']*'|\"[^\"]*\"")
 # and `|&`), sequence `;` / newline, logical `&&`, and command substitution
 # `$(` / backtick. A lone `&` is intentionally absent — it appears in
 # redirections like `2>&1` and matching it would mis-flag a single command.
-_SHELL_COMPOUND = re.compile(r"\||;|\n|&&|\$\(|`")
+# A bare subshell `( … )` groups rather than separates, so it carries none of
+# those and is matched on its own: at the start of the command, or after a
+# separator. `& (` is safe to match where a lone `&` is not, since a
+# redirection is never followed by `(`. Restricting to command position leaves
+# a parenthesis inside an argument alone.
+_SHELL_COMPOUND = re.compile(r"\||;|\n|&&|\$\(|`|(?:^|[;&|])\s*\(")
+
+
+# Where a command word can start: the string start, or after a separator or an
+# opening group. `_normalize_command_words` walks these to find each program.
+_WORD_POSITION = re.compile(r"(?:^|\$\(|[;&|(`\n])[ \t]*")
+_BARE_WORD = re.compile(r"[\w./-]+\Z")
+# POSIX lets a command be prefixed by `VAR=value` assignments and by `sudo`
+# without either being the program; `_command_operands` skips the same run.
+_COMMAND_PREFIX = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*\Z")
+# The program plus the subcommands a rule can name (`aws s3 rm` is the deepest
+# shipped). Past that the words are operands, which stay as written.
+_MAX_NORMALIZED_WORDS = 3
+
+
+def _unquote_word(word):
+    """`"git"` / `g""it` / `g\\it` -> `git`; None when the word isn't bare.
+
+    None also covers a word whose quotes don't close inside it — `"rm` opens a
+    span that runs past the whitespace, so the text after it is quoted data and
+    normalizing it would invent a command that was never there.
+    """
+    out = []
+    quote = None
+    i = 0
+    while i < len(word):
+        c = word[i]
+        if quote:
+            if c == quote:
+                quote = None
+            elif c == "\\" and quote == '"' and i + 1 < len(word):
+                out.append(word[i + 1])
+                i += 2
+                continue
+            else:
+                out.append(c)
+            i += 1
+            continue
+        if c in "\"'":
+            quote = c
+            i += 1
+            continue
+        if c == "\\" and i + 1 < len(word):
+            out.append(word[i + 1])
+            i += 2
+            continue
+        out.append(c)
+        i += 1
+    if quote:
+        return None
+    bare = "".join(out)
+    return bare if bare and _BARE_WORD.match(bare) else None
+
+
+def _normalize_command_words(command):
+    """Resolve the leading words of each command to the word the shell reads ([EN-15])."""
+    out = []
+    pos = 0
+    for sep in _WORD_POSITION.finditer(command):
+        if sep.end() < pos:
+            continue
+        out.append(command[pos:sep.end()])
+        pos = sep.end()
+        budget = _MAX_NORMALIZED_WORDS
+        while budget:
+            end = pos
+            while end < len(command) and command[end] not in " \t\n;&|`":
+                end += 1
+            word = command[pos:end]
+            if not word or word.startswith("-"):
+                break
+            # A prefix isn't the program, so it costs no budget — `sudo aws s3
+            # rm` has to reach `rm` the way `aws s3 rm` does.
+            if word == "sudo" or _COMMAND_PREFIX.match(word):
+                out.append(word)
+            else:
+                bare = _unquote_word(word)
+                if bare is None:
+                    break
+                out.append(bare)
+                budget -= 1
+            pos = end
+            gap = pos
+            while gap < len(command) and command[gap] in " \t":
+                gap += 1
+            if gap == pos:
+                break
+            out.append(command[pos:gap])
+            pos = gap
+    out.append(command[pos:])
+    return "".join(out)
 
 
 def _is_compound_command(command):
@@ -597,7 +692,7 @@ def _compound_escalation():
     """The note prepended when an `ask` is escalated to `deny` for a compound command."""
     return {
         "prefix": "compound command",
-        "reason": "escalated to block — a piped or chained command can be auto-approved segment-by-segment by the host allow list, which skips this confirmation; run the guarded command on its own to be prompted",
+        "reason": "escalated to block — a compound command or subshell can be auto-approved segment-by-segment by the host allow list, which skips this confirmation; run the guarded command on its own to be prompted",
         "ref": "",
     }
 
@@ -837,7 +932,7 @@ def _resolve_input(data):
         cmd = tool_input.get("command", "")
         if not cmd:
             return None
-        return "bash", cmd, None
+        return "bash", _normalize_command_words(cmd), None
 
     if tool_name == "Write":
         content = tool_input.get("content", "")

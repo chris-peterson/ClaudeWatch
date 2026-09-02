@@ -109,7 +109,15 @@ This is the core safety advantage over Claude Code's built-in deny rules, which 
 
 - Use `\s+` instead of literal spaces to handle multiple spaces
 - Use `\b` for word boundaries to avoid false positives
-- Use `(\s|$)` to match "command with args or command alone"
+- Write the program and subcommand as bare words. A `bash` input arrives with
+  the leading words of each command already unquoted ([EN-15]), so `git commit`
+  matches `"git" commit` and `git "commit"` without the pattern saying so.
+  Operands keep their quoting
+- Use `(?![\w-])` to match "command with args or command alone". `(\s|$)` looks
+  equivalent and isn't: a command alone is followed by whatever comes next in
+  the shell, so `(git push)`, `git push;echo done` and `` `git push` `` all slip
+  past it. The `-` keeps a longer subcommand out (`git commit-tree` is not
+  `git commit`)
 - Use negative lookahead `(?!...)` to exclude variants (e.g. `git\s+rm\b(?!.*--cached)`)
 - Remember `re.search()` matches anywhere — `git\s+push` will match both `git push` and `git add . && git push`
 
@@ -304,7 +312,7 @@ rules:
 
   ask:
     - name: docker run
-      pattern: 'docker\s+run(\s|$)'
+      pattern: 'docker\s+run(?![\w-])'
       except: 'docker\s+run\s+--rm\b'
       reason: starts a new container
       ref: https://docs.docker.com/reference/cli/docker/container/run/

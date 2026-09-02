@@ -60,6 +60,20 @@ t "npx --package"   ask '{"tool_name":"Bash","tool_input":{"command":"npx --pack
 t "npx pkg@version" ask '{"tool_name":"Bash","tool_input":{"command":"npx cowsay@latest moo"}}'
 t "npx @scope/pkg"  ask '{"tool_name":"Bash","tool_input":{"command":"npx @angular/cli new app"}}'
 
+echo "--- verb boundary: a shell separator ends the subcommand ---"
+# An argument-less install is followed by whatever comes next in the shell, not
+# by whitespace. Anchoring on `\s` or `$` alone let these through as allow, so
+# the compound escalation never saw an ask to raise.
+t "(npm install)"   block '{"tool_name":"Bash","tool_input":{"command":"(npm install)"}}'
+t "npm install;"    block '{"tool_name":"Bash","tool_input":{"command":"npm install;echo done"}}'
+t "(pip install)"   block '{"tool_name":"Bash","tool_input":{"command":"(pip install)"}}'
+t "go get;"         block '{"tool_name":"Bash","tool_input":{"command":"go get;echo done"}}'
+t "(cargo add)"     block '{"tool_name":"Bash","tool_input":{"command":"(cargo add)"}}'
+# A hyphen continues the subcommand rather than ending it. `npm install-test`
+# does install, so this is coverage the boundary gives up to keep `git
+# commit-tree` out; the anchor it replaced missed it too.
+t "npm install-test" allow '{"tool_name":"Bash","tool_input":{"command":"npm install-test"}}'
+
 echo "--- allow: safe operations ---"
 t "npm run"         allow '{"tool_name":"Bash","tool_input":{"command":"npm run build"}}'
 t "npm test"        allow '{"tool_name":"Bash","tool_input":{"command":"npm test"}}'

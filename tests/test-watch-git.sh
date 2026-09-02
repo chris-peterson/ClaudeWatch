@@ -120,6 +120,26 @@ t "-c key=val add ."                  allow '{"tool_name":"Bash","tool_input":{"
 t "-C path rm file"                   allow '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo rm README.md"}}'
 t "-C path rm --cached file"          allow '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo rm --cached secret.txt"}}'
 
+echo "--- verb boundary: a shell separator ends the subcommand ---"
+# A guarded subcommand with no arguments is followed by whatever comes next in
+# the shell, not by whitespace. Anchoring on `\s` or `$` alone let every one of
+# these through as allow, so the compound escalation never saw an ask to raise.
+t "(commit)"            block '{"tool_name":"Bash","tool_input":{"command":"(git commit)"}}'
+t "(push)"              block '{"tool_name":"Bash","tool_input":{"command":"(git push)"}}'
+t "(stash)"             block '{"tool_name":"Bash","tool_input":{"command":"(git stash)"}}'
+t "commit;"             block '{"tool_name":"Bash","tool_input":{"command":"git commit;echo done"}}'
+t "push|"               block '{"tool_name":"Bash","tool_input":{"command":"git push|tee log"}}'
+t "commit&&"            block '{"tool_name":"Bash","tool_input":{"command":"git commit&&echo done"}}'
+t "\$(commit)"          block '{"tool_name":"Bash","tool_input":{"command":"echo $(git commit)"}}'
+t "(checkout .)"        block '{"tool_name":"Bash","tool_input":{"command":"(git checkout .)"}}'
+t "checkout .;"         block '{"tool_name":"Bash","tool_input":{"command":"git checkout .;echo done"}}'
+t "(restore .)"         block '{"tool_name":"Bash","tool_input":{"command":"(git restore .)"}}'
+# A hyphen continues the subcommand rather than ending it: `git commit-tree` is
+# a different command, and the boundary has to keep it out.
+t "commit-tree"         allow '{"tool_name":"Bash","tool_input":{"command":"git commit-tree HEAD"}}'
+t "pushed"              allow '{"tool_name":"Bash","tool_input":{"command":"git pushed"}}'
+t "stashed"             allow '{"tool_name":"Bash","tool_input":{"command":"git stashed"}}'
+
 echo "--- allow: not git ---"
 t "non-git command"     allow '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'
 t "empty command"       allow '{"tool_name":"Bash","tool_input":{"command":""}}'

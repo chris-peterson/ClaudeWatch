@@ -10,6 +10,19 @@ echo "--- block: rm -rf / ---"
 t "rm -rf /"         block '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
 t "rm -fr /"         block '{"tool_name":"Bash","tool_input":{"command":"rm -fr /"}}'
 t "rm -rf /*"        block '{"tool_name":"Bash","tool_input":{"command":"rm -rf /*"}}'
+# `rm` takes recursive and force as one cluster, as separate short flags, or as
+# long options, in any order. Requiring both letters in a single cluster left
+# `rm --recursive --force /` deciding allow.
+t "rm -r -f /"       block '{"tool_name":"Bash","tool_input":{"command":"rm -r -f /"}}'
+t "rm -f -r /"       block '{"tool_name":"Bash","tool_input":{"command":"rm -f -r /"}}'
+t "rm --long /"      block '{"tool_name":"Bash","tool_input":{"command":"rm --recursive --force /"}}'
+t "rm --long rev /"  block '{"tool_name":"Bash","tool_input":{"command":"rm --force --recursive /"}}'
+t "rm mixed /"       block '{"tool_name":"Bash","tool_input":{"command":"rm -r --force /"}}'
+t "rm --long /*"     block '{"tool_name":"Bash","tool_input":{"command":"rm --recursive --force /*"}}'
+t "(rm --long /)"    block '{"tool_name":"Bash","tool_input":{"command":"(rm --recursive --force /)"}}'
+# Force alone is not recursive, and `rm` has to be its own word.
+t "rm --force file"  allow '{"tool_name":"Bash","tool_input":{"command":"rm --force notes.txt"}}'
+t "confirm -rf /"    allow '{"tool_name":"Bash","tool_input":{"command":"confirm -rf /"}}'
 
 echo "--- block: chmod 777 ---"
 t "chmod 777"        block '{"tool_name":"Bash","tool_input":{"command":"chmod 777 /tmp/file"}}'
@@ -42,6 +55,9 @@ t "sudo chown -R root" ask '{"tool_name":"Bash","tool_input":{"command":"sudo ch
 echo "--- except: cache/temp file deletion ---"
 t "rm -rf cache dir"    allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf ~/.cache/pip"}}'
 t "rm -rf /tmp"         allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/build-output"}}'
+# The exemption's own flag run takes long options too, or the same delete
+# prompts when it's spelled out.
+t "rm --long /tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"rm --recursive --force /tmp/build-output"}}'
 t "rm -r /var/tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"rm -r /var/tmp/stale-dir"}}'
 
 echo "--- is_in_project_tree: in-tree recursive deletes allowed ---"

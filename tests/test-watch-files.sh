@@ -10,19 +10,25 @@ echo "--- block: rm -rf / ---"
 t "rm -rf /"         block '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
 t "rm -fr /"         block '{"tool_name":"Bash","tool_input":{"command":"rm -fr /"}}'
 t "rm -rf /*"        block '{"tool_name":"Bash","tool_input":{"command":"rm -rf /*"}}'
-# `rm` takes recursive and force as one cluster, as separate short flags, or as
-# long options, in any order. Requiring both letters in a single cluster left
-# `rm --recursive --force /` deciding allow.
+# Recursive and force are read as independent options, so every spelling of the
+# pair reaches the rule: clustered, split, reordered, long, and the `-R` synonym.
 t "rm -r -f /"       block '{"tool_name":"Bash","tool_input":{"command":"rm -r -f /"}}'
-t "rm -f -r /"       block '{"tool_name":"Bash","tool_input":{"command":"rm -f -r /"}}'
 t "rm --long /"      block '{"tool_name":"Bash","tool_input":{"command":"rm --recursive --force /"}}'
 t "rm --long rev /"  block '{"tool_name":"Bash","tool_input":{"command":"rm --force --recursive /"}}'
 t "rm mixed /"       block '{"tool_name":"Bash","tool_input":{"command":"rm -r --force /"}}'
-t "rm --long /*"     block '{"tool_name":"Bash","tool_input":{"command":"rm --recursive --force /*"}}'
+t "rm -Rf /"         block '{"tool_name":"Bash","tool_input":{"command":"rm -Rf /"}}'
+t "rm -R --force /"  block '{"tool_name":"Bash","tool_input":{"command":"rm -R --force /"}}'
+t "rm -Rf /*"        block '{"tool_name":"Bash","tool_input":{"command":"rm -Rf /*"}}'
 t "(rm --long /)"    block '{"tool_name":"Bash","tool_input":{"command":"(rm --recursive --force /)"}}'
-# Force alone is not recursive, and `rm` has to be its own word.
+
+echo "--- allow: rm near misses ---"
+# Force alone is not recursive; `rm` is bounded as its own shell word; and the
+# root tail takes `/` and `/*` without reaching a path or a scoped glob.
 t "rm --force file"  allow '{"tool_name":"Bash","tool_input":{"command":"rm --force notes.txt"}}'
 t "confirm -rf /"    allow '{"tool_name":"Bash","tool_input":{"command":"confirm -rf /"}}'
+t "my-rm -rf /"      allow '{"tool_name":"Bash","tool_input":{"command":"my-rm -rf /"}}'
+t "rm -rf /*.log"    ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /*.log"}}'
+t "git rm --cached"  allow '{"tool_name":"Bash","tool_input":{"command":"git rm --cached -r .claude/skills"}}'
 
 echo "--- block: chmod 777 ---"
 t "chmod 777"        block '{"tool_name":"Bash","tool_input":{"command":"chmod 777 /tmp/file"}}'

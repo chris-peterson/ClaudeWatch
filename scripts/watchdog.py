@@ -245,104 +245,24 @@ def _rule_target(rule):
 _QUOTED_SPAN = re.compile(r"'[^']*'|\"[^\"]*\"")
 # Shell control operators that chain multiple commands: pipe `|` (covers `||`
 # and `|&`), sequence `;` / newline, logical `&&`, and command substitution
-# `$(` / backtick. A lone `&` is intentionally absent — it appears in
-# redirections like `2>&1` and matching it would mis-flag a single command.
-# A bare subshell `( … )` groups rather than separates, so it carries none of
-# those and is matched on its own: at the start of the command, or after a
-# separator. `& (` is safe to match where a lone `&` is not, since a
-# redirection is never followed by `(`. Restricting to command position leaves
-# a parenthesis inside an argument alone.
-_SHELL_COMPOUND = re.compile(r"\||;|\n|&&|\$\(|`|(?:^|[;&|])\s*\(")
-
-
-# Where a command word can start: the string start, or after a separator or an
-# opening group. `_normalize_command_words` walks these to find each program.
-_WORD_POSITION = re.compile(r"(?:^|\$\(|[;&|(`\n])[ \t]*")
-_BARE_WORD = re.compile(r"[\w./-]+\Z")
-# POSIX lets a command be prefixed by `VAR=value` assignments and by `sudo`
-# without either being the program; `_command_operands` skips the same run.
-_COMMAND_PREFIX = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*\Z")
-# The program plus the subcommands a rule can name (`aws s3 rm` is the deepest
-# shipped). Past that the words are operands, which stay as written.
-_MAX_NORMALIZED_WORDS = 3
-
-
-def _unquote_word(word):
-    """`"git"` / `g""it` / `g\\it` -> `git`; None when the word isn't bare.
-
-    None also covers a word whose quotes don't close inside it — `"rm` opens a
-    span that runs past the whitespace, so the text after it is quoted data and
-    normalizing it would invent a command that was never there.
-    """
-    out = []
-    quote = None
-    i = 0
-    while i < len(word):
-        c = word[i]
-        if quote:
-            if c == quote:
-                quote = None
-            elif c == "\\" and quote == '"' and i + 1 < len(word):
-                out.append(word[i + 1])
-                i += 2
-                continue
-            else:
-                out.append(c)
-            i += 1
-            continue
-        if c in "\"'":
-            quote = c
-            i += 1
-            continue
-        if c == "\\" and i + 1 < len(word):
-            out.append(word[i + 1])
-            i += 2
-            continue
-        out.append(c)
-        i += 1
-    if quote:
-        return None
-    bare = "".join(out)
-    return bare if bare and _BARE_WORD.match(bare) else None
-
-
-def _normalize_command_words(command):
-    """Resolve the leading words of each command to the word the shell reads ([EN-15])."""
-    out = []
-    pos = 0
-    for sep in _WORD_POSITION.finditer(command):
-        if sep.end() < pos:
-            continue
-        out.append(command[pos:sep.end()])
-        pos = sep.end()
-        budget = _MAX_NORMALIZED_WORDS
-        while budget:
-            end = pos
-            while end < len(command) and command[end] not in " \t\n;&|`":
-                end += 1
-            word = command[pos:end]
-            if not word or word.startswith("-"):
-                break
-            # A prefix isn't the program, so it costs no budget — `sudo aws s3
-            # rm` has to reach `rm` the way `aws s3 rm` does.
-            if word == "sudo" or _COMMAND_PREFIX.match(word):
-                out.append(word)
-            else:
-                bare = _unquote_word(word)
-                if bare is None:
-                    break
-                out.append(bare)
-                budget -= 1
-            pos = end
-            gap = pos
-            while gap < len(command) and command[gap] in " \t":
-                gap += 1
-            if gap == pos:
-                break
-            out.append(command[pos:gap])
-            pos = gap
-    out.append(command[pos:])
-    return "".join(out)
+# `$(` / backtick.
+#
+# A lone `&` both backgrounds a command and separates it from the next, so it
+# counts only when something follows it; a trailing `&` is one command. The
+# neighbour tests keep it clear of the redirections it shares a character with
+# (`2>&1`, `>&2`, `&>log`), which is why it is not simply in the class above.
+#
+# A subshell `( … )` and a process substitution `<( … )` / `>( … )` group
+# rather than separate, so they carry none of those operators and are matched
+# on their own. Restricting the `(` to command position — the string start,
+# after a separator or redirection, optionally behind the `time` and `!`
+# keywords, which are the two words that may precede a subshell with no
+# operator between — leaves a parenthesis inside an argument alone.
+_SHELL_COMPOUND = re.compile(
+    r"\||;|\n|&&|\$\(|`"
+    r"|(?<![>&])&(?![>&])\s*\S"
+    r"|(?:^|[;&|<>])\s*(?:(?:!|time)\s+)*\("
+)
 
 
 def _is_compound_command(command):
@@ -358,6 +278,114 @@ def _is_compound_command(command):
     quotes) stays safe.
     """
     return bool(_SHELL_COMPOUND.search(_QUOTED_SPAN.sub("", command)))
+
+
+# Where a command word can start: the string start, or after a separator or an
+# opening group. `_normalize_command_words` walks these to find each program.
+_WORD_POSITION = re.compile(r"(?:^|[;&|(`\n])[ \t]*")
+# Where one ends. The bound is what keeps the walk linear: every `(` opens a
+# command position, so an unbounded scan makes a run of them cost one pass over
+# the rest of the string each. No program or subcommand is this long, and a
+# word that overruns the bound stops the walk rather than being truncated into
+# one that was never written.
+_WORD_STOP = " \t\n;&|`"
+_MAX_WORD_LEN = 128
+_WORD_SCAN = re.compile(r"[^ \t\n;&|`]{0,%d}" % _MAX_WORD_LEN)
+_BARE_WORD = re.compile(r"[\w./-]+\Z")
+# POSIX lets a command be prefixed by `VAR=value` assignments and by `sudo`
+# without either being the program.
+_COMMAND_PREFIX = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*\Z")
+# The program plus the subcommands a rule can name. `aws --profile prod s3 rm`
+# is the deepest shipped shape once a flag value sits among them.
+_MAX_NORMALIZED_WORDS = 4
+
+
+def _is_command_prefix(word):
+    """Whether a word prefixes a command without being its program ([EN-15])."""
+    return word == "sudo" or bool(_COMMAND_PREFIX.match(word))
+
+
+def _unquote_word(word):
+    """`"git"` / `g""it` / `g\\it` -> `git`; None when the word isn't one word.
+
+    None means the quoting doesn't resolve inside the word — `"rm` opens a span
+    that runs past the whitespace, so the text after it is quoted data and
+    normalizing it would invent a command that was never there. The caller
+    decides whether the word it resolves to may stand as a program or a
+    subcommand; this only reads the quoting the way the shell does.
+    """
+    try:
+        parts = shlex.split(word)
+    except ValueError:  # an unbalanced quote or a trailing backslash
+        return None
+    return parts[0] if len(parts) == 1 and parts[0] else None
+
+
+def _normalize_command_words(command):
+    """Resolve the leading words of each command to the word the shell reads ([EN-15]).
+
+    Walks each command position and rewrites the program, then the words behind
+    it, into the single word the shell resolves each to. An option is stepped
+    over rather than ending the walk, because git and aws both carry their
+    global options ahead of the subcommand a rule matches — so what keeps an
+    *operand* out of the rewrite is two guards: a word is rewritten only where
+    it resolves to a bare word, so an operand carrying an operator
+    (`-m "wip; done"`) stays the quoted data both the rules and [OUT-08] read
+    it as; and the word budget bounds how far past the program it reaches.
+    """
+    out = []
+    pos = 0
+    for sep in _WORD_POSITION.finditer(command):
+        if sep.end() < pos:
+            continue
+        out.append(command[pos:sep.end()])
+        pos = sep.end()
+        budget = _MAX_NORMALIZED_WORDS
+        program = None
+        while budget:
+            end = _WORD_SCAN.match(command, pos).end()
+            if end < len(command) and command[end] not in _WORD_STOP:
+                break
+            word = command[pos:end]
+            if not word:
+                break
+            if word.startswith("-") or _is_command_prefix(word):
+                # Neither an option nor a `VAR=value`/`sudo` prefix names the
+                # program, so neither costs budget.
+                out.append(word)
+            else:
+                resolved = _unquote_word(word)
+                if resolved is None:
+                    break
+                if resolved.startswith("-") or _is_command_prefix(resolved):
+                    # The same two, quoted. No spelling of an option names a
+                    # program, so `rm "-r" /etc` resolves wherever it sits.
+                    out.append(resolved)
+                elif not _BARE_WORD.match(resolved):
+                    # A path or an option's value, carrying something no
+                    # program or subcommand does. It stays exactly as written —
+                    # unquoting `-m "wip; done"` would turn a commit message
+                    # into what reads as a command boundary — but the walk
+                    # continues past it to reach the subcommand behind.
+                    if program is None:
+                        break
+                    out.append(word)
+                    budget -= 1
+                else:
+                    out.append(resolved)
+                    if program is None:
+                        program = os.path.basename(resolved)
+                    budget -= 1
+            pos = end
+            gap = pos
+            while gap < len(command) and command[gap] in " \t":
+                gap += 1
+            if gap == pos:
+                break
+            out.append(command[pos:gap])
+            pos = gap
+    out.append(command[pos:])
+    return "".join(out)
 
 
 # A path token whose on-disk location can't be resolved from the command text
@@ -390,9 +418,8 @@ def _command_operands(command, program):
         tokens = shlex.split(command)
     except ValueError:
         return None
-    # Skip leading `VAR=value` assignments and `sudo` to reach the program.
     i = 0
-    while i < len(tokens) and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[i]) or tokens[i] == "sudo"):
+    while i < len(tokens) and _is_command_prefix(tokens[i]):
         i += 1
     if i >= len(tokens) or os.path.basename(tokens[i]) != program:
         return None
@@ -830,7 +857,7 @@ def command_shape(command, tool):
     """
     tokens = command.strip().split()
     i = 0
-    while i < len(tokens) and (re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[i]) or tokens[i] == "sudo"):
+    while i < len(tokens) and _is_command_prefix(tokens[i]):
         i += 1
     if i >= len(tokens):
         return command.strip(), f"{tool}({command.strip()})"

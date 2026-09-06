@@ -108,16 +108,10 @@ This is the core safety advantage over Claude Code's built-in deny rules, which 
 **Pattern tips:**
 
 - Use `\s+` instead of literal spaces to handle multiple spaces
-- Use `\b` for word boundaries to avoid false positives
-- Write the program and subcommand as bare words. A `bash` input arrives with
-  the leading words of each command already unquoted ([EN-15]), so `git commit`
-  matches `"git" commit` and `git "commit"` without the pattern saying so.
-  Operands keep their quoting
-- Use `(?![\w-])` to match "command with args or command alone". `(\s|$)` looks
-  equivalent and isn't: a command alone is followed by whatever comes next in
-  the shell, so `(git push)`, `git push;echo done` and `` `git push` `` all slip
-  past it. The `-` keeps a longer subcommand out (`git commit-tree` is not
-  `git commit`)
+- Use `\b` for word boundaries inside a token; for the token's own edges see the two bullets below, which the shell's own boundaries govern
+- Write the program and subcommand as bare words — a `bash` input arrives with the leading words of each command already unquoted ([EN-15]), so `git commit` matches `"git" commit` and `git "commit"` without the pattern saying so, while operands keep their quoting
+- End a bare subcommand with `(?=$|[\s;&|)`<>])`, which is where the shell ends it. `(\s|$)` looks equivalent and isn't: a command alone is followed by whatever comes next, so `(git push)`, `git push;echo done` and `` `git push` `` slip past it. Match the terminators rather than excluding the continuations — `(?![\w-])` also accepts a closing quote, so it fires on `grep -rn 'git push' .`
+- Bound a bare program name with `(?:^|[\s;&|`(])` rather than `\b`, so a hyphenated name (`my-rm`) is not read as the program it ends with
 - Use negative lookahead `(?!...)` to exclude variants (e.g. `git\s+rm\b(?!.*--cached)`)
 - Remember `re.search()` matches anywhere — `git\s+push` will match both `git push` and `git add . && git push`
 

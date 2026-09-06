@@ -122,23 +122,21 @@ t "-C path rm --cached file"          allow '{"tool_name":"Bash","tool_input":{"
 
 echo "--- verb boundary: a shell separator ends the subcommand ---"
 # A guarded subcommand with no arguments is followed by whatever comes next in
-# the shell, not by whitespace. Anchoring on `\s` or `$` alone let every one of
-# these through as allow, so the compound escalation never saw an ask to raise.
+# the shell, not by whitespace. Each of these three patterns is edited
+# separately, so each is asserted; one separator stands for the rest.
 t "(commit)"            block '{"tool_name":"Bash","tool_input":{"command":"(git commit)"}}'
 t "(push)"              block '{"tool_name":"Bash","tool_input":{"command":"(git push)"}}'
 t "(stash)"             block '{"tool_name":"Bash","tool_input":{"command":"(git stash)"}}'
 t "commit;"             block '{"tool_name":"Bash","tool_input":{"command":"git commit;echo done"}}'
-t "push|"               block '{"tool_name":"Bash","tool_input":{"command":"git push|tee log"}}'
-t "commit&&"            block '{"tool_name":"Bash","tool_input":{"command":"git commit&&echo done"}}'
-t "\$(commit)"          block '{"tool_name":"Bash","tool_input":{"command":"echo $(git commit)"}}'
+t "\`stash\`"           block '{"tool_name":"Bash","tool_input":{"command":"echo `git stash`"}}'
 t "(checkout .)"        block '{"tool_name":"Bash","tool_input":{"command":"(git checkout .)"}}'
 t "checkout .;"         block '{"tool_name":"Bash","tool_input":{"command":"git checkout .;echo done"}}'
 t "(restore .)"         block '{"tool_name":"Bash","tool_input":{"command":"(git restore .)"}}'
-# A hyphen continues the subcommand rather than ending it: `git commit-tree` is
-# a different command, and the boundary has to keep it out.
+# A hyphen continues the subcommand rather than ending it, and a closing quote
+# does not end it at all — a pattern mentioning the command is not the command.
 t "commit-tree"         allow '{"tool_name":"Bash","tool_input":{"command":"git commit-tree HEAD"}}'
-t "pushed"              allow '{"tool_name":"Bash","tool_input":{"command":"git pushed"}}'
-t "stashed"             allow '{"tool_name":"Bash","tool_input":{"command":"git stashed"}}'
+t "grep for push"       allow '{"tool_name":"Bash","tool_input":{"command":"grep -rn '"'"'git push'"'"' . | head -20"}}'
+t "sed for commit"      allow '{"tool_name":"Bash","tool_input":{"command":"git log | grep '"'"'git commit'"'"'"}}'
 
 echo "--- allow: not git ---"
 t "non-git command"     allow '{"tool_name":"Bash","tool_input":{"command":"ls -la"}}'

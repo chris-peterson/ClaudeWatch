@@ -10,6 +10,25 @@ echo "--- block: rm -rf / ---"
 t "rm -rf /"         block '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
 t "rm -fr /"         block '{"tool_name":"Bash","tool_input":{"command":"rm -fr /"}}'
 t "rm -rf /*"        block '{"tool_name":"Bash","tool_input":{"command":"rm -rf /*"}}'
+# Recursive and force are read as independent options, so every spelling of the
+# pair reaches the rule: clustered, split, reordered, long, and the `-R` synonym.
+t "rm -r -f /"       block '{"tool_name":"Bash","tool_input":{"command":"rm -r -f /"}}'
+t "rm --long /"      block '{"tool_name":"Bash","tool_input":{"command":"rm --recursive --force /"}}'
+t "rm --long rev /"  block '{"tool_name":"Bash","tool_input":{"command":"rm --force --recursive /"}}'
+t "rm mixed /"       block '{"tool_name":"Bash","tool_input":{"command":"rm -r --force /"}}'
+t "rm -Rf /"         block '{"tool_name":"Bash","tool_input":{"command":"rm -Rf /"}}'
+t "rm -R --force /"  block '{"tool_name":"Bash","tool_input":{"command":"rm -R --force /"}}'
+t "rm -Rf /*"        block '{"tool_name":"Bash","tool_input":{"command":"rm -Rf /*"}}'
+t "(rm --long /)"    block '{"tool_name":"Bash","tool_input":{"command":"(rm --recursive --force /)"}}'
+
+echo "--- allow: rm near misses ---"
+# Force alone is not recursive; `rm` is bounded as its own shell word; and the
+# root tail takes `/` and `/*` without reaching a path or a scoped glob.
+t "rm --force file"  allow '{"tool_name":"Bash","tool_input":{"command":"rm --force notes.txt"}}'
+t "confirm -rf /"    allow '{"tool_name":"Bash","tool_input":{"command":"confirm -rf /"}}'
+t "my-rm -rf /"      allow '{"tool_name":"Bash","tool_input":{"command":"my-rm -rf /"}}'
+t "rm -rf /*.log"    ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /*.log"}}'
+t "git rm --cached"  allow '{"tool_name":"Bash","tool_input":{"command":"git rm --cached -r .claude/skills"}}'
 
 echo "--- block: chmod 777 ---"
 t "chmod 777"        block '{"tool_name":"Bash","tool_input":{"command":"chmod 777 /tmp/file"}}'
@@ -42,6 +61,9 @@ t "sudo chown -R root" ask '{"tool_name":"Bash","tool_input":{"command":"sudo ch
 echo "--- except: cache/temp file deletion ---"
 t "rm -rf cache dir"    allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf ~/.cache/pip"}}'
 t "rm -rf /tmp"         allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf /tmp/build-output"}}'
+# The exemption's own flag run takes long options too, or the same delete
+# prompts when it's spelled out.
+t "rm --long /tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"rm --recursive --force /tmp/build-output"}}'
 t "rm -r /var/tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"rm -r /var/tmp/stale-dir"}}'
 
 echo "--- is_in_project_tree: in-tree recursive deletes allowed ---"

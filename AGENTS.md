@@ -96,7 +96,11 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
   concrete reason — the simplicity is a feature.
 - Tests are bash scripts that pipe JSON to the engine and assert decisions.
   Keep them readable and self-contained — `tests/test-watch-<name>.sh` mirrors
-  `watches/watch-<name>.yml`.
+  `watches/watch-<name>.yml`. Those files each load one rule set, which is how
+  the engine is *not* invoked: the hook loads the whole directory, so a rule
+  reading a token out of another tool's command costs a prompt no per-set file
+  can see. `tests/test-all-watches.sh` is the tier that evaluates against
+  `watches/` entire — put a cross-set expectation there.
 - Docs are generated from rules YAML by `build/gen-rules-doc.py`. Don't
   hand-edit `docs/_site` content for rule references; edit the YAML and run
   `just docs`.
@@ -196,6 +200,20 @@ consumers see the update; the tag and the marketplace notify are not what
   nothing more. Multi-line strings, anchors, and `!!tag` constructs are not
   supported. If you need them, that's a spec discussion, not a copy-paste of
   PyYAML.
+- **Word normalization ([EN-15]) reaches the spellings that survive as a
+  literal word**, not obfuscation in general. `"git" commit`, `g\it commit`,
+  `git "commit"` and `rm "-r" /etc` all resolve before matching, and the walk
+  steps over an option to reach the subcommand behind it (`git -C /repo
+  "push"`). What stays out of reach is a word assembled at runtime, because
+  nothing in the command text says what it will be — `C=git; $C commit` is the
+  shape to expect. A shell has unbounded ways to spell a word, so treat the
+  rules as a guard against the destructive command an agent writes plainly, not
+  as a sandbox against one trying to get past it.
+- **Normalization changes how a word is spelled, never where a pattern looks.**
+  Patterns search anywhere in the command, so `echo rm -rf /` decides the same
+  as `rm -rf /` — and after normalization so does `echo "rm" -rf /`. That
+  breadth is the deliberate trade in [RL-03]; resolving a spelling neither
+  widens nor narrows it.
 
 ## Reading order for new contributors
 

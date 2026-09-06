@@ -9,12 +9,12 @@ rules:
       ref: https://git-scm.com/docs/git-push#Documentation/git-push.txt--f
 
     - name: git checkout .
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+checkout\s+\.\s*$'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+checkout\s+\.(?=$|[\s;&|)`<>])'
       reason: discards all working tree changes with no recovery
       ref: https://git-scm.com/docs/git-checkout
 
     - name: git restore .
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+restore\s+\.\s*$'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+restore\s+\.(?=$|[\s;&|)`<>])'
       reason: discards all unstaged changes with no recovery
       ref: https://git-scm.com/docs/git-restore
 
@@ -45,12 +45,12 @@ rules:
       ref: https://git-scm.com/docs/git-reset#Documentation/git-reset.txt---hard
 
     - name: git commit
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+commit(\s|$)'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+commit(?=$|[\s;&|)`<>])'
       reason: creates a permanent commit
       ref: https://git-scm.com/docs/git-commit
 
     - name: git stash
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+stash(\s|$)'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+stash(?=$|[\s;&|)`<>])'
       reason: modifies the stash stack
       ref: https://git-scm.com/docs/git-stash
 
@@ -65,7 +65,7 @@ rules:
       ref: https://git-scm.com/docs/git-push#Documentation/git-push.txt---delete
 
     - name: git push
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push(?!\s.*(?:--force-with-lease|--delete\b|(?<=\s)-d\b|(?<=\s):\S))(\s|$)'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push(?!\s.*(?:--force-with-lease|--delete\b|(?<=\s)-d\b|(?<=\s):\S))(?=$|[\s;&|)`<>])'
       reason: publishes commits to the shared remote
       ref: https://git-scm.com/docs/git-push
 

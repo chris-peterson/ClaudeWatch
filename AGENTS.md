@@ -100,6 +100,16 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 - Docs are generated from rules YAML by `build/gen-rules-doc.py`. Don't
   hand-edit `docs/_site` content for rule references; edit the YAML and run
   `just docs`.
+- **The installed plugin is off in this checkout**, via `enabledPlugins` in
+  `.claude/settings.json` — a session editing the rules would otherwise be
+  screened by the rules it is editing, and a half-written `watch-*.yml` can
+  block the commands needed to fix it. Project settings outrank user settings,
+  so this holds for every clone without anyone configuring it. Consequences
+  while working here: your own commands are not screened, so this is not the
+  place to judge whether a rule fires, and `~/.claude/claudewatch/decisions.jsonl`
+  gets no records from this session. Exercise a change with `just try` (an
+  interactive session with `--plugin-dir .`), or pipe a payload straight into
+  the engine the way `tests/harness.sh` does.
 
 ## When making changes
 

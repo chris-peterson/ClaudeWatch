@@ -20,6 +20,9 @@ docs:
 preview-docs: docs
     npx docsify-cli serve docs --open
 
+# `.claude/settings.json` turns the installed plugin off here, so editing the
+# rules isn't screened by the rules being edited — making --plugin-dir the only
+# way to exercise a change.
 # launch an interactive session with the local plugin loaded
 try:
     claude --plugin-dir .

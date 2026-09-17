@@ -47,11 +47,27 @@ Broadening the allowlist is safe because a hook decision outranks an `allow` rul
 
 The `Monitor` tool runs its command in the same shell as `Bash`, so ClaudeWatch screens it on the same terms and its matcher is `Bash|Monitor`. Claude Code keeps the two permission families apart, though: a command you want frictionless in both places needs a `Monitor(…)` rule alongside the `Bash(…)` one. `/ClaudeWatch:learn` proposes each candidate for the tool its records came from, so the suggestion already names the right one.
 
-One nuance for compound commands. Claude Code does not honor a hook `ask` for a piped or chained command (e.g. `git push --force-with-lease 2>&1 | tail`) whose segments each match an allow rule — it auto-approves the pipeline before the prompt surfaces, so the confirm is skipped. A `deny`, by contrast, is honored through a pipe. So that an `ask`-tier command isn't silently bypassed when piped, ClaudeWatch escalates an `ask` to a `deny` whenever the command is compound, with a message to re-run the guarded command on its own to get the prompt. Bare commands prompt normally; the escalation only changes the piped/chained form. A command left malformed by a dangling `&&` or `||` is the one chained form the host never auto-approves: it requires approval whatever the allow rules say, and ClaudeWatch's escalation applies to it on the same terms as any other compound. A `Monitor` command escalates on the same terms, since it runs unattended and repeats on a single approval: run the guarded step as its own `Bash` call rather than folding it into a watch loop.
+One nuance for compound commands. A `deny` is honored in every permission mode; an `ask` is not (see [What an `ask` actually does](#what-an-ask-actually-does)). Chaining is where that costs most — the host's allow list can approve a pipeline segment-by-segment and auto-run it before any prompt surfaces, so `git push --force-with-lease 2>&1 | tail` can slip through even in a mode that would prompt on the bare command. ClaudeWatch therefore escalates an `ask` to a `deny` whenever the command is compound, with a message to re-run the guarded command on its own. A command left malformed by a dangling `&&` or `||` is the one chained form the host never auto-approves: it requires approval whatever the allow rules say, and ClaudeWatch's escalation applies to it on the same terms as any other compound. A `Monitor` command escalates on the same terms, since it runs unattended and repeats on a single approval: run the guarded step as its own `Bash` call rather than folding it into a watch loop.
 
 To keep agents out of that escalation in the first place, a `SessionStart` hook (`hooks/emit-rules.sh`) injects a short ambient note advising that consequential steps be run as their own Bash call rather than chained. The content lives in `rules/*.md`; the escalation is the backstop, the note is the nudge that fires before it.
 
 `watch-aws` leans on this. Unlike the interpreter sets — which stay silent on most commands and only block destructive variants — it *asks* on most `aws` commands and stays silent only on read-only ops (`get-`/`list-`/`describe-`/`head-`, `s3 ls`). `Bash(aws *)` is what makes those reads frictionless; without it they still hit Claude Code's default prompt. Mutations still prompt and destructive ops (`delete-`, `terminate-`, `s3 rm`, …) are still blocked, because the hook's decision wins over the allow rule.
+
+### What an `ask` actually does
+
+An `ask` is a request for confirmation, not a guarantee of one. Whether it reaches you is decided by how the session was launched, and the hook has no way to tell:
+
+| Session | What happens to an `ask` |
+| --- | --- |
+| Interactive, `default` / `plan` / `acceptEdits` | prompts |
+| Interactive, `auto` | **runs unprompted** — the mode clears the call before the hook's `ask` has a prompt surface ([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)) |
+| Headless (`--print`) | **denied** — nobody can answer, so the call fails closed |
+
+`deny` is honored in all three. The practical consequences:
+
+- **Put anything unrecoverable in the block tier.** A rule that guards something no reflog can undo should not depend on a prompt that may never appear.
+- **A failed command in a headless run may be an unanswerable `ask`, not a block.** Read the message before concluding a rule stopped you.
+- **`/ClaudeWatch:learn` cannot tell a reviewed run from an unreviewed one.** `permission_mode` reads `auto` whether or not a prompt was shown, and `--permission-prompts none` sets no field of its own, so an `ask` record is evidence the engine asked — never evidence a person answered.
 
 ### Discovering what to allow (`/ClaudeWatch:learn`)
 

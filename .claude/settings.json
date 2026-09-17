@@ -1,4 +1,7 @@
 {
+  "enabledPlugins": {
+    "ClaudeWatch@getty-claude-marketplace": false
+  },
   "hooks": {
     "PostToolUse": [
       {

@@ -3,15 +3,15 @@
 Reaching for `| tail`, `2>&1 | head`, or `$(…)` to shape a command's output is
 the reflex that trips this. When the command you're wrapping is a commit, a
 push, an install, or a destructive op (`git push`, `git commit`, `npm install`,
-`rm -rf`), ClaudeWatch escalates the whole compound from an `ask` prompt to a hard block.
-The reason: Claude Code's allow list can approve a pipeline segment-by-segment
-and auto-run it before the `ask` ever surfaces, so the block is the only way the
-confirmation reaches the user.
+`rm -rf`), ClaudeWatch escalates the whole compound from an `ask` to a hard block.
+The reason: a `deny` is honored in every permission mode, and an `ask` is not —
+so the block is what survives to reach the user.
 
 So run the consequential step as its own bare Bash call — `git push` on one
 line, then read what it printed — rather than folding it into a pipe, an `&&`
-chain, or a `$(…)`. Its output is usually short enough that the `| tail` bought
-you nothing. When you need a value from one command in the next, run the first,
+chain, or a `$(…)`. That keeps the command out of the hard block; whether it
+then reaches a person is the separate question the ask-tier note covers. Its
+output is usually short enough that the `| tail` bought you nothing. When you need a value from one command in the next, run the first,
 read its result, then use it in a second call. Pipes between plainly-safe
 commands (`grep … | head`) stay fine — the escalation fires only when a guarded
 command is in the chain.

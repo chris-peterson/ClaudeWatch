@@ -10,11 +10,12 @@ confirmation reaches the user.
 
 So run the consequential step as its own bare Bash call — `git push` on one
 line, then read what it printed — rather than folding it into a pipe, an `&&`
-chain, or a `$(…)`. Its output is usually short enough that the `| tail` bought
-you nothing. When you need a value from one command in the next, run the first,
-read its result, then use it in a second call. Pipes between plainly-safe
-commands (`grep … | head`) stay fine — the escalation fires only when a guarded
-command is in the chain.
+chain, a `$(…)`, a `( … )` subshell, or a `<( … )` process substitution. Its
+output is usually short enough that
+the `| tail` bought you nothing. When you need a value from one command in the
+next, run the first, read its result, then use it in a second call. Pipes
+between plainly-safe commands (`grep … | head`) stay fine — the escalation
+fires only when a guarded command is in the chain.
 
 The same applies to a `Monitor` command, which runs in the same shell and is
 screened the same way. A watch loop is compound by construction, so a guarded

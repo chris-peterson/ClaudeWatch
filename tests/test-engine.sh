@@ -267,11 +267,58 @@ run_test "$RULES_DIR" "bare ask prompts"                    ask   '{"tool_name":
 run_test "$RULES_DIR" "piped ask escalates to block"        block '{"tool_name":"Bash","tool_input":{"command":"git stash list | tail -4"}}'
 run_test "$RULES_DIR" "chained ask (&&) escalates to block" block '{"tool_name":"Bash","tool_input":{"command":"git add . && git commit -m \"wip\""}}'
 run_test "$RULES_DIR" "sequenced ask (;) escalates to block" block '{"tool_name":"Bash","tool_input":{"command":"git commit -m wip; echo done"}}'
+# A bare subshell groups without separating, so it carries none of the operators
+# the cases above turn on — but the host treats it as the same class (it
+# auto-approved an ask inside one until 2.1.257). A `(` counts only at command
+# position, so an escaped or quoted paren mid-command is left alone.
+run_test "$RULES_DIR" "subshell ask escalates to block"      block '{"tool_name":"Bash","tool_input":{"command":"(git push --dry-run)"}}'
+run_test "$RULES_DIR" "spaced subshell escalates to block"   block '{"tool_name":"Bash","tool_input":{"command":"( git commit -m wip )"}}'
+run_test "$RULES_DIR" "subshell after & escalates to block"  block '{"tool_name":"Bash","tool_input":{"command":"sleep 1 & (git commit -m wip)"}}'
+run_test "$RULES_DIR" "escaped paren mid-command stays ask"  ask   '{"tool_name":"Bash","tool_input":{"command":"find . \\( -name x.sh \\) -exec chmod +x {} +"}}'
+run_test "$RULES_DIR" "quoted paren in commit msg stays ask" ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"wip (part 2)\""}}'
 run_test "$RULES_DIR" "quoted operators in commit msg stay ask" ask '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"wip | cleanup; done\""}}'
 run_test "$RULES_DIR" "cmd-subst inside quotes stays ask"   ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"$(printf done)\""}}'
 run_test "$RULES_DIR" "block through pipe unaffected"       block '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main | tail -4"}}'
 run_test "$RULES_DIR" "allow through pipe stays silent"     allow '{"tool_name":"Bash","tool_input":{"command":"ls -la | tail -4"}}'
+# A subshell and a process substitution each run their own command, and a lone
+# `&` separates one from the next where a redirection's `&` does not.
+run_test "$RULES_DIR" "process substitution"                block '{"tool_name":"Bash","tool_input":{"command":"cat <(git push)"}}'
+run_test "$RULES_DIR" "time before a subshell"              block '{"tool_name":"Bash","tool_input":{"command":"time (git push)"}}'
+run_test "$RULES_DIR" "async list"                          block '{"tool_name":"Bash","tool_input":{"command":"git push & git commit -m wip"}}'
+run_test "$RULES_DIR" "trailing & is one command"           ask   '{"tool_name":"Bash","tool_input":{"command":"git push &"}}'
+run_test "$RULES_DIR" "redirection & is not a separator"    ask   '{"tool_name":"Bash","tool_input":{"command":"git push 2>&1"}}'
 
+echo ""
+echo "=== command-word normalization ==="
+# A rule names a program and subcommand as literal text, and the shell lets the
+# same word be spelled several ways. Each of these is `git commit` to bash, so
+# each reaches the rules as `git commit`.
+run_test "$RULES_DIR" "quoted program"          ask   '{"tool_name":"Bash","tool_input":{"command":"\"git\" commit -m wip"}}'
+run_test "$RULES_DIR" "single-quoted program"   ask   '{"tool_name":"Bash","tool_input":{"command":"'"'"'git'"'"' commit -m wip"}}'
+run_test "$RULES_DIR" "empty-string split"      ask   '{"tool_name":"Bash","tool_input":{"command":"g\"\"it commit -m wip"}}'
+run_test "$RULES_DIR" "backslash in program"    ask   '{"tool_name":"Bash","tool_input":{"command":"g\\it commit -m wip"}}'
+run_test "$RULES_DIR" "quoted subcommand"       ask   '{"tool_name":"Bash","tool_input":{"command":"git \"commit\" -m wip"}}'
+# `VAR=value` and `sudo` prefix a command without being the program, so they
+# cost no normalization budget — `sudo aws s3 rm` has to reach `rm`.
+run_test "$RULES_DIR" "quoted after assignment" ask   '{"tool_name":"Bash","tool_input":{"command":"FOO=1 \"git\" commit -m wip"}}'
+run_test "$RULES_DIR" "quoted after sudo"       ask   '{"tool_name":"Bash","tool_input":{"command":"sudo \"git\" commit -m wip"}}'
+# An operand keeps the quoting the rules and the compound check both read it
+# by: unquoting a commit message would turn its punctuation into what looks
+# like a command boundary, and a quoted word behind a program that takes no
+# subcommand is data rather than a command to be promoted.
+run_test "$RULES_DIR" "quoted msg stays quoted" ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"wip; done\""}}'
+run_test "$RULES_DIR" "quoted flag value"       block '{"tool_name":"Bash","tool_input":{"command":"git -C \"/tmp/has space\" push --force"}}'
+# An unbalanced quote opens a span that runs past the whitespace, so the words
+# after it are data; normalizing them would invent a command nobody wrote.
+run_test "$RULES_DIR" "unbalanced quote"        allow '{"tool_name":"Bash","tool_input":{"command":"echo \"hello there"}}'
+# A quoted word resolves wherever it sits, so `echo "rm" -rf /` reaches the
+# rules as `echo rm -rf /` — which patterns match anywhere in, quoted or not.
+run_test "$RULES_DIR" "quoted word resolves"    block '{"tool_name":"Bash","tool_input":{"command":"echo \"rm\" -rf /"}}'
+# git and aws carry their global options ahead of the subcommand a rule names,
+# so the walk steps over an option instead of stopping at it.
+run_test "$RULES_DIR" "quoted behind -C"        block '{"tool_name":"Bash","tool_input":{"command":"git -C /repo \"push\" --force"}}'
+run_test "$RULES_DIR" "quoted behind -c"        ask   '{"tool_name":"Bash","tool_input":{"command":"git -c user.name=x \"commit\" -m wip"}}'
+run_test "$RULES_DIR" "quoted behind --profile" block '{"tool_name":"Bash","tool_input":{"command":"aws --profile prod \"s3\" rm s3://bucket/x"}}'
 
 echo ""
 echo "=== unless_condition (in-tree exemption) ==="

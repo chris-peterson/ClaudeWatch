@@ -4,12 +4,7 @@ filter: '\b(rm|chmod|chown|mv|shred)\b'
 rules:
   block:
     - name: rm -rf /
-      pattern: 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*\s+/\s*$|rm\s+-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*\s+/\s*$'
-      reason: destroys the entire filesystem
-      ref: https://man7.org/linux/man-pages/man1/rm.1.html
-
-    - name: rm -rf /*
-      pattern: 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f\s+/\*|rm\s+-[a-zA-Z]*f[a-zA-Z]*r\s+/\*'
+      pattern: '(?:^|[\s;&|`(])rm(?=(?:\s+-\S+)*\s+(?:--recursive\b|-[a-zA-Z]*[rR]))(?=(?:\s+-\S+)*\s+(?:--force\b|-[a-zA-Z]*f))(?:\s+-\S+)*\s+/\*?(?![\w.~/*-])'
       reason: destroys the entire filesystem
       ref: https://man7.org/linux/man-pages/man1/rm.1.html
 
@@ -30,16 +25,16 @@ rules:
 
   ask:
     - name: rm -rf
-      pattern: 'rm\s+-[a-zA-Z]*r[a-zA-Z]*f|rm\s+-[a-zA-Z]*f[a-zA-Z]*r'
+      pattern: '(?:^|[\s;&|`(])rm(?=(?:\s+-\S+)*\s+(?:--recursive\b|-[a-zA-Z]*[rR]))(?=(?:\s+-\S+)*\s+(?:--force\b|-[a-zA-Z]*f))'
       unless_condition: [is_in_project_tree, is_ephemeral_scratch]
-      unless_regex: ['rm\s+(-[a-zA-Z]+\s+)*(~/\.cache/|/tmp/|/var/tmp/)']
+      unless_regex: ['rm\s+(--?[a-zA-Z][-a-zA-Z]*\s+)*(~/\.cache/|/tmp/|/var/tmp/)', '\bgit\b[^;&|]*\brm(?=$|[\s;&|)`<>])']
       reason: recursively deletes files and directories
       ref: https://man7.org/linux/man-pages/man1/rm.1.html
 
     - name: rm -r
-      pattern: 'rm\s+-[a-zA-Z]*r'
+      pattern: '(?:^|[\s;&|`(])rm(?=(?:\s+-\S+)*\s+(?:--recursive\b|-[a-zA-Z]*[rR]))'
       unless_condition: [is_in_project_tree, is_ephemeral_scratch]
-      unless_regex: ['rm\s+(-[a-zA-Z]+\s+)*(~/\.cache/|/tmp/|/var/tmp/)']
+      unless_regex: ['rm\s+(--?[a-zA-Z][-a-zA-Z]*\s+)*(~/\.cache/|/tmp/|/var/tmp/)', '\bgit\b[^;&|]*\brm(?=$|[\s;&|)`<>])']
       reason: recursively deletes directories
       ref: https://man7.org/linux/man-pages/man1/rm.1.html
 

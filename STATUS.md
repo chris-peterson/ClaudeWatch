@@ -4,9 +4,9 @@ Tracking status of the requirements declared in [SPEC.md](SPEC.md). Updated
 whenever an audit (`/spec-audit`) is run, when implementation lands, or when
 the spec is revised.
 
-**Last audit:** 2026-08-27
+**Last audit:** 2026-09-06
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 94/94 normative requirements (100%).
+**Coverage:** 95/95 normative requirements (100%).
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
 for the contract, `scripts/watchdog.py` for engine behavior, and the per-set
@@ -18,7 +18,7 @@ the file and its tests.
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| EN-01..EN-14 | Engine lifecycle, IO, tool dispatch (Bash, Monitor, Write, Edit), error handling | Covered | `scripts/watchdog.py` (`_resolve_input`) + `tests/test-engine.sh` |
+| EN-01..EN-15 | Engine lifecycle, IO, tool dispatch (Bash, Monitor, Write, Edit), command-word normalization, error handling | Covered | `scripts/watchdog.py` (`_resolve_input`) + `tests/test-engine.sh` |
 | EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.py` (`main`) |
 | EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py` (`main`) |
 | LOG-01..LOG-06 | Decision logging side channel: on by default (`CLAUDEWATCH_LOG=off` to opt out), records the command shape rather than the raw command, owner-only perms (0600/0700), schema-versioned header that discards pre-shape logs on upgrade | Covered | `scripts/watchdog.py` (`_log_event`, `command_shape`) + `tests/test-logging.sh` |
@@ -46,6 +46,10 @@ the file and its tests.
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just preview-docs` | Covered | `justfile` + `tests/` |
 
 ## Audit history
+
+### 2026-09-06 — Coverage refresh (spec-status)
+
+STATUS.md updated: +1 ID (EN-15, command-word normalization), normative count 94 → 95. The EN row's range and summary extend to cover it.
 
 ### 2026-08-27 — Coverage refresh (spec-status)
 

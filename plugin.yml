@@ -9,7 +9,7 @@
 # convention exception — not a finding to re-raise.
 name: ClaudeWatch
 version: 0.18.0
-description: PreToolUse hook that screens shell commands and the code Claude writes to disk for safety, via 'claude-watchdog'
+description: "Screens every shell command and every file Claude writes, before either lands. Blocks the dangerous, asks on anything that changes state."
 author: chris-peterson
 repository: https://github.com/chris-peterson/ClaudeWatch
 icon: docs/favicon.svg
@@ -43,9 +43,9 @@ suite:
   # Activated by the agent (the PreToolUse hook screens what the agent runs) and
   # the user (the /ClaudeWatch:learn and :rules skills).
   activations: [agent, user]
-  gloss: The lookout posted on watch.
-  pitch: "Screens every command before it runs — blocks the genuinely dangerous, asks before the rest, and stops you rubber-stamping the safe ones."
-  what: "Screens every shell command — and the code Claude writes to disk — before it runs, matching real patterns rather than naive prefixes, so reordered flags and chained commands don't slip past. Blocks the genuinely dangerous; asks before anything that changes state."
+  gloss: "ClaudeWatch: agents move fast; watch them closely."
+  pitch: "Stop allowing commands you haven't actually read. Save your attention for the decisions that matter."
+  what: "Screens every shell command (and the code Claude writes to disk) before it runs, matching real patterns rather than naive prefixes, so reordered flags and chained commands don't slip past. Blocks the genuinely dangerous; asks before anything that changes state."
   cmds:
     - ["/ClaudeWatch:rules", "See and edit the rule sets that guard your commands"]
     - ["/ClaudeWatch:learn", "Tune the rules from what's been prompting you"]

@@ -1,6 +1,12 @@
-# <img src="docs/favicon.svg" alt="ClaudeWatch" width="64" height="64"> ClaudeWatch
+# ClaudeWatch
 
-A Claude Code plugin that enforces command and script safety rules via a `PreToolUse` hook on `Bash`, `Monitor`, `Write`, and `Edit`.
+**ClaudeWatch:** agents move fast; watch them closely.
+
+![Claude Code](https://img.shields.io/badge/Claude%20Code-%23D97757.svg?logo=claudecode&logoColor=white)
+![GitHub top language](https://img.shields.io/github/languages/top/chris-peterson/ClaudeWatch)
+![GitHub Release](https://img.shields.io/github/v/release/chris-peterson/ClaudeWatch?sort=semver&display_name=release&logo=github&label=latest)
+
+Screens every shell command and every file Claude writes, before either lands. Blocks the dangerous, asks on anything that changes state.
 
 Claude Code's built-in permission system uses naive string matching that [fails for compound commands, heredocs, and flag reordering](https://github.com/anthropics/claude-code/issues/30519). `ClaudeWatch` solves this with Python regex rules matched anywhere in the command string (or in the body of a script being written/edited) via `re.search()`.
 

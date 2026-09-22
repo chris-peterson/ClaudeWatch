@@ -1,6 +1,14 @@
-# <img src="favicon.svg" alt="ClaudeWatch" width="64" height="64" style="vertical-align: middle"> ClaudeWatch
+<div class="ph-hero" style="--accent: var(--color-red)">
 
-A Claude Code plugin that enforces command safety rules via a `PreToolUse` hook.
+<h1 class="ph-lede"><span class="ph-name">ClaudeWatch:</span> agents move fast; watch them closely.</h1>
+
+<div class="ph-badge"><img class="ph-mark" src="favicon.svg" alt="ClaudeWatch" width="26" height="26">
+
+[](_tags.md ':include')
+
+</div>
+
+</div>
 
 Claude Code's built-in permission system uses naive string matching that [fails for compound commands, heredocs, and flag reordering](https://github.com/anthropics/claude-code/issues/30519). A block rule on `git push --force` won't catch `git push -f`. A block rule on `git commit` won't fire when the command is `git add . && git commit -m "oops"`.
 

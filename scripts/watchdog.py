@@ -268,13 +268,13 @@ _SHELL_COMPOUND = re.compile(
 def _is_compound_command(command):
     """Whether a bash command chains multiple commands via a shell operator.
 
-    The host's allow list can approve each segment of a compound command
-    independently and auto-approve the whole, which pre-empts this hook's
-    `ask` (a `deny` is honored regardless). Detecting the compound shape lets
-    the engine escalate `ask` -> `deny` so the confirmation is not silently
-    skipped (see `main`). This detection only ever *tightens* `ask` into
-    `deny`; missing a compound form degrades to the existing `ask`, never
-    weaker, so the simple quote-stripping (which does not handle escaped
+    A `deny` is honored in every permission mode; an `ask` is not ([OUT-04]).
+    Chaining is the shape where that gap costs most, because the host's allow
+    list can approve each segment independently and auto-approve the whole
+    before any prompt surfaces. Detecting the compound shape lets the engine
+    escalate `ask` -> `deny` (see `main`). This detection only ever *tightens*
+    `ask` into `deny`; missing a compound form degrades to the existing `ask`,
+    never weaker, so the simple quote-stripping (which does not handle escaped
     quotes) stays safe.
     """
     return bool(_SHELL_COMPOUND.search(_QUOTED_SPAN.sub("", command)))
@@ -1050,7 +1050,10 @@ def main():
     # A compound bash command (pipe, chain, sequence, substitution) can be
     # auto-approved by the host segment-by-segment, which pre-empts an `ask`. A
     # `deny` is honored regardless, so escalate `ask` -> `deny` and tell the
-    # user to re-run the guarded command on its own. Bare commands keep `ask`.
+    # user to re-run the guarded command on its own. A bare command keeps `ask`
+    # even where the host will not surface it ([OUT-04]): escalating those too
+    # would hard-block the ordinary workflow, and the payload carries no signal
+    # to escalate selectively on.
     if decision == "ask" and input_kind == "bash" and _is_compound_command(input_text):
         decision, chosen = "deny", [_compound_escalation()] + chosen
 

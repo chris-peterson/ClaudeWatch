@@ -160,7 +160,7 @@ rules:
 
 ### 9. Verify
 
-Run `bash ${CLAUDE_PLUGIN_ROOT}/tests/test-watchdog.sh`. If tests fail, explain which
+Run `bash "${CLAUDE_PLUGIN_ROOT}/tests/test-watchdog.sh"`. If tests fail, explain which
 rule caused the failure and offer to fix or revert.
 
 If any rules were added, note that the test file has no coverage for them yet

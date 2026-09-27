@@ -2,12 +2,12 @@
 hooks:
   - event: PreToolUse
     matcher: Bash|Monitor
-    command: 'python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches'
+    command: 'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py" "${CLAUDE_PLUGIN_ROOT}/watches"'
     description: Screens the shell command against the watch rules before it runs. Monitor is included because it runs its command in the same shell as Bash.
   - event: PreToolUse
     matcher: Write|Edit
-    command: 'python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches'
+    command: 'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py" "${CLAUDE_PLUGIN_ROOT}/watches"'
     description: Screens the code Claude writes to disk against the watch rules before it lands.
   - event: SessionStart
-    command: 'bash ${CLAUDE_PLUGIN_ROOT}/hooks/emit-rules.sh'
+    command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/emit-rules.sh"'
     description: Emit ClaudeWatch's ambient guidance into context.

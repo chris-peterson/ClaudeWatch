@@ -232,7 +232,7 @@ These describe how the current implementation satisfies the spec. They are
   pure-Python YAML parser (no PyYAML dependency). The parser supports inline
   list syntax (`['.ps1', '.psm1']`) for the top-level `extensions` field.
 - The hook command line is
-  `python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches`,
+  `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py" "${CLAUDE_PLUGIN_ROOT}/watches"`,
   invoked from two `PreToolUse` matchers: `Bash|Monitor` and `Write|Edit`.
 - The ambient-guidance emission ([HK-04]) is a second SessionStart hook,
   `hooks/emit-rules.sh`, which prints a `# Ambient rules from the ClaudeWatch

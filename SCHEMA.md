@@ -209,7 +209,7 @@ Two `PreToolUse` hooks point the engine at the `watches/` directory — one for 
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py\" \"${CLAUDE_PLUGIN_ROOT}/watches\""
           }
         ]
       },
@@ -218,7 +218,7 @@ Two `PreToolUse` hooks point the engine at the `watches/` directory — one for 
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py ${CLAUDE_PLUGIN_ROOT}/watches"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/watchdog.py\" \"${CLAUDE_PLUGIN_ROOT}/watches\""
           }
         ]
       }

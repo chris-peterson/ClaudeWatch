@@ -57,6 +57,7 @@ suite:
       learn: Analyze the ClaudeWatch decision log to find commands that repeatedly prompt, and propose allow-list entries and rule tweaks that cut prompt fatigue — reviewed as one batch, then reset the log.
       rules: View and interactively edit ClaudeWatch safety rules — list each rule set's block/ask rules as tables, then add, move, or remove rules, toggle whole rule sets on/off, or scaffold a new set, with conflict detection, a preview, and a test run before writing.
     rules:
+      ask-is-not-a-confirmation: Don't treat ClaudeWatch's ask tier as a confirmation
       avoid-compound-commands: Before you pipe or chain, check the lead command
     hooks:
       emit-rules: SessionStart — Emit ClaudeWatch's ambient guidance into context.

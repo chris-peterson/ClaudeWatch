@@ -81,14 +81,18 @@ Then render the JSON as three tables. Lead with the one that removes the most
 prompts.
 
 - **Allow candidates** — commands ClaudeWatch already allows that are *not*
-  covered by your allow list, so Claude Code prompts on them. Columns: tool,
-  shape, count, distinct dirs, suggested `allow` pattern. These are the
-  prompt-fatigue wins. `Bash` and `Monitor` are separate rule families in the
-  host, so the same shape can appear once per tool and each row's suggested
-  pattern names its own; add them as given rather than folding them into one.
+  covered by your allow list, so Claude Code prompts on them in the modes that
+  prompt. Columns: tool, shape, count, distinct dirs, suggested `allow` pattern.
+  These are the prompt-fatigue wins. `Bash` and `Monitor` are separate rule
+  families in the host, so the same shape can appear once per tool and each
+  row's suggested pattern names its own; add them as given rather than folding
+  them into one.
 - **Ask candidates** — commands ClaudeWatch repeatedly *asks* about. Columns:
   shape, count, the matched rule(s). For each, the choice is: add an `except`
-  for a demonstrably-safe variant, or leave it (the prompt is doing its job).
+  for a demonstrably-safe variant, promote it to the block tier if it guards
+  something unrecoverable, or leave it. A high count under `auto` is *not*
+  evidence the prompt is doing its job — see "Auto mode" below for why an `ask`
+  record can't tell you whether anyone saw it.
 - **Deny summary** — commands ClaudeWatch *blocked*, grouped by reason.
   Informational. A high count means a workflow you need is blocked — worth a
   conversation, never an automatic change.
@@ -153,14 +157,25 @@ nothing, leave the log alone.
 ## Auto mode
 
 ClaudeWatch's `PreToolUse` hook runs *before* the permission-mode check, so its
-`deny` still blocks and `ask` still prompts even under `auto` or
-`bypassPermissions`. Each record carries the active `mode`, and the analyzer
-reports `by_mode` plus an `auto_executed` count per allow candidate. Under auto
-mode the prompts are already gone, so this skill's value shifts from *cutting
-prompts* to *auditing what ran unattended*: lead with the high-`auto_executed`
-allow candidates ("these ran N times with no review — keep allowing, or add a
-watch rule?") and treat the deny summary as the record of what the hard backstop
-caught while you weren't watching.
+`deny` blocks in every mode. An `ask` does not survive the same way: under `auto`
+the host clears the call before the `ask` has a prompt surface and the command
+runs unconfirmed
+([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)),
+and in a headless `--print` run nobody can answer so it is denied outright.
+
+**So an `ask` record means the engine asked, never that a person answered.**
+`permission_mode` reads `auto` whether or not a prompt was shown, and
+`--permission-prompts none` sets no field of its own, so the log cannot separate
+the two. Each record carries the active `mode`, and the analyzer reports
+`by_mode` plus an `auto_executed` count per allow candidate — read those as
+"how often this ran", not "how often this was reviewed".
+
+Under auto mode the prompts are already gone, so this skill's value shifts from
+*cutting prompts* to *auditing what ran unattended*: lead with the
+high-`auto_executed` allow candidates ("these ran N times, none of them
+necessarily reviewed — keep allowing, or add a watch rule?") and treat the deny
+summary as the record of what the hard backstop caught while you weren't
+watching.
 
 ## Notes
 

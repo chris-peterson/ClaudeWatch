@@ -57,7 +57,7 @@ One nuance for compound commands. A `deny` is honored in every permission mode; 
 
 To keep agents out of that escalation in the first place, a `SessionStart` hook (`hooks/emit-rules.sh`) injects a short ambient note advising that consequential steps be run as their own Bash call rather than chained. The content lives in `rules/*.md`; the escalation is the backstop, the note is the nudge that fires before it.
 
-`watch-aws` leans on this. Unlike the interpreter sets, which stay silent on most commands and only block destructive variants, it *asks* on most `aws` commands and stays silent only on read-only ops (`get-`/`list-`/`describe-`/`head-`, `s3 ls`). `Bash(aws *)` is what makes those reads frictionless; without it they still hit Claude Code's default prompt. Mutations still prompt and destructive ops (`delete-`, `terminate-`, `s3 rm`, …) are still blocked, because the hook's decision wins over the allow rule.
+`watch-aws` leans on this. Unlike the interpreter sets, which stay silent on most commands and only block destructive variants, it *asks* on most `aws` commands and stays silent only on read-only ops (`get-`/`list-`/`describe-`/`head-`, `s3 ls`). `Bash(aws *)` is what makes those reads frictionless; without it they still hit Claude Code's default prompt. Mutations get an `ask` and destructive ops (`delete-`, `terminate-`, `s3 rm`, …) are blocked, because the hook's decision wins over the allow rule. Whether that `ask` prompts depends on the session's permission mode (see [What an `ask` actually does](#what-an-ask-actually-does)).
 
 ### What an `ask` actually does
 
@@ -67,10 +67,18 @@ An `ask` is a request for confirmation, not a guarantee of one. Whether it reach
 | --- | --- |
 | Interactive, `default` / `plan` / `acceptEdits` | prompts |
 | Interactive, `auto` | **runs unprompted**: the mode clears the call before the hook's `ask` has a prompt surface ([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)) |
+| Interactive, no permission mode configured | **runs unprompted**: the session starts in `auto` ([which mode a session starts in](https://code.claude.com/docs/en/permission-modes#which-mode-a-session-starts-in)) |
 | Headless (`--print`) | **denied**: nobody can answer, so the call fails closed |
 
-`deny` is honored in all three. The practical consequences:
+`deny` is honored in every case. The practical consequences:
 
+- **Set `defaultMode` if you want the `ask` tier to prompt.** Add this to `~/.claude/settings.json` (or a project's `.claude/settings.json`):
+
+  ```json
+  "permissions": { "defaultMode": "default" }
+  ```
+
+  `default` is the prompting mode, which Claude Code's UI labels "Manual" (`"manual"` is accepted too).
 - **Put anything unrecoverable in the block tier.** A rule that guards something no reflog can undo should not depend on a prompt that may never appear.
 - **A failed command in a headless run may be an unanswerable `ask`, not a block.** Read the message before concluding a rule stopped you.
 - **`/ClaudeWatch:learn` cannot tell a reviewed run from an unreviewed one.** `permission_mode` reads `auto` whether or not a prompt was shown, and `--permission-prompts none` sets no field of its own, so an `ask` record is evidence the engine asked, never evidence a person answered.

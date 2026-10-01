@@ -91,7 +91,7 @@ Then `/ClaudeWatch:learn` aggregates the log into a batch proposal: frequently-a
 
 ## The `\n#` gate (and how to work around it)
 
-Claude Code's built-in Bash input analyzer flags `\n#` (a newline followed by `#`) inside a quoted argument as potentially hiding arguments from path validation. The gate fires **before** any plugin hook runs, so ClaudeWatch never gets a chance to auto-approve. Agents that habitually write multi-line `python3 -c "..."` or `node -e "..."` scripts with embedded `#` comments will get a permission prompt every single invocation, regardless of the allowlist above.
+Claude Code's built-in Bash input analyzer flags `\n#` (a newline followed by `#`) inside a quoted argument as potentially hiding arguments from path validation. The gate fires **before** any plugin hook runs, so no hook (ClaudeWatch included) and no allow rule can clear it. Agents that habitually write multi-line `python3 -c "..."` or `node -e "..."` scripts with embedded `#` comments will get a permission prompt every single invocation, regardless of the allowlist above.
 
 The workaround is to author the script as a file and execute the file:
 

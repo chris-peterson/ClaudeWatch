@@ -170,6 +170,11 @@ the two. Each record carries the active `mode`, and the analyzer reports
 `by_mode` plus an `auto_executed` count per allow candidate — read those as
 "how often this ran", not "how often this was reviewed".
 
+Expect `auto` to dominate `by_mode`: a session with no permission mode
+configured starts in `auto`. When it does, say so and name
+`"permissions": { "defaultMode": "default" }` as the setting that turns the ask
+tier's prompts back on.
+
 Under auto mode the prompts are already gone, so this skill's value shifts from
 *cutting prompts* to *auditing what ran unattended*: lead with the
 high-`auto_executed` allow candidates ("these ran N times, none of them

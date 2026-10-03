@@ -6,6 +6,9 @@ the hook cannot tell which case it is in. Two are known:
 - **Interactive `auto` runs it unprompted.** The mode clears the call before the
   hook's `ask` has a surface to resolve against
   ([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)).
+  `auto` is also where a session with no permission mode configured starts; if
+  the user expects ClaudeWatch to prompt, tell them to set
+  `"permissions": { "defaultMode": "default" }`.
 - **Headless `-p` denies it.** Nothing can answer, so the call fails closed and
   the command has no path forward.
 

@@ -30,6 +30,8 @@ check "frames the trigger reflex" "Reaching for \`| tail\`"
 check "names the escalation behavior" "from an \`ask\` to a hard block"
 check "emits the ask-tier guidance heading" "Don't treat ClaudeWatch's ask tier as a confirmation"
 check "names the auto-mode outcome" "Interactive \`auto\` runs it unprompted"
+check "names the unconfigured default" "where a session with no permission mode configured starts"
+check "names the setting that restores the prompt" '"permissions": { "defaultMode": "default" }'
 check "names the headless outcome" "Headless \`-p\` denies it"
 
 echo ""

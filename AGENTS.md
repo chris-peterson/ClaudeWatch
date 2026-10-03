@@ -156,8 +156,9 @@ lands. Editing `plugin.yml`, `hooks/hooks.yml`, a skill, or a rule needs no
 local regeneration step; push, and the projection job's commit is what shows
 up next.
 
-To see what the projection job would write without keeping it — useful when
-debugging a red run — use `just check`, then `git restore .` to discard.
+To see what the projection job would write — useful when debugging a red run —
+use `just check-generated`. The files it writes match what CI would commit, so
+keeping them is harmless.
 
 `release.yml` resyncs the generated artifacts once more as a backstop when it
 cuts a release, so `plugin.json` at a release tag is current even on the rare

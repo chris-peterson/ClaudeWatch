@@ -30,9 +30,9 @@ rules:
 test:
     bash tests/test-watchdog.sh
 
-# Read what the projection job would commit, without keeping it; `git restore .` discards
+# Regenerate the artifacts and list what the projection job would commit
 [group('check your work')]
-check:
+check-generated:
     {{shipyard}} generate
     git --no-pager diff --stat
 

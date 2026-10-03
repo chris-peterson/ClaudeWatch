@@ -18,5 +18,6 @@
     "installs",
     "git-guardian"
   ],
-  "homepage": "https://chris-peterson.github.io/ClaudeWatch/#/"
+  "homepage": "https://chris-peterson.github.io/ClaudeWatch/#/",
+  "documentationUrl": "https://chris-peterson.github.io/ClaudeWatch/#/"
 }

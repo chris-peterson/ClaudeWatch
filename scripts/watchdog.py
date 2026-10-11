@@ -976,7 +976,7 @@ def _resolve_input(data):
         if not new_string and not old_string:
             return None
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8", errors="replace") as f:
                 existing = f.read()
             if replace_all:
                 content = existing.replace(old_string, new_string)

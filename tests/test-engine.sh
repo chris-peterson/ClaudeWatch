@@ -223,6 +223,12 @@ printf 'X token\nX token\nY here\n' > "$TMPFILE_REPLACE"
 run_test "$TMPDIR_TARGETS/watch-target.yml" "replace_all reconstructs every match" block \
   "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"token","new_string":"destroy-file","replace_all":true}}' "$TMPFILE_REPLACE")"
 
+echo "--- Edit on a non-UTF-8 file still evaluates ---"
+TMPFILE_LATIN1=$(mktemp "$TMPDIR_TARGETS/latin1.XXXXXX.foo")
+printf 'caf\xe9\nno-op placeholder\n' > "$TMPFILE_LATIN1"
+run_test "$TMPDIR_TARGETS/watch-target.yml" "undecodable bytes do not crash the engine" block \
+  "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"no-op placeholder","new_string":"destroy-file"}}' "$TMPFILE_LATIN1")"
+
 echo "--- unsupported tool names exit silently ---"
 run_test "$TMPDIR_TARGETS/watch-target.yml" "Read tool produces no output" allow \
   '{"tool_name":"Read","tool_input":{"file_path":"anything"}}'

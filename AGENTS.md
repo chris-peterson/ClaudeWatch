@@ -120,6 +120,8 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 - **Rule edits** — Use `/ClaudeWatch:rules` for interactive edits; it
   validates and previews. Manual edits to YAML are fine for bulk changes,
   but run `just test` before committing.
+- **Toggling a rule set** — `skills/rules/SKILL.md` says when its
+  disable/enable rename needs an unsandboxed shell.
 - **Engine changes** — Update `scripts/watchdog.py` and `tests/test-engine.sh`
   in the same change. The engine has a small surface; every behavior should
   be exercised by a test.
@@ -207,6 +209,9 @@ consumers see the update; the tag and the marketplace notify are not what
   per se — but the documentation references unix conventions. If
   cross-platform support becomes a goal, that's a spec change, not a quick
   fix.
+- **The hooks set no `shell`.** README's Installation section lists what that
+  requires of a host. Declaring a `shell` per hook to support Windows is a spec
+  change, not a quick fix.
 - **YAML parser is minimal.** It handles the format ClaudeWatch ships and
   nothing more. Multi-line strings, anchors, and `!!tag` constructs are not
   supported. If you need them, that's a spec discussion, not a copy-paste of

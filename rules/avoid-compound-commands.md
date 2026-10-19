@@ -17,6 +17,10 @@ command in the next, run the first, read its result, then use it in a second
 call. Pipes between plainly-safe commands (`grep … | head`) stay fine — the
 escalation fires only when a guarded command is in the chain.
 
+A `$(…)` counts inside double quotes too, since the shell runs it there, so a
+commit message built as `-m "$(cat <<'EOF' … EOF)"` is escalated. Write the
+message to a file and pass it with `git commit -F <path>` instead.
+
 The same applies to a `Monitor` command, which runs in the same shell and is
 screened the same way. A watch loop is compound by construction, so a guarded
 command inside one is escalated too — and it would run unattended, repeatedly,

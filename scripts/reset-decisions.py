@@ -4,8 +4,8 @@ reset-decisions: clear the ClaudeWatch decision log so the next analysis
 measures from a fresh baseline.
 
 After `/ClaudeWatch:learn` proposals are applied (allow-list additions, rule
-edits) the accumulated history would otherwise keep re-surfacing the same
-already-dispositioned commands. Resetting starts the next window from the
+edits) the accumulated history would otherwise keep re-surfacing commands the
+user already decided on. Resetting starts the next window from the
 post-change baseline (SK-19).
 
 By default the log is **archived** — moved to `~/.claude/claudewatch/archive/`

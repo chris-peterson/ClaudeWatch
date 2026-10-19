@@ -273,7 +273,7 @@ Claude Code sends tool invocations as JSON on stdin. The engine handles these to
 }
 ```
 
-For `Edit`, the engine reads the on-disk file, applies the `old_string` → `new_string` substitution (all occurrences if `replace_all` is true), and matches `target: file-content` rules against the resulting full content. If the file cannot be read, the engine falls back to matching `new_string` alone.
+For `Edit`, the engine reads the on-disk file, applies the `old_string` → `new_string` substitution (all occurrences if `replace_all` is true), and matches `target: file-content` rules against the resulting full content. It decodes the file by its byte-order mark (UTF-8, UTF-16, or UTF-32), and as UTF-8 when there is none. If the file cannot be read, or `old_string` does not occur in the decoded text, the engine matches `new_string` alone.
 
 The watchdog engine outputs one of:
 
@@ -285,7 +285,7 @@ The watchdog engine outputs one of:
 
 Exit code is always `0`.
 
-Tool invocations other than `Bash`, `Monitor`, `Write`, `Edit` (and empty payloads) are silently allowed.
+Tool invocations other than `Bash`, `Monitor`, `Write`, `Edit` (and calls whose command or content is empty) are silently allowed. Input the engine can't read (not UTF-8, not JSON, or a field of the wrong type) is a **block** whose reason names the error.
 
 ## Creating a new rule set
 

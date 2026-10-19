@@ -69,14 +69,14 @@ rules:
     - name: Remove-Item -Recurse -Force (bash)
       pattern: '\bRemove-Item\b.*-Recurse.*-Force|\bRemove-Item\b.*-Force.*-Recurse'
       target: bash
-      except: '(~/\.cache/|/tmp/|/var/tmp/)'
+      unless_condition: [is_under_scratch_root]
       reason: recursive force-delete (allowed for cache/temp paths)
       ref: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/remove-item
 
     - name: Remove-Item (bash)
       pattern: '\bRemove-Item\b'
       target: bash
-      except: '(~/\.cache/|/tmp/|/var/tmp/)'
+      unless_condition: [is_under_scratch_root]
       reason: deletes files or directories
       ref: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/remove-item
     - name: Remove-Item (file)

@@ -241,8 +241,11 @@ def _rule_target(rule):
 # Quoted spans (single- or double-quoted) carry string data, not shell syntax,
 # so they are stripped before scanning for control operators — an operator
 # inside a string literal (a pipe in a commit message, a semicolon in a sed
-# program) is not a command boundary.
+# program) is not a command boundary. The exception is command substitution,
+# which the shell still runs inside double quotes, so a double-quoted span keeps
+# its `$(` and unescaped backticks; only single quotes make them data.
 _QUOTED_SPAN = re.compile(r"'[^']*'|\"[^\"]*\"")
+_QUOTED_SUBSTITUTION = re.compile(r"(?<!\\)(?:\$\(|`)")
 # Shell control operators that chain multiple commands: pipe `|` (covers `||`
 # and `|&`), sequence `;` / newline, logical `&&`, and command substitution
 # `$(` / backtick.
@@ -277,7 +280,13 @@ def _is_compound_command(command):
     never weaker, so the simple quote-stripping (which does not handle escaped
     quotes) stays safe.
     """
-    return bool(_SHELL_COMPOUND.search(_QUOTED_SPAN.sub("", command)))
+    return bool(_SHELL_COMPOUND.search(_QUOTED_SPAN.sub(_shell_syntax_in_quotes, command)))
+
+
+def _shell_syntax_in_quotes(span):
+    """What of a quoted span the shell still acts on: a double-quoted span's substitutions."""
+    text = span.group(0)
+    return "" if text[0] == "'" else "".join(_QUOTED_SUBSTITUTION.findall(text))
 
 
 # Where a command word can start: the string start, or after a separator or an
@@ -441,6 +450,31 @@ def _rm_targets(command):
     return _command_operands(command, "rm")
 
 
+_POWERSHELL_PROGRAMS = ("pwsh", "powershell")
+
+
+def _remove_item_targets(command):
+    """The paths a `pwsh -Command "Remove-Item …"` deletes, or None when it isn't one.
+
+    The script is parsed with the same POSIX operand reader as the outer
+    command. That is close enough for the one question asked of it: a `$`, a
+    backtick, a `;` or a `|` in the script makes either the parse or the target
+    check decline, so a PowerShell construct it misreads can only leave the ask
+    standing. PowerShell reads `a,b` as two paths, so operands split on commas.
+    """
+    for shell in _POWERSHELL_PROGRAMS:
+        operands = _command_operands(command, shell)
+        if operands:
+            break
+    else:
+        return None
+    script = operands[0] if len(operands) == 1 else shlex.join(operands)
+    paths = _command_operands(script, "Remove-Item")
+    if not paths:
+        return None
+    return [p for path in paths for p in path.split(",") if p]
+
+
 def _exempt_roots(cwd):
     """The roots a delete may be confined to: the working directory and the project root.
 
@@ -493,28 +527,27 @@ def _resolved_targets_in_tree(command, cwd):
     targets = _rm_targets(command)
     if not targets:
         return None
+    resolved_targets = [_resolve_in_tree(tok, cwd, roots) for tok in targets]
+    return None if None in resolved_targets else resolved_targets
 
+
+def _resolve_in_tree(tok, cwd, roots):
+    """One target as an absolute path, when it sits strictly under one of `roots`; else None."""
+    if not roots or _UNRESOLVABLE_TARGET.search(tok):
+        return None
     # Relative targets are resolved by the shell against cwd, so only cwd can
     # resolve them; an absolute target may sit under either root.
-    base = os.path.normpath(cwd) if cwd else None
-    resolved_targets = []
-    for tok in targets:
-        if _UNRESOLVABLE_TARGET.search(tok):
-            return None
-        if os.path.isabs(tok):
-            resolved = os.path.normpath(tok)
-        elif base:
-            resolved = os.path.normpath(os.path.join(base, tok))
-        else:
-            return None
-        for root in roots:
-            if resolved != root and resolved.startswith(root + os.sep) \
-                    and ".git" not in os.path.relpath(resolved, root).split(os.sep):
-                break
-        else:
-            return None
-        resolved_targets.append(resolved)
-    return resolved_targets
+    if os.path.isabs(tok):
+        resolved = os.path.normpath(tok)
+    elif cwd:
+        resolved = os.path.normpath(os.path.join(os.path.normpath(cwd), tok))
+    else:
+        return None
+    for root in roots:
+        if resolved != root and resolved.startswith(root + os.sep) \
+                and ".git" not in os.path.relpath(resolved, root).split(os.sep):
+            return resolved
+    return None
 
 
 def _targets_under_cwd(command, cwd):
@@ -553,14 +586,56 @@ def _targets_are_ephemeral_scratch(command, cwd):
     a glob or variable can never stand in for the name.
     """
     targets = _rm_targets(command)
+    return bool(targets) and all(_is_ephemeral_target(tok) for tok in targets)
+
+
+def _is_ephemeral_target(tok):
+    return not _UNRESOLVABLE_TARGET.search(tok) \
+        and os.path.basename(os.path.normpath(tok)) in _EPHEMERAL_SCRATCH_DIRS
+
+
+# Locations whose contents are disposable by convention ([RL-19]). The `/private`
+# forms are what macOS resolves `/tmp` and `/var/tmp` to, and tools that resolve
+# paths (Claude Code's session scratchpad among them) write them that way. `~` is
+# matched as text, never expanded, so the check reads no environment.
+_SCRATCH_ROOTS = ("/tmp", "/var/tmp", "/private/tmp", "/private/var/tmp", "~/.cache")
+
+
+def _is_scratch_target(tok):
+    """Whether one target sits strictly under a scratch root, with nothing past it unresolvable.
+
+    The markers are the ones the in-tree check declines on, applied to the part
+    past the root: a `..` could climb out of it, and a `$` or backtick could
+    point anywhere once the shell expands it.
+    """
+    for root in _SCRATCH_ROOTS:
+        if tok.startswith(root + "/"):
+            rest = tok[len(root) + 1:]
+            return not _UNRESOLVABLE_TARGET.search(rest) and os.path.normpath(rest.lstrip("/")) != "."
+    return False
+
+
+def _targets_under_scratch_root(command, cwd):
+    """Whether every target of an `rm`, or of a `Remove-Item` in a pwsh script, is scratch ([RL-19])."""
+    targets = _rm_targets(command) or _remove_item_targets(command)
+    return bool(targets) and all(_is_scratch_target(tok) for tok in targets)
+
+
+def _targets_in_tree_or_scratch(command, cwd):
+    """Whether each `rm` target is in-tree, a regenerable tool directory, or scratch ([RL-20]).
+
+    Each of those predicates alone needs every target to qualify on its own
+    terms, so listing them side by side prompts on a mixed set whose every
+    target is safe. This asks the question per target instead.
+    """
+    targets = _rm_targets(command)
     if not targets:
         return False
-    for tok in targets:
-        if _UNRESOLVABLE_TARGET.search(tok):
-            return False
-        if os.path.basename(os.path.normpath(tok)) not in _EPHEMERAL_SCRATCH_DIRS:
-            return False
-    return True
+    roots = _exempt_roots(cwd)
+    return all(
+        _resolve_in_tree(tok, cwd, roots) or _is_ephemeral_target(tok) or _is_scratch_target(tok)
+        for tok in targets
+    )
 
 
 _PROBE_TIMEOUT = 3
@@ -662,9 +737,9 @@ def _targets_recoverable(command, cwd):
     how a rule set expresses a known-safe location it knows about and the
     engine does not.
 
-    Scratch paths under `/tmp` and friends never reach here — `watch-files`
-    exempts them by `unless_regex` first, and requiring ephemeral space to be
-    version-controlled would defeat that exemption.
+    Scratch paths under `/tmp` and friends are left to `is_under_scratch_root`:
+    requiring ephemeral space to be version-controlled would defeat that
+    exemption.
     """
     targets = _resolved_targets_in_tree(command, cwd)
     if targets is None:
@@ -680,6 +755,8 @@ _PREDICATES = {
     "is_in_project_tree": _targets_under_cwd,
     "is_ephemeral_scratch": _targets_are_ephemeral_scratch,
     "is_recoverable": _targets_recoverable,
+    "is_under_scratch_root": _targets_under_scratch_root,
+    "is_in_tree_or_scratch": _targets_in_tree_or_scratch,
 }
 
 

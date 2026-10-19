@@ -163,8 +163,8 @@ Two inline-list fields that exempt an ask rule, OR'd together: the rule is skipp
 ```yaml
 - name: rm -r
   pattern: 'rm\s+-[a-zA-Z]*r'
-  unless_condition: [is_in_project_tree]
-  unless_regex: ['rm\s+(-[a-zA-Z]+\s+)*(~/\.cache/|/tmp/|/var/tmp/)']
+  unless_condition: [is_in_tree_or_scratch]
+  unless_regex: ['\bgit\b[^;&|]*\brm\b']
   reason: recursively deletes directories
   ref: https://man7.org/linux/man-pages/man1/rm.1.html
 ```
@@ -180,6 +180,8 @@ Available predicates:
 | `is_in_project_tree` | every deletion target of an `rm` command resolves **strictly under an anchor root** — the session's working directory (the `cwd` Claude Code passes at the top level of the hook input) or the project root (`CLAUDE_PROJECT_DIR`, which Claude Code exports to hook commands). The premise: an in-tree recursive delete is recoverable from git history, so it need not prompt, while one reaching outside the tree still does. |
 | `is_ephemeral_scratch` | every deletion target of an `rm` command **names a regenerable tool directory** — `.playwright-mcp`, `__pycache__`, `.pytest_cache`, `.mypy_cache`, `.ruff_cache`. The premise is the directory's identity rather than its location: deleting one loses nothing that re-running the tool doesn't reproduce, so it need not prompt wherever on disk it sits. |
 | `is_recoverable` | every deletion target is **both** under an anchor root **and** restorable from git — the target is tracked, isn't a submodule, and holds no file that is untracked, ignored, or edited without being committed. Where `is_in_project_tree` assumes location implies recoverability, this checks it, so a workspace root that isn't itself a repo no longer exempts a delete with no history behind it. Unlike the other two it reads the filesystem, via bounded read-only `git` calls that decline the exemption whenever a check can't complete. Git is the only backend; for a location some other tool can restore, use `unless_regex` on the path. No shipped rule uses it. |
+| `is_under_scratch_root` | every deletion target sits **strictly under a scratch root**: `/tmp`, `/var/tmp`, `/private/tmp`, `/private/var/tmp` (where macOS resolves the first two, and where Claude Code's session scratchpad lives), or `~/.cache`. It reads the targets of an `rm`, or of a `Remove-Item` that makes up the whole script of a `pwsh`/`powershell` call, with a comma-separated PowerShell path list read as separate paths. Each target is tested on its own, so `rm -rf /tmp/build ~/Documents` still asks. |
+| `is_in_tree_or_scratch` | each deletion target of an `rm` command qualifies **on its own** under `is_in_project_tree`, `is_ephemeral_scratch`, or `is_under_scratch_root`. Listing those three side by side exempts only a command whose every target passes the *same* one, so `rm -rf /work/repo/bin /tmp/build` would ask; this one asks the question per target, and still asks when any single target qualifies under none. |
 
 Two roots rather than one because `cwd` follows the session's shell — it leaves the project the moment the session changes directory into a scratch area, and an in-repo delete issued from there is no less recoverable for it. The project root holds still. A **relative** target resolves against `cwd` only (that is what the shell itself would do); an **absolute** target may sit under either root. `/` and the user's home directory are rejected as roots — a delete anywhere beneath either is not what "confined to the working tree" means.
 
@@ -194,7 +196,9 @@ Two roots rather than one because `cwd` follows the session's shell — it leave
 
 `is_ephemeral_scratch` matches on the **final path segment** only, so `rm -rf .playwright-mcp/traces` is not exempt — the exemption can't be widened by appending a subdirectory — and it declines on the same compound-command, parse-failure, non-`rm`, no-target, and unresolvable-marker conditions, so a glob or variable can never stand in for the name.
 
-Both analyses are pure string resolution (no filesystem access), so the decision stays deterministic — symlinked targets are classified by their textual path, not their link destination.
+`is_under_scratch_root` declines on the same compound-command, parse-failure, different-program, and no-target conditions, and on any unresolvable marker in the part of a target past its scratch root, so `/tmp/../Users/foo` and `/tmp/$(whoami)` are not scratch. A scratch root itself (`/tmp/`) is not exempt either. The `~` of `~/.cache` is matched as text, not expanded.
+
+All but `is_recoverable` are pure string resolution (no filesystem access), so the decision stays deterministic — symlinked targets are classified by their textual path, not their link destination.
 
 ## Hook wiring
 

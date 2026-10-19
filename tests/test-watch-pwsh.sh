@@ -21,6 +21,14 @@ t "Remove-Item /tmp (except)"      allow '{"tool_name":"Bash","tool_input":{"com
 t "Remove-Item ~/.cache (except)"  allow '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Remove-Item -Recurse -Force ~/.cache/build\""}}'
 t "Remove-Item ~/code (ask)"       ask   '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Remove-Item -Recurse -Force ~/code\""}}'
 t "Remove-Item /var/tmp (except)"  allow '{"tool_name":"Bash","tool_input":{"command":"pwsh -c \"Remove-Item -Force -Recurse /var/tmp/stale\""}}'
+# Every path has to be scratch, whichever order they come in (#35).
+t "Remove-Item out-of-tree, tmp"   ask   '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Remove-Item -Recurse -Force /Users/foo/Documents /tmp/build\""}}'
+t "Remove-Item tmp, out-of-tree"   ask   '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Remove-Item -Recurse -Force /tmp/build /Users/foo/Documents\""}}'
+t "Remove-Item tmp,out-of-tree"    ask   '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Remove-Item -Recurse -Force /tmp/build,/Users/foo/Documents\""}}'
+t "Remove-Item /tmp/.. escape"     ask   '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Remove-Item -Recurse -Force /tmp/../Users/foo\""}}'
+t "Remove-Item /private/tmp"       allow '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Remove-Item -Recurse -Force /private/tmp/build\""}}'
+t "Remove-Item -Path /tmp"         allow '{"tool_name":"Bash","tool_input":{"command":"pwsh -c \"Remove-Item -Path /tmp/build\""}}'
+t "Remove-Item non-recursive"      ask   '{"tool_name":"Bash","tool_input":{"command":"pwsh -c \"Remove-Item /tmp/a.log /etc/hosts\""}}'
 
 echo "--- ask (bash target): Stop-Process -Force ---"
 t "Stop-Process -Force"   ask   '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Stop-Process -Name node -Force\""}}'

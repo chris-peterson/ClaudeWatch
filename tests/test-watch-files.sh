@@ -29,6 +29,25 @@ t "confirm -rf /"    allow '{"tool_name":"Bash","tool_input":{"command":"confirm
 t "my-rm -rf /"      allow '{"tool_name":"Bash","tool_input":{"command":"my-rm -rf /"}}'
 t "rm -rf /*.log"    ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /*.log"}}'
 t "git rm --cached"  allow '{"tool_name":"Bash","tool_input":{"command":"git rm --cached -r .claude/skills"}}'
+t "grep for rm -rf /" allow '{"tool_name":"Bash","tool_input":{"command":"grep -rn '"'"'rm -rf /'"'"' ."}}'
+
+echo "--- rm opening a quoted -c or eval script (#42) ---"
+# A quote is a boundary only where it opens a script the shell runs, so the
+# rm that starts one is matched and an rm that starts a search pattern is not.
+t "bash -c rm -rf /"           block '{"tool_name":"Bash","tool_input":{"command":"bash -c \"rm -rf /\""}}'
+t "sh -c rm -rf /"             block '{"tool_name":"Bash","tool_input":{"command":"sh -c '"'"'rm -rf /'"'"'"}}'
+t "bash -lc rm -rf /"          block '{"tool_name":"Bash","tool_input":{"command":"bash -lc '"'"'rm -rf /'"'"'"}}'
+t "/bin/bash -c rm -rf /"      block '{"tool_name":"Bash","tool_input":{"command":"/bin/bash -c \"rm -rf /\""}}'
+t "zsh -c rm -rf /"            block '{"tool_name":"Bash","tool_input":{"command":"zsh -c \"rm -rf /\""}}'
+t "bash -x -c rm -rf /"        block '{"tool_name":"Bash","tool_input":{"command":"bash -x -c '"'"'rm -rf /'"'"'"}}'
+t "grep -c for rm -rf /"       allow '{"tool_name":"Bash","tool_input":{"command":"grep -c '"'"'rm -rf /'"'"' file"}}'
+t "a word ending in sh -c"     allow '{"tool_name":"Bash","tool_input":{"command":"myfish -c '"'"'rm -rf /'"'"'"}}'
+t "eval rm -rf /"              block '{"tool_name":"Bash","tool_input":{"command":"eval \"rm -rf /\""}}'
+t "bash -c rm -rf ~/Documents" ask   '{"tool_name":"Bash","tool_input":{"command":"bash -c \"rm -rf ~/Documents\""}}'
+t "eval rm -rf ~/Documents"    ask   '{"tool_name":"Bash","tool_input":{"command":"eval \"rm -rf ~/Documents\""}}'
+t "bash -c cd; rm -rf"         ask   '{"tool_name":"Bash","tool_input":{"command":"bash -c \"cd /x; rm -rf ~/Documents\""}}'
+t "bash -c rm -r"              ask   '{"tool_name":"Bash","tool_input":{"command":"bash -c \"rm -r ~/Documents\""}}'
+t "my-eval is not eval"        allow '{"tool_name":"Bash","tool_input":{"command":"my-eval \"rm -rf ~/Documents\""}}'
 
 echo "--- block: chmod 777 ---"
 t "chmod 777"        block '{"tool_name":"Bash","tool_input":{"command":"chmod 777 /tmp/file"}}'
@@ -65,6 +84,23 @@ t "rm -rf /tmp"         allow '{"tool_name":"Bash","tool_input":{"command":"rm -
 # prompts when it's spelled out.
 t "rm --long /tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"rm --recursive --force /tmp/build-output"}}'
 t "rm -r /var/tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"rm -r /var/tmp/stale-dir"}}'
+
+echo "--- scratch exemption reads every target (#35) ---"
+# One row per case in #35, run with cwd /work/repo.
+c() { t "$1" "$2" '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"'"$3"'"}}'; }
+c "rm -rf \$(mktemp -d)"            block 'rm -rf $(mktemp -d)'
+c "rm -rf \"\$(mktemp -d)\""        block 'rm -rf \"$(mktemp -d)\"'
+c "rm -rf /tmp/\$(whoami)"          block 'rm -rf /tmp/$(whoami)'
+c "rm -rf /tmp/../Users/foo"        ask   'rm -rf /tmp/../Users/foo'
+c "scratch then out of tree"        ask   'rm -rf /tmp/build /Users/foo/Documents'
+c "out of tree then scratch"        ask   'rm -rf /Users/foo/Documents /tmp/build'
+c "in-tree then scratch"            allow 'rm -rf /work/repo/bin /tmp/build'
+c "scratch then in-tree"            allow 'rm -rf /tmp/build bin'
+c "rm -rf /private/tmp/build"       allow 'rm -rf /private/tmp/build'
+c "rm -r /private/var/tmp"          allow 'rm -r /private/var/tmp/stale-dir'
+c "rm -rf /etc/foo"                 ask   'rm -rf /etc/foo'
+c "rm -rf /tmp/build"               allow 'rm -rf /tmp/build'
+c "tool dir then scratch"           allow 'rm -rf .pytest_cache /tmp/build'
 
 echo "--- is_in_project_tree: in-tree recursive deletes allowed ---"
 t "rm -r in-tree relative"       allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r old-dir"}}'

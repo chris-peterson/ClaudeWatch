@@ -23,6 +23,8 @@ t "git -C path rm --cached"  allow '{"tool_name":"Bash","tool_input":{"command":
 echo "--- a plain rm still decides on its own terms ---"
 t "rm -rf /"                 block '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
 t "rm -rf outside tree"      ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /home/me/build"}}'
+t "rm -rf in a -c script"    block '{"tool_name":"Bash","tool_input":{"command":"bash -c \"rm -rf /\""}}'
+t "rm -rf session scratchpad" allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -rf /private/tmp/claude-501/proj/session/scratchpad/out"}}'
 
 echo "--- one command, one decision ([OUT-03]) ---"
 # `npm install` is an ask in watch-installs; the pipe is a compound shape in
@@ -38,6 +40,8 @@ t "confirm -rf"              allow '{"tool_name":"Bash","tool_input":{"command":
 t "npm install-test"         allow '{"tool_name":"Bash","tool_input":{"command":"npm install-test"}}'
 t "git commit-tree"          allow '{"tool_name":"Bash","tool_input":{"command":"git commit-tree HEAD"}}'
 t "grep for a guarded cmd"   allow '{"tool_name":"Bash","tool_input":{"command":"grep -rn '"'"'git push'"'"' . | head -20"}}'
+t "grep for rm -rf /"        allow '{"tool_name":"Bash","tool_input":{"command":"grep -rn '"'"'rm -rf /'"'"' ."}}'
+t "grep -c for rm -rf /"     allow '{"tool_name":"Bash","tool_input":{"command":"grep -c '"'"'rm -rf /'"'"' file"}}'
 t "sed for a guarded cmd"    allow '{"tool_name":"Bash","tool_input":{"command":"sed -i '"'"'s/npm install/npm ci/'"'"' README.md"}}'
 
 echo "--- ordinary work is not prompted ---"

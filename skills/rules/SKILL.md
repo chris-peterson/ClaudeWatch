@@ -89,6 +89,14 @@ without deleting it.
 For `enable <name>`: rename `watches/<name>.yml.disabled` back to
 `watches/<name>.yml`.
 
+Both renames run through Bash and write into the plugin folder. When the
+sandbox is on, run the rename unsandboxed, and tell the user to expect a
+permission prompt for it. Claude Code refuses a sandboxed shell write into a
+`--plugin-dir` folder (`just rules`, `just try`), and an installed plugin's
+folder under `~/.claude/plugins/` is outside the working directory a sandboxed
+command writes to by default. The other commands write through Write/Edit,
+which this does not affect.
+
 For `new`: guide the user through creating a custom rule set:
 
 1. **Name** — the rule set name (e.g. `watch-docker`). Must start with `watch-`.

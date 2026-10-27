@@ -150,9 +150,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/reset-decisions.py"
 ```
 
 Pass `--hard` to delete the log outright instead of archiving it. Only offer
-reset after changes are applied — a reset before the user has dispositioned the
-buckets throws away the very data this pass is built on. If the user applied
-nothing, leave the log alone.
+reset after changes are applied — a reset before the user has decided what to
+do with the buckets throws away the very data this pass is built on. If the
+user applied nothing, leave the log alone.
 
 ## Auto mode
 

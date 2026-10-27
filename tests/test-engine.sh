@@ -106,6 +106,51 @@ else
   FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: unrecognized YAML field warns (stderr: ${TYPO_STDERR:-empty})"
 fi
 
+echo "--- hook input the engine can't read denies ---"
+# Each payload carries a command watch-git denies when well-formed, so a silent
+# exit here would be an allow of `git push --force`.
+# The payload is a printf format, so `\xff` reaches the engine as a raw byte.
+expect_deny_naming() {
+  local label="$1" needle="$2" payload="$3" result code
+  TOTAL=$((TOTAL + 1))
+  result=$(printf "$payload" | python3 "$HOOK" "$RULES_DIR" 2>/dev/null) && code=0 || code=$?
+  if [ "$code" -ne 0 ]; then
+    FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: $label (exit $code)"
+  elif echo "$result" | grep -q '"permissionDecision":"deny"' && echo "$result" | grep -qF "$needle"; then
+    PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: $label"
+  else
+    FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: $label (expected deny naming '$needle', got: ${result:-empty})"
+  fi
+}
+expect_deny_naming "invalid JSON denies" "unreadable hook input: invalid JSON" \
+  'git push --force'
+expect_deny_naming "empty stdin denies" "unreadable hook input: invalid JSON" \
+  ''
+expect_deny_naming "array payload denies" "the payload is an array" \
+  '["git push --force"]'
+expect_deny_naming "string payload denies" "the payload is a string" \
+  '"git push --force"'
+expect_deny_naming "string tool_input denies" "tool_input is a string" \
+  '{"tool_name":"Bash","tool_input":"git push --force"}'
+expect_deny_naming "list command denies" "tool_input.command is an array" \
+  '{"tool_name":"Bash","tool_input":{"command":["git","push","--force"]}}'
+expect_deny_naming "non-UTF-8 stdin denies" "stdin is not valid UTF-8" \
+  '{"tool_name":"Bash","tool_input":{"command":"git push --force \xff"}}'
+expect_deny_naming "well-formed control still denies on its rule" "git push --force:" \
+  '{"tool_name":"Bash","tool_input":{"command":"git push --force"}}'
+expect_deny_naming "an exception past input validation denies" "watchdog: internal error: TypeError" \
+  '{"tool_name":"Bash","cwd":5,"tool_input":{"command":"rm -r build"}}'
+run_test "$RULES_DIR" "an unmatched tool's input shape is not read" allow \
+  '{"tool_name":"Read","tool_input":"anything"}'
+
+PARSE_STDERR=$(printf 'not json' | python3 "$HOOK" "$RULES_DIR" 2>&1 >/dev/null || true)
+TOTAL=$((TOTAL + 1))
+if echo "$PARSE_STDERR" | grep -q "invalid JSON on stdin"; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: parse failure still writes stderr"
+else
+  FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: parse failure still writes stderr (stderr: ${PARSE_STDERR:-empty})"
+fi
+
 rm -rf "$TMPDIR_TESTS"
 
 echo ""
@@ -225,9 +270,19 @@ run_test "$TMPDIR_TARGETS/watch-target.yml" "replace_all reconstructs every matc
 
 echo "--- Edit on a non-UTF-8 file still evaluates ---"
 TMPFILE_LATIN1=$(mktemp "$TMPDIR_TARGETS/latin1.XXXXXX.foo")
-printf 'caf\xe9\nno-op placeholder\n' > "$TMPFILE_LATIN1"
+printf 'caf\xe9 \xff\nno-op placeholder\n' > "$TMPFILE_LATIN1"
 run_test "$TMPDIR_TARGETS/watch-target.yml" "undecodable bytes do not crash the engine" block \
   "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"no-op placeholder","new_string":"destroy-file"}}' "$TMPFILE_LATIN1")"
+
+echo "--- Edit decodes a file by its byte-order mark ---"
+TMPFILE_UTF16="$TMPDIR_TARGETS/profile.ps1"
+python3 -c 'import codecs, sys; open(sys.argv[1], "wb").write(codecs.BOM_UTF16_LE + "Write-Host hi\r\n# placeholder\r\n".encode("utf-16-le"))' "$TMPFILE_UTF16"
+run_test "$SCRIPT_DIR/../watches/watch-pwsh.yml" "UTF-16LE+BOM edit screens the inserted text" block \
+  "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"# placeholder","new_string":"Format-Volume -DriveLetter C"}}' "$TMPFILE_UTF16")"
+
+echo "--- Edit whose old_string is absent screens new_string ---"
+run_test "$TMPDIR_TARGETS/watch-target.yml" "absent old_string matches new_string" block \
+  "$(printf '{"tool_name":"Edit","tool_input":{"file_path":"%s","old_string":"not in the file","new_string":"destroy-file"}}' "$TMPFILE_EDIT")"
 
 echo "--- unsupported tool names exit silently ---"
 run_test "$TMPDIR_TARGETS/watch-target.yml" "Read tool produces no output" allow \

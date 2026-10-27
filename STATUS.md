@@ -6,7 +6,7 @@ the spec is revised.
 
 **Last audit:** 2026-10-19
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 97/97 normative requirements (100%).
+**Coverage:** 100/100 normative requirements (100%).
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
 for the contract, `scripts/watchdog.py` for engine behavior, and the per-set
@@ -19,8 +19,11 @@ the file and its tests.
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
 | EN-01..EN-15 | Engine lifecycle, IO, tool dispatch (Bash, Monitor, Write, Edit), command-word normalization, error handling | Covered | `scripts/watchdog.py` (`_resolve_input`) + `tests/test-engine.sh` |
-| EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.py` (`main`) |
-| EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py` (`main`) |
+| EN-04, EN-04b | Unreadable hook input (not UTF-8, not JSON, wrong shape) denies, naming the error | Covered | `scripts/watchdog.py` (`_read_hook_input`, `_resolve_input`, `_string_field`) + `tests/test-engine.sh` |
+| EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.py` (`_read_hook_input`) + `tests/test-engine.sh` |
+| EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py` (`_decide`) |
+| EN-10a | An exception on the decision path denies, naming it | Covered | `scripts/watchdog.py` (`main`) + `tests/test-engine.sh` |
+| EN-13 | Edit screens the post-edit file, decoded by its byte-order mark; `new_string` alone when the file is unreadable or `old_string` is absent | Covered | `scripts/watchdog.py` (`_resolve_input`, `_decode_file`) + `tests/test-engine.sh` |
 | LOG-01..LOG-06 | Decision logging side channel: on by default (`CLAUDEWATCH_LOG=off` to opt out), records the command shape rather than the raw command, owner-only perms (0600/0700), schema-versioned header that discards pre-shape logs on upgrade | Covered | `scripts/watchdog.py` (`_log_event`, `command_shape`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | RL-01..RL-20 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning, the `unless_condition`/`unless_regex` exemptions and their `is_in_project_tree` / `is_ephemeral_scratch` / `is_recoverable` / `is_under_scratch_root` / `is_in_tree_or_scratch` predicates | Covered | `scripts/watchdog.py` (`_targets_under_scratch_root`, `_targets_in_tree_or_scratch`, `_remove_item_targets`) + `tests/test-engine.sh` + `tests/test-watch-files.sh` + `tests/test-watch-pwsh.sh` |
@@ -30,6 +33,7 @@ the file and its tests.
 | HK-02 | SessionStart plugin-update self-check *(retired in 0.18.0)* | Removed | Never implemented; the placeholder hook was deleted with the requirement |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |
 | HK-04 | SessionStart ambient guidance emission | Covered | `hooks/emit-rules.sh`, `rules/*.md`, `tests/test-ambient.sh` |
+| HK-05 | Guard hooks fail closed: the engine denies every fault it observes, and `onFailure: block` blocks the rest | Covered | `scripts/watchdog.py` (`_decide`, `main`) + `tests/test-engine.sh`; `hooks/hooks.yml` → `hooks/hooks.json` + `tests/test-hooks.sh` |
 | EXT-01..EXT-03 | Auto-discovery, disable-by-rename, no-code-change | Covered | `scripts/watchdog.py`, `tests/test-engine.sh` |
 | SK-01 | `/ClaudeWatch:help` overview *(retired in 0.16.0)* | Removed | README + docs site |
 | SK-02..SK-12 | `/ClaudeWatch:rules` interactive editor | Covered | `skills/rules/SKILL.md` |
@@ -46,6 +50,10 @@ the file and its tests.
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just preview-docs` | Covered | `justfile` + `tests/` |
 
 ## Audit history
+
+### 2026-10-19 — Coverage refresh (spec-status)
+
+STATUS.md updated: +3 IDs (EN-04b wrong-shape hook input, EN-10a catch-all deny, HK-05 fail-closed guard hooks), normative count 97 → 100. EN-04 now denies unreadable input instead of exiting silently, and EN-13 decodes the Edit target by its byte-order mark and screens `new_string` alone when `old_string` is absent; both get their own rows. The EN-04a and EN-05a pointers move with the code from `main` to `_read_hook_input` and `_decide`.
 
 ### 2026-10-19 — Coverage refresh (spec-status)
 

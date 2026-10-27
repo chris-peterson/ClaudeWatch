@@ -31,12 +31,14 @@ that Claude Code shows on ask prompts but omits on deny errors; the logged
 reasons carry no tag.
 """
 
+import codecs
 import glob
 import json
 import os
 import re
 import shlex
 import sys
+import traceback
 
 
 VALID_TARGETS = ("bash", "file-content")
@@ -1024,61 +1026,131 @@ def _log_event(data, input_kind, input_text, decision, matched):
         print(f"watchdog: failed to write decision log to {dest}: {e}", file=sys.stderr)
 
 
+class HookInputError(Exception):
+    """Hook input the engine can't read: not UTF-8, not JSON, or the wrong shape."""
+
+
+_JSON_TYPE_NAMES = {dict: "an object", list: "an array", str: "a string", bool: "a boolean", int: "a number", float: "a number"}
+
+
+def _json_type(value):
+    return _JSON_TYPE_NAMES.get(type(value), type(value).__name__)
+
+
+def _read_hook_input(raw):
+    """Decode the hook's stdin bytes into the payload object ([EN-01], [EN-04], [EN-04b])."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        raise HookInputError(f"stdin is not valid UTF-8: {e}")
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        print(f"watchdog: invalid JSON on stdin: {e}", file=sys.stderr)
+        raise HookInputError(f"invalid JSON: {e}")
+    if not isinstance(data, dict):
+        raise HookInputError(f"the payload is {_json_type(data)}, expected an object")
+    return data
+
+
+def _string_field(tool_input, key):
+    """A tool_input field the engine reads as text; absent or null reads as empty ([EN-03])."""
+    value = tool_input.get(key)
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise HookInputError(f"tool_input.{key} is {_json_type(value)}, expected a string")
+    return value
+
+
+_FILE_BOMS = (
+    (codecs.BOM_UTF32_LE, "utf-32"),
+    (codecs.BOM_UTF32_BE, "utf-32"),
+    (codecs.BOM_UTF16_LE, "utf-16"),
+    (codecs.BOM_UTF16_BE, "utf-16"),
+    (codecs.BOM_UTF8, "utf-8-sig"),
+)
+
+
+def _decode_file(raw):
+    """A file's text, decoded by its byte-order mark, else as UTF-8 ([EN-13]).
+
+    The UTF-32 marks are checked first because the UTF-32LE mark begins with
+    the UTF-16LE one. Undecodable bytes become U+FFFD so every rule still sees
+    the rest of the file.
+    """
+    encoding = next((enc for bom, enc in _FILE_BOMS if raw.startswith(bom)), "utf-8")
+    return raw.decode(encoding, errors="replace")
+
+
 def _resolve_input(data):
     """Map tool_input -> (input_kind, input_text, file_extension) or None."""
     tool_name = data.get("tool_name")
-    tool_input = data.get("tool_input", {}) or {}
+    if tool_name not in ("Bash", "Monitor", "Write", "Edit"):
+        return None
+    tool_input = data.get("tool_input")
+    if tool_input is None:
+        tool_input = {}
+    elif not isinstance(tool_input, dict):
+        raise HookInputError(f"tool_input is {_json_type(tool_input)}, expected an object")
 
     # A Monitor command runs in the same shell environment as a Bash command,
     # so it is the same input kind ([EN-14]). Monitor's `ws` form carries no
     # command and falls through to the empty-input exit ([EN-03]).
     if tool_name in ("Bash", "Monitor"):
-        cmd = tool_input.get("command", "")
+        cmd = _string_field(tool_input, "command")
         if not cmd:
             return None
         return "bash", _normalize_command_words(cmd), None
 
+    path = _string_field(tool_input, "file_path")
+
     if tool_name == "Write":
-        content = tool_input.get("content", "")
-        path = tool_input.get("file_path", "") or ""
+        content = _string_field(tool_input, "content")
         if not content:
             return None
         return "file-content", content, os.path.splitext(path)[1]
 
-    if tool_name == "Edit":
-        path = tool_input.get("file_path", "") or ""
-        old_string = tool_input.get("old_string", "")
-        new_string = tool_input.get("new_string", "")
-        replace_all = bool(tool_input.get("replace_all", False))
-        if not new_string and not old_string:
-            return None
-        try:
-            with open(path, encoding="utf-8", errors="replace") as f:
-                existing = f.read()
-            if replace_all:
-                content = existing.replace(old_string, new_string)
-            else:
-                content = existing.replace(old_string, new_string, 1)
-        except (OSError, FileNotFoundError):
-            content = new_string
-        if not content:
-            return None
-        return "file-content", content, os.path.splitext(path)[1]
-
-    return None
-
-
-def main():
-    raw = sys.stdin.read()
+    old_string = _string_field(tool_input, "old_string")
+    new_string = _string_field(tool_input, "new_string")
+    replace_all = bool(tool_input.get("replace_all", False))
+    if not new_string and not old_string:
+        return None
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        print(f"watchdog: invalid JSON on stdin: {e}", file=sys.stderr)
-        sys.exit(0)
+        with open(path, "rb") as f:
+            existing = _decode_file(f.read())
+    except OSError:
+        existing = None
+    if existing is None or old_string not in existing:
+        content = new_string
+    elif replace_all:
+        content = existing.replace(old_string, new_string)
+    else:
+        content = existing.replace(old_string, new_string, 1)
+    if not content:
+        return None
+    return "file-content", content, os.path.splitext(path)[1]
 
-    resolved = _resolve_input(data)
+
+def _emit(decision, reason):
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+            "permissionDecisionReason": reason,
+        }
+    }, separators=(",", ":")))
+
+
+def _decide():
+    try:
+        data = _read_hook_input(sys.stdin.buffer.read())
+        resolved = _resolve_input(data)
+    except HookInputError as e:
+        _emit("deny", f"watchdog: unreadable hook input: {e} {_PLUGIN_TAG}")
+        return
     if resolved is None:
-        sys.exit(0)
+        return
     input_kind, input_text, file_extension = resolved
     cwd = data.get("cwd")
 
@@ -1087,22 +1159,13 @@ def main():
     else:
         target = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "watches")
 
-    def _emit(decision, reason):
-        print(json.dumps({
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": decision,
-                "permissionDecisionReason": reason,
-            }
-        }, separators=(",", ":")))
-
     if os.path.isdir(target):
         rule_files = sorted(glob.glob(os.path.join(target, "*.yml")))
     elif os.path.isfile(target):
         rule_files = [target]
     else:
         _emit("deny", f"watchdog: rules not found: {target}")
-        sys.exit(0)
+        return
 
     all_blocks = []
     all_asks = []
@@ -1146,6 +1209,15 @@ def main():
             reason += f" {_PLUGIN_TAG}"
         _emit(decision, reason)
 
+
+def main():
+    # A traceback exits 1, which the host treats as a non-blocking error and lets
+    # the call through, so any exception becomes a deny instead ([EN-10a]).
+    try:
+        _decide()
+    except Exception as e:
+        traceback.print_exc()
+        _emit("deny", f"watchdog: internal error: {type(e).__name__}: {e} {_PLUGIN_TAG}")
     sys.exit(0)
 
 

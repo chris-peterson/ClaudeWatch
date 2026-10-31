@@ -19,6 +19,6 @@
     "git-guardian"
   ],
   "homepage": "https://chris-peterson.github.io/ClaudeWatch/#/",
-  "icon": "docs/favicon.svg",
+  "icon": ".claude-plugin/icon.svg",
   "documentationUrl": "https://chris-peterson.github.io/ClaudeWatch/#/"
 }

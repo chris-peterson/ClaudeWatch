@@ -7,7 +7,6 @@
 docs/*
 !docs/_sidebar.md
 !docs/.nojekyll
-!docs/favicon.svg
 !docs/logo.svg
 !docs/README.md
 

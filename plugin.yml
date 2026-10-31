@@ -12,7 +12,7 @@ version: 0.18.0
 description: "Screens every shell command and every file Claude writes, before either lands. Blocks the dangerous, asks on anything that changes state."
 author: chris-peterson
 repository: https://github.com/chris-peterson/ClaudeWatch
-icon: docs/favicon.svg
+icon: .claude-plugin/icon.svg
 license: MIT
 keywords: [claude, watch, safety, permissions, guardrail, hook, watchdog, installs, git-guardian]
 

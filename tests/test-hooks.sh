@@ -1,5 +1,5 @@
 #!/bin/bash
-# Tests for the hook wiring in hooks/hooks.yml ([HK-01], [HK-05]). hooks.json is
+# Tests for the hook wiring in hooks/hooks.yml ([HK-01], [HK-05], [HK-06]). hooks.json is
 # generated from this file in CI, so the source of record is what gets checked.
 set -euo pipefail
 
@@ -29,6 +29,26 @@ for matcher in GUARD_MATCHERS:
         failed += 1
         found = "no such PreToolUse entry" if entry is None else f"onFailure: {on_failure or 'absent'}"
         print(f"  {RED}FAIL{NC}: {matcher} guard declares onFailure: block ({found})")
+
+# [HK-06]: the hooks that stand between a prompt and nobody fail closed; the
+# marking hooks must not, or a broken one would refuse the user's own prompt.
+unattended = {(e.get("event"), e.get("matcher")): e for e in entries if "unattended.py" in e.get("command", "")}
+expected = {
+    ("PermissionRequest", None): "block",
+    ("PreToolUse", "AskUserQuestion"): "block",
+    ("UserPromptSubmit", None): None,
+    ("PostToolUse", "Skill"): None,
+}
+for key, want in expected.items():
+    entry = unattended.get(key)
+    got = entry.get("onFailure") if entry else "missing"
+    label = f"{key[0]}{'(' + key[1] + ')' if key[1] else ''} unattended hook onFailure is {want or 'absent'}"
+    if entry is not None and got == want:
+        passed += 1
+        print(f"  {GREEN}PASS{NC}: {label}")
+    else:
+        failed += 1
+        print(f"  {RED}FAIL{NC}: {label} (got {got})")
 
 print()
 print(f"Results: {passed} passed, {failed} failed")

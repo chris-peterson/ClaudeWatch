@@ -206,6 +206,104 @@ def parse_rules_yml(path):
     return result
 
 
+OVERRIDES_PATH = "~/.claude/claudewatch/overrides.yml"
+OVERRIDE_TIERS = ("ask", "block", "off")
+
+
+class OverridesError(Exception):
+    """An overrides file the engine can't read; every screened call is denied ([OVR-05])."""
+
+
+def load_overrides(path=OVERRIDES_PATH):
+    """Read the user's rule overrides ([OVR-01], [OVR-02]).
+
+    Returns `{set_name: "off" | {rule_name: tier}}`, or `{}` when the file is
+    absent. Raises OverridesError on anything it can't interpret, since guessing
+    at a malformed override could silently drop a block the user added.
+    """
+    path = os.path.expanduser(path)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except (OSError, UnicodeDecodeError) as e:
+        raise OverridesError(f"{path}: {e}") from e
+
+    overrides = {}
+    current = None
+    for n, raw in enumerate(lines, 1):
+        line = re.sub(r"\s+#.*$", "", raw.rstrip())
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key, sep, value = stripped.rpartition(":")
+        key, value = _unquote(key.strip()), value.strip()
+        if not sep or not key:
+            raise OverridesError(f"{path}:{n}: expected '<name>: <value>', got {stripped!r}")
+        if line == stripped:
+            if key in overrides:
+                raise OverridesError(f"{path}:{n}: rule set {key!r} appears twice")
+            if value == "":
+                overrides[key], current = {}, key
+            elif value == "off":
+                overrides[key], current = "off", None
+            else:
+                raise OverridesError(f"{path}:{n}: rule set {key!r} takes 'off' or a list of rules, not {value!r}")
+        elif current is None:
+            raise OverridesError(f"{path}:{n}: rule {key!r} is not under a rule set")
+        elif value not in OVERRIDE_TIERS:
+            raise OverridesError(f"{path}:{n}: rule {key!r} has tier {value!r}; use ask, block, or off")
+        else:
+            overrides[current][key] = value
+    return overrides
+
+
+def apply_overrides(config, overrides):
+    """The rule set as the user's overrides leave it ([OVR-03]), or None when it is off.
+
+    A moved rule keeps every field, exemptions included, so a rule promoted from
+    ask to block refuses what it used to ask about and nothing it used to exempt.
+    """
+    entry = overrides.get(config.get("name"))
+    if entry is None:
+        return config
+    if entry == "off":
+        return None
+    rules = {"block": [], "ask": []}
+    for tier in ("block", "ask"):
+        for rule in config.get("rules", {}).get(tier, []):
+            effective = entry.get(rule.get("name"), tier)
+            if effective != "off":
+                rules[effective].append(rule)
+    return {**config, "rules": rules}
+
+
+def override_report(configs, overrides):
+    """What the overrides change against the shipped rule sets ([OVR-04], [OVR-06])."""
+    shipped = {}
+    for config in configs:
+        shipped[config.get("name")] = {
+            rule.get("name"): tier
+            for tier in ("block", "ask")
+            for rule in config.get("rules", {}).get(tier, [])
+        }
+    changed, sets_off, stale = [], [], []
+    for set_name, entry in overrides.items():
+        if set_name not in shipped:
+            stale.append({"set": set_name})
+        elif entry == "off":
+            sets_off.append(set_name)
+        else:
+            for rule_name, tier in entry.items():
+                if rule_name not in shipped[set_name]:
+                    stale.append({"set": set_name, "rule": rule_name})
+                elif tier != shipped[set_name][rule_name]:
+                    changed.append({"set": set_name, "rule": rule_name,
+                                    "shipped": shipped[set_name][rule_name], "effective": tier})
+    return {"changed": changed, "sets_off": sets_off, "stale": stale}
+
+
 def _violation(rule):
     """A matched violation as structured data.
 
@@ -830,6 +928,74 @@ def _compound_escalation():
     }
 
 
+UNATTENDED_DIR = "~/.claude/claudewatch/unattended"
+_SESSION_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def unattended_marker(session_id):
+    """The marker file that says a session is unattended ([OUT-09]), or None.
+
+    Shared with `scripts/unattended.py`, which writes and removes it, so the
+    engine and the hook agree on one path. An id that could escape the
+    directory names no marker.
+    """
+    if not isinstance(session_id, str) or not _SESSION_ID.match(session_id):
+        return None
+    return os.path.join(os.path.expanduser(UNATTENDED_DIR), session_id)
+
+
+def _is_unattended(session_id):
+    marker = unattended_marker(session_id)
+    return marker is not None and os.path.isfile(marker)
+
+
+_GIT = r"git(?:\s+-C\s+\S+)?\s+"
+UNATTENDED_ALLOWANCE = (
+    ("git add", re.compile(_GIT + r"add(?:\s.*)?")),
+    ("git commit", re.compile(_GIT + r"commit(?!.*\s--amend\b)(?:\s.*)?")),
+    ("git switch", re.compile(_GIT + r"switch(?!.*\s(?:-f|--force|--discard-changes)(?:\s|$))(?:\s.*)?")),
+    ("git checkout -b", re.compile(_GIT + r"checkout\s+-b\s.*")),
+)
+
+
+def unattended_allowance(command):
+    """The [SK-24] operation a bare command is, or None.
+
+    The engine and the PermissionRequest hook both ask this, so the set an
+    unattended run may still perform is defined once.
+    """
+    command = command.strip()
+    if _is_compound_command(command):
+        return None
+    for name, form in UNATTENDED_ALLOWANCE:
+        if form.fullmatch(command):
+            return name
+    return None
+
+
+def record_unattended(session_id, verdict, what):
+    """Append an ALLOW or DENY line to the session's unattended log ([SK-22], [SK-24])."""
+    marker = unattended_marker(session_id)
+    if marker is None:
+        return
+    from datetime import datetime
+
+    try:
+        with open(marker + ".log", "a") as f:
+            f.write(f"{datetime.now().astimezone().isoformat(timespec='seconds')}\t{verdict}\t{what}\n")
+    except OSError as e:
+        print(f"watchdog: unattended log write failed: {e}", file=sys.stderr)
+
+
+def _unattended_escalation():
+    """The note prepended when an `ask` is escalated to `deny` for an unattended session."""
+    return {
+        "prefix": "unattended session",
+        "reason": "escalated to block — nobody is here to answer this ask; leave the step prepared for the user to run on return",
+        "ref": "",
+    }
+
+
 def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None):
     """Evaluate a single rule set against an input.
 
@@ -877,10 +1043,20 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
             _block(f"{label} — rule {rule.get('name', '?')!r} has empty pattern")
             continue
         try:
-            if re.search(rule["pattern"], input_text):
-                blocks.append(_violation(rule))
+            matched = bool(re.search(rule["pattern"], input_text))
         except re.error as e:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid regex: {e}")
+            continue
+        if not matched:
+            continue
+        # The parser drops exemptions from a shipped block rule, so only a rule an
+        # override moved here from ask carries one ([OVR-03]).
+        exempted, err = _is_exempted(rule, input_kind, input_text, cwd)
+        if err:
+            _block(f"{label} — rule {rule.get('name', '?')!r} {err}")
+            continue
+        if not exempted:
+            blocks.append(_violation(rule))
 
     for rule in rules.get("ask", []):
         target = _rule_target(rule)
@@ -942,31 +1118,28 @@ SUBCOMMAND_TOOLS = frozenset((
 ))
 # A subcommand token is a bare lowercase word (e.g. `pr`, `view`, `commit`).
 # Stopping at the first flag, path, or value keeps the shape free of secrets and
-# keeps the learn skill's suggested allow pattern as narrow as the real commands.
+# keeps the learn skill's groups as narrow as the real commands.
 _SUBCOMMAND_LIKE = re.compile(r"^[a-z][a-z0-9-]*$")
 _MAX_SHAPE_TOKENS = 4
 
 
-def command_shape(command, tool):
+def command_shape(command):
     """Reduce a bash command to a stable, secret-free grouping prefix.
 
     Skips leading `VAR=value` assignments and `sudo`, then keeps the program and
     (for known subcommand tools) its leading subcommand tokens, stopping at the
-    first flag, path, or value. Returns `(shape, allow_pattern)`, where the
-    pattern names `tool` because a host `Bash(…)` allow rule does not cover the
-    same command issued through `Monitor`. This is what
-    `[LOG-03]` records in place of the raw command, and what `/ClaudeWatch:learn`
-    groups by — defined here so the engine (which writes the log) and the
-    analyzer (which reads it) share one definition. Applying it to an already-
-    reduced shape is idempotent, so the analyzer can re-derive the pattern from a
-    logged shape.
+    first flag, path, or value. This is what `[LOG-03]` records in place of the
+    raw command, and what `/ClaudeWatch:learn` groups by — defined here so the
+    engine (which writes the log) and the analyzer (which reads it) share one
+    definition. Applying it to an already-reduced shape is idempotent, so the
+    analyzer can reduce legacy raw-command records the same way.
     """
     tokens = command.strip().split()
     i = 0
     while i < len(tokens) and _is_command_prefix(tokens[i]):
         i += 1
     if i >= len(tokens):
-        return command.strip(), f"{tool}({command.strip()})"
+        return command.strip()
 
     prog = os.path.basename(tokens[i])
     shape_tokens = [prog]
@@ -976,11 +1149,10 @@ def command_shape(command, tool):
             shape_tokens.append(tokens[j])
             j += 1
 
-    shape = " ".join(shape_tokens)
-    return shape, f"{tool}({shape}:*)"
+    return " ".join(shape_tokens)
 
 
-def _log_event(data, input_kind, input_text, decision, matched):
+def _log_event(data, input_kind, input_text, decision, matched, extra=None):
     """Append a decision record to the log unless logging is disabled.
 
     The side channel the `/ClaudeWatch:learn` workflow reads. It never
@@ -993,16 +1165,6 @@ def _log_event(data, input_kind, input_text, decision, matched):
       - "off"/"0"/"false"/"none"/"" -> logging disabled (this is the opt-out)
       - anything else -> treated as the destination path
     """
-    raw = os.environ.get("CLAUDEWATCH_LOG")
-    if raw is None:
-        dest = DEFAULT_LOG_PATH
-    else:
-        token = raw.strip().lower()
-        if token in _LOG_OFF_VALUES:
-            return
-        dest = DEFAULT_LOG_PATH if token in _LOG_DEFAULT_VALUES else raw
-    dest = os.path.expanduser(dest)
-
     from datetime import datetime, timezone
 
     entry = {
@@ -1013,17 +1175,40 @@ def _log_event(data, input_kind, input_text, decision, matched):
         "mode": data.get("permission_mode"),
         "decision": decision,
         "matched": matched,
+        **(extra or {}),
     }
     if input_kind == "bash":
         # Log the shape, not the raw command: a command can carry inline secrets
         # (credentials in flags, URLs, or VAR=value prefixes), and the durable log
         # is plaintext ([LOG-03]). The shape drops everything past the program and
         # its subcommand tokens, so no secret survives into the log.
-        entry["command_shape"] = command_shape(input_text, entry["tool"])[0]
+        entry["command_shape"] = command_shape(input_text)
     else:
         tool_input = data.get("tool_input", {}) or {}
         entry["path"] = tool_input.get("file_path")
+    append_log_record(entry)
 
+
+def log_destination():
+    """The decision log's path per CLAUDEWATCH_LOG, or None when logging is off."""
+    raw = os.environ.get("CLAUDEWATCH_LOG")
+    if raw is None:
+        return os.path.expanduser(DEFAULT_LOG_PATH)
+    token = raw.strip().lower()
+    if token in _LOG_OFF_VALUES:
+        return None
+    return os.path.expanduser(DEFAULT_LOG_PATH if token in _LOG_DEFAULT_VALUES else raw)
+
+
+def append_log_record(entry):
+    """Append one record to the decision log, writing the schema header first when needed.
+
+    Shared by the engine's decision records and the session-start overrides
+    record ([OVR-06]). A write failure is reported to stderr and swallowed.
+    """
+    dest = log_destination()
+    if dest is None:
+        return
     try:
         parent = os.path.dirname(dest)
         if parent:
@@ -1195,6 +1380,12 @@ def _decide():
         _emit("deny", f"watchdog: rules not found: {target}")
         return
 
+    try:
+        overrides = load_overrides()
+    except OverridesError as e:
+        _emit("deny", f"watchdog: rule overrides unreadable: {e} {_PLUGIN_TAG}")
+        return
+
     all_blocks = []
     all_asks = []
 
@@ -1203,6 +1394,9 @@ def _decide():
             config = parse_rules_yml(rule_file)
         except Exception as e:
             all_blocks.append(_error_violation(f"watchdog: failed to load rules: {e}"))
+            continue
+        config = apply_overrides(config, overrides)
+        if config is None:
             continue
         blocks, asks = evaluate_rules(config, input_kind, input_text, file_extension, cwd)
         all_blocks.extend(blocks)
@@ -1224,9 +1418,19 @@ def _decide():
     # to escalate selectively on.
     if decision == "ask" and input_kind == "bash" and _is_compound_command(input_text):
         decision, chosen = "deny", [_compound_escalation()] + chosen
+    allowance = None
+    if decision == "ask" and _is_unattended(data.get("session_id")):
+        allowance = unattended_allowance(input_text) if input_kind == "bash" else None
+        if allowance:
+            asked = "; ".join(v["prefix"] or v["reason"] for v in chosen)
+            record_unattended(data.get("session_id"), "ALLOW", f"{allowance} (ClaudeWatch ask not escalated: {asked})")
+            decision, chosen = "allow", []
+        else:
+            decision, chosen = "deny", [_unattended_escalation()] + chosen
 
     messages = [_message_plain(v) for v in chosen]
-    _log_event(data, input_kind, input_text, decision, messages)
+    _log_event(data, input_kind, input_text, decision, messages,
+               {"unattended_allow": allowance} if allowance else None)
 
     if decision != "allow":
         reason = "\n".join(messages)

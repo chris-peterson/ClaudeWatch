@@ -47,35 +47,37 @@ suite:
   pitch: "Stop allowing commands you haven't actually read. Save your attention for the decisions that matter."
   what: "Screens every shell command (and the code Claude writes to disk) before it runs, matching real patterns rather than naive prefixes, so reordered flags and chained commands don't slip past. Blocks the genuinely dangerous; asks before anything that changes state."
   cmds:
-    - ["/ClaudeWatch:rules", "See and edit the rule sets that guard your commands"]
+    - ["/ClaudeWatch:rules", "See the rules and change how they apply to you"]
     - ["/ClaudeWatch:learn", "Tune the rules from what's been prompting you"]
+    - ["/ClaudeWatch:unattended", "Step away: the agent decides, logs, and never waits on a prompt"]
   # The automatic block/ask flow is the primary interaction (see session: below);
   # these examples are anchored on the two skills, for when you look under the hood.
   # >>> shipyard:describe — generated from source by `shipyard gen-describe`; do not edit >>>
   describe:
     skills:
-      learn: Analyze the ClaudeWatch decision log to find commands that repeatedly prompt, and propose allow-list entries and rule tweaks that cut prompt fatigue — reviewed as one batch, then reset the log.
-      rules: View and interactively edit ClaudeWatch safety rules — list each rule set's block/ask rules as tables, then add, move, or remove rules, toggle whole rule sets on/off, or scaffold a new set, with conflict detection, a preview, and a test run before writing.
+      learn: Analyze the ClaudeWatch decision log to find the rules that ask most and the blocks that get in the way, and propose overrides (move a rule between ask and block, or turn it off) reviewed as one batch, then reset the log.
+      rules: 'View ClaudeWatch''s rules and change how they apply to you: move a rule between block and ask, turn a rule or a whole rule set off, or restore the shipped tier, kept in an overrides file that survives plugin upgrades.'
+      unattended: Work while the user is away, making best-judgment calls, logging them, and never waiting on a question, a permission prompt, or a ClaudeWatch ask.
     rules:
       ask-is-not-a-confirmation: Don't treat ClaudeWatch's ask tier as a confirmation
       avoid-compound-commands: Before you pipe or chain, check the lead command
     hooks:
       emit-rules: SessionStart — Emit ClaudeWatch's ambient guidance into context.
-      hooks: 'Hook wiring: PreToolUse→watchdog (Bash|Monitor, Write|Edit); SessionStart→emit-rules.'
+      hooks: 'Hook wiring: PreToolUse→watchdog (Bash|Monitor, Write|Edit), unattended (AskUserQuestion); SessionStart→emit-rules, overrides; UserPromptSubmit→unattended; PostToolUse→unattended (Skill); PermissionRequest→unattended.'
   # <<< shipyard:describe <<<
   examples:
     - label: "/ClaudeWatch:rules"
       ac: "--purple"
       frames:
         - { t: you, text: "/ClaudeWatch:rules" }
-        - { t: claude, text: "watch-git blocks git push --force and asks before git push and git commit. Add a rule, edit one, or move it to except?" }
-        - { t: status, text: "previews the change, then writes it back to watches/watch-git.yml" }
+        - { t: claude, text: "watch-git blocks git push --force and asks before git push and git commit. Move one between block and ask, or turn it off?" }
+        - { t: status, text: "previews the change, then writes it to your overrides file, which survives upgrades" }
     - label: "/ClaudeWatch:learn"
       ac: "--cyan"
       frames:
         - { t: you, text: "/ClaudeWatch:learn" }
-        - { t: claude, text: "You've confirmed rm -rf node_modules 9 times this week — add an except so it stops asking?" }
-        - { t: status, text: "proposes the except clause for watch-files from your decision log" }
+        - { t: claude, text: "git stash asked 14 times this week and you approved every one. Turn that rule off?" }
+        - { t: status, text: "proposes overrides from your decision log, applied once you approve each one" }
   session:
     - { t: claude, text: "Wrapping up — I'll force-push the rebase, then clear the scratch dirs." }
     - { t: watch, cmd: "git push --force", err: "watch-git — overwrites shared remote history", link: "https://git-scm.com/docs/git-push#Documentation/git-push.txt--f" }

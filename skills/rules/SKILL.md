@@ -1,183 +1,135 @@
 ---
 name: rules
 description: >
-  View and interactively edit ClaudeWatch safety rules — list each rule set's
-  block/ask rules as tables, then add, move, or remove rules, toggle whole rule
-  sets on/off, or scaffold a new set, with conflict detection, a preview, and a
-  test run before writing.
+  View ClaudeWatch's rules and change how they apply to you: move a rule between
+  block and ask, turn a rule or a whole rule set off, or restore the shipped
+  tier, kept in an overrides file that survives plugin upgrades.
 disable-model-invocation: true
 ---
 
-A rule set is a `watches/watch-*.yml` file; each holds `block` and `ask` rules
-that the PreToolUse hook matches against commands. This skill lists them and
-walks any change through preview and tests before writing.
+ClaudeWatch ships its rules in `watches/watch-*.yml`, inside the plugin's
+install folder, which every upgrade replaces. A user's changes live in
+`~/.claude/claudewatch/overrides.yml` instead, and `scripts/overrides.py` is the
+only program that writes it. This skill lists the rules as they apply now and
+walks each change through a preview before writing.
+
+An override can move a shipped rule between `block` and `ask`, turn a rule or a
+whole rule set `off`, or restore the shipped tier. It cannot add a rule, a
+pattern, or an exemption; a new rule belongs in the plugin's source.
 
 ## Steps
 
 ### 1. Find the plugin root
 
-All paths below are relative to `${CLAUDE_PLUGIN_ROOT}`, which Claude Code sets
-when the skill runs. If it is empty, stop and report — do not guess a path, since
-running against the wrong directory would edit the wrong rule files.
+The commands below run `${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py`. If
+`${CLAUDE_PLUGIN_ROOT}` is empty, stop and report: do not guess a path.
 
-### 2. Discover rule sets
+### 2. Read the rules as they apply now
 
-List YAML files in `${CLAUDE_PLUGIN_ROOT}/watches/`. Each file is a rule set
-(e.g. `watch-git.yml`, `watch-installs.yml`).
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" show --json
+```
 
-Also check for disabled rule sets — files ending in `.yml.disabled` in the
-same directory. These are rule sets that have been toggled off.
+It reports each shipped rule set with `off` (the whole set is turned off), and
+each rule with its `shipped` and `effective` tier and its `reason`, plus a
+`stale` list: overrides naming a rule set or rule the shipped rules no longer
+have, which the engine ignores. If it exits non-zero, the overrides file is
+malformed and **every screened call is being denied**: show the error, offer
+`reset` (step 4) or a hand fix, and stop until it loads.
 
-### 3. Read and display rules for each rule set
+### 3. Display
 
-For each **enabled** rule set, present rules in two tables. Use the rule set
-`name` field as the heading. Use the naming convention
-`<ruleset>-block-NN` / `<ruleset>-ask-NN` for IDs, where `<ruleset>` is the
-short name from the YAML `name` field (e.g. `watch-git` → `git`), and NN is
-zero-padded (e.g. `git-block-01`, `installs-ask-03`):
+For each rule set, present two tables of its **effective** rules. Number IDs in
+shipped order, `<short-name>-block-NN` / `<short-name>-ask-NN`, where the short
+name drops `watch-` (`watch-git` -> `git`) and NN is zero-padded. Mark a rule
+whose effective tier differs from its shipped one with its shipped tier
+(`was ask`), and list a rule turned off under its set as `off (was block)`.
 
-**watch-git** (`watches/watch-git.yml`)
+**watch-git**
 
 **🚫 block** — rejected outright:
 
 | id | command | reason |
 |----|---------|--------|
-| git-block-01 | `name` | reason |
+| git-block-01 | `git push --force` | reason |
+| git-block-07 | `git commit` *(was ask)* | reason |
 
 **❓ ask** — require confirmation:
 
 | id | command | reason |
 |----|---------|--------|
-| git-ask-01 | `name` | reason |
+| git-ask-01 | `git checkout -- <file>` | reason |
 
-After listing all enabled rule sets, if any **disabled** rule sets exist, list
-them:
+Off: `git stash` *(was ask)*
 
-**Disabled rule sets:**
-- `watch-foo` (`watches/watch-foo.yml.disabled`)
+Then list any rule set turned off (`watch-dotnet` — off), and any stale
+override with a note that it is ignored and can be removed with `reset`.
 
-### 4. Check for `--list` flag
+If the user passed `--list`, stop here.
 
-If the user passed `--list`, stop here and do not enter the edit loop.
-
-### 5. Prompt for edits
+### 4. Prompt for edits
 
 Ask: **"Make any changes? (Enter a command or press Enter to skip)"**
 
 ```
 Commands:
-  <id>:block      — move rule to block       (e.g. git-ask-02:block)
-  <id>:ask        — move rule to ask          (e.g. git-block-03:ask)
-  <id>:allow      — remove rule entirely      (e.g. installs-ask-05:allow)
-  add             — add a new rule
-  disable <name>  — disable an entire rule set (e.g. disable watch-files)
-  enable <name>   — re-enable a disabled rule set (e.g. enable watch-files)
-  new             — create a new custom rule set
-  done / ↵        — finish
+  <id>:block    — move the rule to block        (e.g. git-ask-02:block)
+  <id>:ask      — move the rule to ask          (e.g. git-block-03:ask)
+  <id>:off      — turn the rule off             (e.g. installs-ask-05:off)
+  <id>:reset    — restore the rule's shipped tier
+  off <name>    — turn a rule set off           (e.g. off watch-dotnet)
+  on <name>     — restore a rule set            (e.g. on watch-dotnet)
+  reset         — remove every override
+  done / ↵      — finish
 >
 ```
 
-For `add`: prompt for (1) the command to match, (2) which rule set it belongs
-to, (3) a reason (why the rule exists), (4) an optional `ref` (docs URL), and
-(5) whether it should block or ask. Derive a Python `re.search()` regex from
-the command description, following the style of existing patterns.
+Accept one command per turn and loop until `done` or an empty reply. Hold the
+changes; nothing is written yet. If the user makes no changes, stop.
 
-For `disable <name>`: rename `watches/<name>.yml` to `watches/<name>.yml.disabled`.
-The engine only loads `*.yml` files, so this effectively turns off the rule set
-without deleting it.
+A rule moved from ask to block keeps its exemptions: `rm -rf` moved to block
+still skips the in-tree and scratch-path deletes it used to skip, and blocks
+what it used to ask about. Say so when the user moves a rule that has one.
 
-For `enable <name>`: rename `watches/<name>.yml.disabled` back to
-`watches/<name>.yml`.
+### 5. Preview
 
-Both renames run through Bash and write into the plugin folder. When the
-sandbox is on, run the rename unsandboxed, and tell the user to expect a
-permission prompt for it. Claude Code refuses a sandboxed shell write into a
-`--plugin-dir` folder (`just rules`, `just try`), and an installed plugin's
-folder under `~/.claude/plugins/` is outside the working directory a sandboxed
-command writes to by default. The other commands write through Write/Edit,
-which the sandbox does not affect. With
-`permissions.blockWritesOutsideWorkingDirectories` on, Write/Edit refuse the
-plugin folder too: tell the user to add it to
-`permissions.additionalDirectories`, or to run the skill from the plugin's
-checkout.
-
-For `new`: guide the user through creating a custom rule set:
-
-1. **Name** — the rule set name (e.g. `watch-docker`). Must start with `watch-`.
-2. **Filter** — a regex pre-check to skip irrelevant commands (e.g. `\bdocker\b`).
-   Explain: "This is a fast regex that skips commands that can't possibly match
-   any of your rules. Use `\b` word boundaries around keywords."
-3. **Rules** — prompt for one or more rules, each with:
-   - `name` — friendly label (e.g. `docker run --privileged`)
-   - `pattern` — Python `re.search()` regex
-   - `reason` — why the rule exists
-   - `ref` — optional docs URL
-   - `block` or `ask`
-4. Write the file to `watches/watch-<name>.yml` using the standard YAML format.
-
-Accept one command per turn. Loop back to the prompt after each operation
-until the user enters `done` or presses Enter with no input.
-
-If the user presses Enter immediately (no changes requested), skip to step 8.
-
-### 6. Conflict and duplicate check
-
-Before writing, scan the updated rule list for:
-
-- **Exact duplicates** — identical `pattern` strings.
-- **Shadowing** — one pattern is a strict substring of another and would match
-  a superset of commands (e.g., `git\s+push` shadows `git\s+push\s+origin`).
-- **Cross-section conflicts** — same effective pattern appears in both `block`
-  and `ask`.
-
-Report any findings and ask the user how to resolve them before continuing.
-
-### 7. Preview
-
-Show the full updated rule tables (same format as step 3) so the user can
-review the final state. Then ask:
+Show the affected rule tables as they will be after the changes, each change
+marked, then ask:
 
 ```
 Confirm changes? [yes / edit / abort]
 ```
 
-- **yes** — proceed to write.
-- **edit** — return to the prompt in step 5.
-- **abort** — discard all pending changes and exit.
+- **yes** — apply.
+- **edit** — return to step 4.
+- **abort** — discard the pending changes.
 
-### 8. Apply changes
+Turning a block rule off or down to ask removes a refusal ClaudeWatch ships
+with. Name each one in the preview so the confirmation covers it.
 
-Write only the modified rule set files. Preserve the exact YAML format — the
-skeleton below is the common case; `SCHEMA.md` in the repo root is the
-authoritative field reference (`except`, multiple patterns, `filter`, etc.),
-so consult it rather than inferring fields:
+### 6. Apply
 
-```yaml
-name: watch-name
-filter: 'regex'
+Run one command per change, by the rule's set name and its `name` exactly as
+`show` reported it:
 
-rules:
-  block:
-    - name: command name
-      pattern: 'regex'
-      reason: why the rule exists
-      ref: https://...
-
-  ask:
-    - name: command name
-      pattern: 'regex'
-      reason: why the rule exists
-      ref: https://...
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" set <set> "<rule name>" <ask|block|off>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" set <set> off
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" reset <set> ["<rule name>"]
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" reset
 ```
 
-### 9. Verify
+`<id>:reset` and `on <name>` are `reset`; setting a rule to its shipped tier
+also removes its entry. Never edit `watches/` or the overrides file by hand from
+this skill.
 
-Run `bash "${CLAUDE_PLUGIN_ROOT}/tests/test-watchdog.sh"`. If tests fail, explain which
-rule caused the failure and offer to fix or revert.
+### 7. Verify
 
-If any rules were added, note that the test file has no coverage for them yet
-and offer to add test cases.
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" check
+```
 
-### 10. Confirm
-
-Summarize what changed (or confirm no changes were made).
+A malformed overrides file denies every screened call, so report any error at
+once. Then summarize what changed. The changes apply to the next command;
+from the next session on, each session's start logs them to the decision log,
+so they stay visible.

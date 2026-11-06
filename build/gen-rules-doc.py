@@ -195,7 +195,7 @@ def main():
         "Generated from rule files in `watches/`.",
         "",
         "> [!TIP]",
-        "> Use the `/ClaudeWatch:rules` skill to interactively customize or extend these rules.",
+        "> Use the `/ClaudeWatch:rules` skill to move a rule between block and ask, or turn rules off, in an overrides file that survives upgrades.",
         "",
         "\n\n".join(sections),
         "",

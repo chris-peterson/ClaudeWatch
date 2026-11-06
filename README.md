@@ -28,67 +28,65 @@ The plugin ships these rule sets, each a standalone YAML file auto-discovered by
 | **watch-ruby** | `watches/watch-ruby.yml` | `FileUtils.rm_rf` at root/$HOME, `Marshal.load`, `YAML.load` on input (block); `FileUtils.rm_rf`, `File.delete`, `system`/`exec`, backtick-with-interpolation, `eval`, `instance_eval`/`class_eval`/`module_eval` (ask). Applies to both `ruby -e` bash invocations and `.rb` file content authored via Write/Edit |
 | **watch-secrets** | `watches/watch-secrets.yml` | Reading SSH keys or cloud credentials (AWS SSO/CLI caches included) with `cat`, `tac`, `xxd` and the other readers, or a bare `<` redirect; echo secrets (block); reading dotfiles, .env files, PEM/key files, secret-named files; env/printenv (ask). The dotfile ask skips Claude Code's skill and plugin caches under `~/.claude` |
 
-Each rule set has an optional `filter` regex that short-circuits bash commands outside its domain. Rule sets targeting script bodies declare `extensions` to gate which `Write`/`Edit` payloads they evaluate. To add a new rule set, drop a YAML file in `watches/`. To disable one, rename it to `*.yml.disabled`.
+Each rule set has an optional `filter` regex that short-circuits bash commands outside its domain. Rule sets targeting script bodies declare `extensions` to gate which `Write`/`Edit` payloads they evaluate. To add a new rule set, drop a YAML file in `watches/`.
 
-## Pairing with Bash permissions
+### Changing how the rules apply to you (`/ClaudeWatch:rules`)
 
-Agents routinely generate one-off scripts to complete tasks, both inline (`python3 -c "..."`, `pwsh -Command "..."`) and as authored files (`Write` of a `.py` or `.ps1`). Reviewing every such invocation through a permission prompt is impractical: the script body is opaque in the prompt, and clicking "allow" doesn't reflect real consent.
+The shipped rule sets live in the plugin's install folder, which every upgrade replaces, so don't edit them there. `/ClaudeWatch:rules` keeps your changes in `~/.claude/claudewatch/overrides.yml` instead:
 
-ClaudeWatch's regex matching reaches anywhere in the command string and into the body of `Write`/`Edit` payloads, which covers cases Claude Code's built-in `startsWith` rules can't see. That makes it safe to broaden your Bash allowlist for the interpreters agents reach for, and let ClaudeWatch be the safety net that blocks destructive variants (`shutil.rmtree` at filesystem roots, `Format-Volume`, `Invoke-WebRequest | iex`, etc.):
-
-```jsonc
-// .claude/settings.json
-{
-  "permissions": {
-    "allow": [
-      "Bash(aws *)",
-      "Bash(pwsh *)",
-      "Bash(python3 *)"
-    ]
-  }
-}
+```yaml
+watch-dotnet: off          # turn a whole rule set off
+watch-git:
+  git commit: block        # ask -> block
+  git push --force: ask    # block -> ask
+  git stash: off           # turn one rule off
 ```
 
-Broadening the allowlist is safe because a hook decision outranks an `allow` rule: ClaudeWatch's `ask` and `deny` still fire even when your allowlist would otherwise let the command through. The allow rule only takes effect where ClaudeWatch stays silent: a silent hook defers to Claude Code's normal permission flow rather than auto-approving.
+An override moves a shipped rule between `block` and `ask` or turns it `off`; it can't add a rule or a pattern. A rule moved from ask to block keeps its exemptions, so `rm -rf` moved to block still lets in-tree and scratch deletes through. An override naming a rule an upgrade renamed or removed is ignored, and the next session start tells you about it. A file the engine can't parse denies every screened call until it's fixed, so a block you added can't silently disappear.
 
-The `Monitor` tool runs its command in the same shell as `Bash`, so ClaudeWatch screens it on the same terms and its matcher is `Bash|Monitor`. Claude Code keeps the two permission families apart, though: a command you want frictionless in both places needs a `Monitor(…)` rule alongside the `Bash(…)` one. `/ClaudeWatch:learn` proposes each candidate for the tool its records came from, so the suggestion already names the right one.
+Each session start writes a `session_start` record to the decision log listing every difference from the shipped rules (and the plugin version), so how far your rules have drifted is on the record.
+
+## How decisions meet Claude Code's permissions
+
+ClaudeWatch only ever **adds** scrutiny. Its decisions are `ask` and `deny`; when no rule matches it stays silent, and the call goes through Claude Code's normal permission flow (your allow rules, the permission mode, its own prompts) as if the hook weren't there. A hook decision outranks an `allow` rule, so ClaudeWatch's `ask` and `deny` fire regardless of your allow list.
+
+The `Monitor` tool runs its command in the same shell as `Bash`, so ClaudeWatch screens it on the same terms and its matcher is `Bash|Monitor`.
 
 One nuance for compound commands. A `deny` is honored in every permission mode; an `ask` is not (see [What an `ask` actually does](#what-an-ask-actually-does)). Chaining is where that costs most: the host's allow list can approve a pipeline segment-by-segment and auto-run it before any prompt surfaces, so `git push --force-with-lease 2>&1 | tail` can slip through even in a mode that would prompt on the bare command. ClaudeWatch therefore escalates an `ask` to a `deny` whenever the command is compound, with a message to re-run the guarded command on its own. A bare subshell, `(git push)`, counts as compound on the same grounds: Claude Code treats a command inside one the way it treats one inside a pipeline. A command left malformed by a dangling `&&` or `||` is the one chained form the host never auto-approves: it requires approval whatever the allow rules say, and ClaudeWatch's escalation applies to it on the same terms as any other compound. A `Monitor` command escalates on the same terms, since it runs unattended and repeats on a single approval: run the guarded step as its own `Bash` call rather than folding it into a watch loop.
 
 To keep agents out of that escalation in the first place, a `SessionStart` hook (`hooks/emit-rules.sh`) injects a short ambient note advising that consequential steps be run as their own Bash call rather than chained. The content lives in `rules/*.md`; the escalation is the backstop, the note is the nudge that fires before it.
 
-`watch-aws` leans on this. Unlike the interpreter sets, which stay silent on most commands and only block destructive variants, it *asks* on most `aws` commands and stays silent only on read-only ops (`get-`/`list-`/`describe-`/`head-`, `s3 ls`). `Bash(aws *)` is what makes those reads frictionless; without it they still hit Claude Code's default prompt. Mutations get an `ask` and destructive ops (`delete-`, `terminate-`, `s3 rm`, …) are blocked, because the hook's decision wins over the allow rule. Whether that `ask` prompts depends on the session's permission mode (see [What an `ask` actually does](#what-an-ask-actually-does)).
+`watch-aws` takes the opposite posture to the interpreter sets. Those stay silent on most commands and only block destructive variants; `watch-aws` *asks* on most `aws` commands, blocks destructive ops (`delete-`, `terminate-`, `s3 rm`, …), and stays silent only on read-only ops (`get-`/`list-`/`describe-`/`head-`, `s3 ls`), which then get whatever Claude Code's permissions give them. Whether its `ask` prompts depends on the session (see [What an `ask` actually does](#what-an-ask-actually-does)).
 
 ### What an `ask` actually does
 
-An `ask` is a request for confirmation, not a guarantee of one. Whether it reaches you is decided by how the session was launched, and the hook has no way to tell:
+An `ask` is a request for confirmation, not a guarantee of one. Whether it reaches you is decided by how the session was launched and configured, and the hook has no way to tell:
 
 | Session | What happens to an `ask` |
 | --- | --- |
-| Interactive, `default` / `plan` / `acceptEdits` | prompts |
-| Interactive, `auto` | **runs unprompted**: the mode clears the call before the hook's `ask` has a prompt surface ([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)) |
-| Interactive, no permission mode configured | **runs unprompted**: the session starts in `auto` ([which mode a session starts in](https://code.claude.com/docs/en/permission-modes#which-mode-a-session-starts-in)) |
+| Interactive, `default` / `plan` / `acceptEdits` | prompts, unless `permissions.denyInsteadOfPrompting` is on: then it is **denied** and the turn continues (Claude Code 2.1.319; applies to subagents and teammates too) |
+| Interactive, `auto` | **runs unprompted** where the auto-mode server check is reachable: the mode clears the call before the hook's `ask` has a prompt surface ([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)). With telemetry or feature flags off, including behind an LLM gateway, Claude Code 2.1.319 asks about or denies calls the server can't check, unless `CLAUDE_CODE_AUTO_MODE_SERVER=0` keeps the built-in classifier |
+| Interactive, no permission mode configured | as `auto`: the session starts there ([which mode a session starts in](https://code.claude.com/docs/en/permission-modes#which-mode-a-session-starts-in)) |
 | Headless (`--print`) | **denied**: nobody can answer, so the call fails closed |
 
-`deny` is honored in every case. The practical consequences:
+`deny` is honored in every case. The `auto` + telemetry-off row is what the 2.1.319 changelog states; `tests/probe-host-ask-behavior.sh` grades headless runs only. The practical consequences:
 
-- **Set `permissions.defaultMode` if you want the `ask` tier to prompt.** In `~/.claude/settings.json` (or a project's `.claude/settings.json`), add the key to the `permissions` object, beside any `allow` list:
+- **Set `permissions.defaultMode`, and leave `permissions.denyInsteadOfPrompting` off, if you want the `ask` tier to prompt.** In `~/.claude/settings.json` (or a project's `.claude/settings.json`), add the key to the `permissions` object:
 
   ```jsonc
   "permissions": {
-    "defaultMode": "default",
-    "allow": [ /* … */ ]
+    "defaultMode": "default"
   }
   ```
 
   `default` is the prompting mode, which Claude Code's UI labels "Manual" (`"manual"` is accepted too).
 - **Put anything unrecoverable in the block tier.** A rule that guards something no reflog can undo should not depend on a prompt that may never appear.
-- **A failed command in a headless run may be an unanswerable `ask`, not a block.** Read the message before concluding a rule stopped you.
-- **`/ClaudeWatch:learn` cannot tell a reviewed run from an unreviewed one.** `permission_mode` reads `auto` whether or not a prompt was shown, and `--permission-prompts none` sets no field of its own, so an `ask` record is evidence the engine asked, never evidence a person answered.
+- **A failed command in a headless run, or in any session with `denyInsteadOfPrompting` on, may be an unanswerable `ask`, not a block.** Read the message before concluding a rule stopped you.
+- **`/ClaudeWatch:learn` cannot tell a reviewed run from an unreviewed one.** `permission_mode` reads `auto` whether or not a prompt was shown, and `--permission-prompts none` and `denyInsteadOfPrompting` set no field of their own, so an `ask` record is evidence the engine asked, never evidence a person answered.
 
-### Discovering what to allow (`/ClaudeWatch:learn`)
+### Tuning the rules (`/ClaudeWatch:learn`)
 
-Deciding *which* patterns to add to the allowlist is itself the chore. The engine appends each decision to a JSONL log by default, at `~/.claude/claudewatch/decisions.jsonl`, with no setup needed. To log elsewhere, point `CLAUDEWATCH_LOG` at a path; to opt out, set it to `off` (which also disables `/ClaudeWatch:learn`, since it has nothing to read without the log):
+Deciding which rules prompt too often, and which blocks are in the way, is easier from history than from memory. The engine appends each decision to a JSONL log by default, at `~/.claude/claudewatch/decisions.jsonl`, with no setup needed. To log elsewhere, point `CLAUDEWATCH_LOG` at a path; to opt out, set it to `off` (which also disables `/ClaudeWatch:learn`, since it has nothing to read without the log):
 
 ```jsonc
 // settings.json: the ClaudeWatch hook's env. Optional: override the default
@@ -98,11 +96,29 @@ Deciding *which* patterns to add to the allowlist is itself the chore. The engin
 
 For a `Bash` or `Monitor` decision the log records the command *shape* rather than the full command: the program plus its leading subcommand tokens (`git push`, `aws s3 cp`), stopping at the first flag, path, or value. That keeps inline secrets (credentials in flags, URLs, or `VAR=value` prefixes) out of the plaintext log. The shape is what `/ClaudeWatch:learn` groups by, so nothing is lost for the workflow. The log file and its directory are owner-only (`0600`/`0700`).
 
-Then `/ClaudeWatch:learn` aggregates the log into a batch proposal: frequently-allowed commands that aren't in your allowlist yet (promote them), ask rules you keep approving (add an `except`), and blocks that may be in your way. `scripts/analyze-decisions.py` does the read-only analysis; the skill drives the per-item approval. Because it works from the hook's own decisions rather than scanning transcripts heuristically, it distinguishes allowed / asked / blocked instead of guessing what looks read-only. You vet a window's worth of prompts once instead of one at a time. The proposal leads with the window it covers (records, sessions, span) so you can weigh it, and once you've applied changes the skill offers to reset the log (`scripts/reset-decisions.py`, archives by default) so the next pass measures from the new baseline rather than re-surfacing what you just handled.
+Then `/ClaudeWatch:learn` aggregates the log into a batch proposal: ask rules you keep hitting (move to block, or turn off) and blocks that may be in your way (move to ask, or turn off). `scripts/analyze-decisions.py` does the read-only analysis; the skill drives the per-item approval and writes each approved change to your overrides file, the same one `/ClaudeWatch:rules` edits. The proposal leads with the window it covers (records, sessions, span) so you can weigh it, and once you've applied changes the skill offers to reset the log (`scripts/reset-decisions.py`, archives by default) so the next pass measures from the new baseline rather than re-surfacing what you just handled.
+
+### Stepping away (`/ClaudeWatch:unattended`)
+
+Type `/ClaudeWatch:unattended` (or say you're stepping away, and the agent invokes it) when you hand a session work and leave. The skill has the agent decide, log each call in a `NOTES.md`, and keep going instead of waiting on questions, then end with a review map of what it did, what it left prepared, and what it couldn't verify.
+
+It also marks the session so nothing waits on you:
+
+- ClaudeWatch's `ask` tier becomes a block, in every permission mode, `auto` included. An `ask` nobody can answer is either a stall or, in `auto`, a command that runs unconfirmed; neither is what the rule was for.
+- A Claude Code permission prompt is denied at once, with a message telling the agent to take another route or leave the step prepared.
+- A question to you (`AskUserQuestion`) is denied before it shows, so the agent decides and logs the call instead.
+
+Both of those hooks fail closed: if one can't run (no `python3`, a crash, a timeout), the prompt or question is denied rather than left waiting. That holds in attended sessions too, so a broken hook shows up as denied prompts until it's fixed.
+
+The exception is the local git work an unattended run needs to segment what it does: a bare `git add`, `git commit` (not `--amend`), `git switch` (not `-f` or `--discard-changes`), or `git checkout -b`. ClaudeWatch stays silent on those and approves their permission prompt, and writes an `ALLOW` line for each one to the session's unattended log (plus an `unattended_allow` field in `decisions.jsonl`), so every one is visible on return. Push and everything else stays denied.
+
+The first thing you type turns the mark off. `python3 scripts/unattended.py status` (from a session, with `CLAUDE_CODE_SESSION_ID` set) reports the mark and how many calls it denied and allowed. The marker lives in `~/.claude/claudewatch/unattended/`.
+
+`permissions.denyInsteadOfPrompting` (Claude Code 2.1.319) is the always-on version of the second effect. It is a setting, so it reaches every session that reads the settings file and does nothing about an `ask` that `auto` runs unprompted; the skill's mark is per session and covers both.
 
 ## The `\n#` gate (and how to work around it)
 
-Claude Code's built-in Bash input analyzer flags `\n#` (a newline followed by `#`) inside a quoted argument as potentially hiding arguments from path validation. The gate fires **before** any plugin hook runs, so no hook (ClaudeWatch included) and no allow rule can clear it. Agents that habitually write multi-line `python3 -c "..."` or `node -e "..."` scripts with embedded `#` comments will get a permission prompt every single invocation, regardless of the allowlist above.
+Claude Code's built-in Bash input analyzer flags `\n#` (a newline followed by `#`) inside a quoted argument as potentially hiding arguments from path validation. The gate fires **before** any plugin hook runs, so no hook (ClaudeWatch included) and no allow rule can clear it. Agents that habitually write multi-line `python3 -c "..."` or `node -e "..."` scripts with embedded `#` comments will get a permission prompt every single invocation, regardless of your allow rules.
 
 The workaround is to author the script as a file and execute the file:
 
@@ -139,7 +155,7 @@ See [`CHANGELOG.md`](CHANGELOG.md) for release notes.
 
 See the [docs site](https://chris-peterson.github.io/ClaudeWatch/) for usage, configuration, and the full [rules](https://chris-peterson.github.io/ClaudeWatch/#/rules) reference. The YAML rule format is documented for rule authors in [`SCHEMA.md`](SCHEMA.md).
 
-In-session, run `/ClaudeWatch:rules` to view and edit rules interactively, or `/ClaudeWatch:learn` to cut prompt fatigue from your decision log.
+In-session, run `/ClaudeWatch:rules` to view the rules and change how they apply to you, or `/ClaudeWatch:learn` to tune them from your decision log.
 
 ## Development
 

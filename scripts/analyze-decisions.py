@@ -118,20 +118,28 @@ def analyze(records, min_count, max_samples):
         if not src:
             continue  # file-content (Write/Edit) records have no command to group
         shape = command_shape(src)
+        reasons = rec.get("matched") or []
+        # Each reason is filed under the shape of the part of the command its
+        # rule matched ([LOG-03]). A reason the engine added itself (the
+        # compound escalation) has none, so it takes the first rule's; a
+        # record from before `matched_shapes` takes the command's shape.
+        logged = rec.get("matched_shapes") or []
+        first = next((s for s in logged if s), shape)
+        reason_shapes = [(r, (logged[i] if i < len(logged) else None) or first) for i, r in enumerate(reasons)]
 
         if decision == "ask":
-            g = ask_groups[shape]
-            g["count"] += 1
-            for reason in rec.get("matched", []):
-                g["reasons"].add(reason)
-            if len(g["samples"]) < max_samples and shape not in g["samples"]:
-                g["samples"].append(shape)
+            for part_shape in dict.fromkeys(s for _, s in reason_shapes) or [shape]:
+                g = ask_groups[part_shape]
+                g["count"] += 1
+                g["reasons"].update(r for r, s in reason_shapes if s == part_shape)
+                if len(g["samples"]) < max_samples and part_shape not in g["samples"]:
+                    g["samples"].append(part_shape)
         elif decision == "deny":
-            for reason in rec.get("matched", []) or ["(unattributed)"]:
+            for reason, part_shape in reason_shapes or [("(unattributed)", shape)]:
                 g = deny_groups[reason]
                 g["count"] += 1
-                if len(g["samples"]) < max_samples and shape not in g["samples"]:
-                    g["samples"].append(shape)
+                if len(g["samples"]) < max_samples and part_shape not in g["samples"]:
+                    g["samples"].append(part_shape)
 
     except_candidates = [
         {"shape": shape, "count": g["count"], "reasons": sorted(g["reasons"]),

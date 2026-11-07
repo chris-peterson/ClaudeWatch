@@ -76,6 +76,29 @@ python3 "$ANALYZE" --log "$LOG" --min-count 4 > "$OUT" 2>/dev/null
 assert_json "git commit (count 3) dropped at min-count 4" \
   "all(c['shape']!='git commit' for c in d['except_candidates'])"
 
+echo "--- records with matched_shapes group by the part each rule matched ---"
+# A chain logs its leading command as command_shape; the rule fired on a later
+# part, which matched_shapes names. The compound note (null shape) takes the
+# first rule's shape.
+cat > "$LOG" <<'EOF'
+{"schema":2}
+{"ts":"2026-05-31T10:00:00+00:00","decision":"deny","tool":"Bash","command_shape":"cat","matched":["compound command: escalated","git commit: creates a permanent commit"],"matched_shapes":[null,"git commit"]}
+{"ts":"2026-05-31T10:01:00+00:00","decision":"deny","tool":"Bash","command_shape":"echo","matched":["rm -rf: recursively deletes"],"matched_shapes":["rm"]}
+{"ts":"2026-05-31T10:02:00+00:00","decision":"ask","tool":"Bash","command_shape":"git stash","matched":["git stash: modifies the stash stack"],"matched_shapes":["git stash"]}
+{"ts":"2026-05-31T10:03:00+00:00","decision":"ask","tool":"Bash","command_shape":"git stash","matched":["git stash: modifies the stash stack"]}
+EOF
+python3 "$ANALYZE" --log "$LOG" --min-count 1 > "$OUT" 2>/dev/null
+assert_json "deny sample is the matched part (git commit), not the leading cat" \
+  "any(s['reason'].startswith('git commit') and s['samples']==['git commit'] for s in d['deny_summary'])"
+assert_json "compound note samples the rule's part" \
+  "any(s['reason'].startswith('compound') and s['samples']==['git commit'] for s in d['deny_summary'])"
+assert_json "rm -rf deny samples rm, not echo" \
+  "any(s['reason'].startswith('rm -rf') and s['samples']==['rm'] for s in d['deny_summary'])"
+assert_json "ask records with and without matched_shapes group together" \
+  "any(c['shape']=='git stash' and c['count']==2 for c in d['except_candidates'])"
+assert_json "no group is keyed by the leading command" \
+  "all(c['shape'] not in ('cat','echo') for c in d['except_candidates']) and all('cat' not in s['samples'] for s in d['deny_summary'])"
+
 echo "--- missing log exits non-zero with guidance ---"
 TOTAL=$((TOTAL + 1))
 if python3 "$ANALYZE" --log "$TMP/nope.jsonl" >/dev/null 2>&1; then

@@ -304,14 +304,16 @@ def override_report(configs, overrides):
     return {"changed": changed, "sets_off": sets_off, "stale": stale}
 
 
-def _violation(rule):
+def _violation(rule, pos=None):
     """A matched violation as structured data.
 
     `prefix` is the rule's `name` (the rule-set name is redundant once the
     reason carries the ref, so it's dropped); `reason` is the human prose;
-    `ref` is the doc URL (or "" when absent).
+    `ref` is the doc URL (or "" when absent). `pos` is where the pattern matched
+    in a bash input, which the log uses to name the part of a compound command
+    the rule fired on ([LOG-03]).
     """
-    return {"prefix": rule.get("name") or "", "reason": rule["reason"], "ref": rule.get("ref") or ""}
+    return {"prefix": rule.get("name") or "", "reason": rule["reason"], "ref": rule.get("ref") or "", "pos": pos}
 
 
 def _error_violation(text):
@@ -1043,11 +1045,11 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
             _block(f"{label} — rule {rule.get('name', '?')!r} has empty pattern")
             continue
         try:
-            matched = bool(re.search(rule["pattern"], input_text))
+            match = re.search(rule["pattern"], input_text)
         except re.error as e:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid regex: {e}")
             continue
-        if not matched:
+        if not match:
             continue
         # The parser drops exemptions from a shipped block rule, so only a rule an
         # override moved here from ask carries one ([OVR-03]).
@@ -1056,7 +1058,7 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
             _block(f"{label} — rule {rule.get('name', '?')!r} {err}")
             continue
         if not exempted:
-            blocks.append(_violation(rule))
+            blocks.append(_violation(rule, match.start()))
 
     for rule in rules.get("ask", []):
         target = _rule_target(rule)
@@ -1069,11 +1071,11 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
             _block(f"{label} — rule {rule.get('name', '?')!r} has empty pattern")
             continue
         try:
-            matched = bool(re.search(rule["pattern"], input_text))
+            match = re.search(rule["pattern"], input_text)
         except re.error as e:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid regex: {e}")
             continue
-        if not matched:
+        if not match:
             continue
         exempted, err = _is_exempted(rule, input_kind, input_text, cwd)
         if err:
@@ -1081,7 +1083,7 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
             continue
         if exempted:
             continue
-        asks.append(_violation(rule))
+        asks.append(_violation(rule, match.start()))
 
     return blocks, asks
 
@@ -1122,24 +1124,47 @@ SUBCOMMAND_TOOLS = frozenset((
 _SUBCOMMAND_LIKE = re.compile(r"^[a-z][a-z0-9-]*$")
 _MAX_SHAPE_TOKENS = 4
 
+# A heredoc's body is data for the command that opens it, not commands of its own.
+_HEREDOC_OPEN = re.compile(r"(?<!<)<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+_COMMENT = re.compile(r"(?:^|(?<=[ \t;&|(]))#[^\n]*", re.M)
+# What ends one part of a compound command and starts the next. Redirections
+# that share `&` (`2>&1`, `&>log`) are not separators.
+_PART_SEPARATOR = re.compile(r"\|\||&&|\|&?|;|(?<![<>&])&(?![>&])|\n|\$\(|`|\)")
+# Words ahead of a part's program that only group or sequence it.
+_PART_LEAD = re.compile(r"(?:[ \t]*(?:[({!]|(?:if|then|else|elif|do|while|until|time)(?=[ \t]|$)))+")
+# Parts that only move the shell or close a group, so they say nothing about
+# what a command does.
+_INCIDENTAL_PROGRAMS = frozenset(("cd", "pushd", "popd", "fi", "done", "esac", "}"))
 
-def command_shape(command):
-    """Reduce a bash command to a stable, secret-free grouping prefix.
 
-    Skips leading `VAR=value` assignments and `sudo`, then keeps the program and
-    (for known subcommand tools) its leading subcommand tokens, stopping at the
-    first flag, path, or value. This is what `[LOG-03]` records in place of the
-    raw command, and what `/ClaudeWatch:learn` groups by — defined here so the
-    engine (which writes the log) and the analyzer (which reads it) share one
-    definition. Applying it to an already-reduced shape is idempotent, so the
-    analyzer can reduce legacy raw-command records the same way.
+def _mask_shell_data(command):
+    """The command with heredoc bodies, quoted spans, and comments blanked out.
+
+    Lengths are preserved, so a position in the result is the same position in
+    the command. What remains is the shell syntax that separates commands.
     """
-    tokens = command.strip().split()
+    chars = list(command)
+    for m in _HEREDOC_OPEN.finditer(command):
+        body = command.find("\n", m.end())
+        if body < 0:
+            continue
+        end = re.compile(r"^[ \t]*%s[ \t]*$" % re.escape(m.group(2)), re.M).search(command, body + 1)
+        stop = end.end() if end else len(command)
+        for k in range(body, stop):
+            chars[k] = " "
+    masked = "".join(chars)
+    masked = _QUOTED_SPAN.sub(lambda s: s.group(0)[0] + "_" * (len(s.group(0)) - 2) + s.group(0)[-1], masked)
+    return _COMMENT.sub(lambda s: " " * len(s.group(0)), masked)
+
+
+def _program_shape(text):
+    """The program plus its leading subcommand tokens, or "" when there is none."""
+    tokens = text.split()
     i = 0
     while i < len(tokens) and _is_command_prefix(tokens[i]):
         i += 1
     if i >= len(tokens):
-        return command.strip()
+        return ""
 
     prog = os.path.basename(tokens[i])
     shape_tokens = [prog]
@@ -1150,6 +1175,65 @@ def command_shape(command):
             j += 1
 
     return " ".join(shape_tokens)
+
+
+def command_parts(command):
+    """Split a bash command into its parts: `(start, end, shape, incidental)` each.
+
+    A part is one simple command of a pipe, chain, sequence, substitution, or
+    multi-line script. Its shape is `_program_shape` of the part with quoted
+    text, heredoc bodies, and comments blanked, so the shape keeps no argument
+    text. A part holding only a comment has shape `#`. `incidental` marks parts
+    that say nothing about what the command does: comments, `cd`, and group
+    closers.
+    """
+    masked = _mask_shell_data(command)
+    parts = []
+    start = 0
+    for sep in list(_PART_SEPARATOR.finditer(masked)) + [None]:
+        end = sep.start() if sep else len(masked)
+        lead = _PART_LEAD.match(masked, start, end)
+        body_start = lead.end() if lead else start
+        shape = _program_shape(masked[body_start:end])
+        if shape:
+            parts.append((start, end, shape, shape.split()[0] in _INCIDENTAL_PROGRAMS))
+        elif command[start:end].lstrip().startswith("#"):
+            parts.append((start, end, "#", True))
+        start = sep.end() if sep else end
+    return parts
+
+
+def command_shape(command):
+    """Reduce a bash command to a stable, secret-free grouping prefix.
+
+    The shape of the command's first part that isn't incidental (see
+    `command_parts`), so `cd repo && rm -rf build` and a script opening with a
+    comment are filed under what they run. Within a part, skips leading
+    `VAR=value` assignments and `sudo`, then keeps the program and (for known
+    subcommand tools) its leading subcommand tokens, stopping at the first flag,
+    path, or value. This is what `[LOG-03]` records in place of the raw command,
+    and what `/ClaudeWatch:learn` groups by — defined here so the engine (which
+    writes the log) and the analyzer (which reads it) share one definition.
+    Applying it to an already-reduced shape is idempotent, so the analyzer can
+    reduce legacy raw-command records the same way.
+    """
+    parts = command_parts(command)
+    for _, _, shape, incidental in parts:
+        if not incidental:
+            return shape
+    return parts[0][2] if parts else ""
+
+
+def matched_shape(command, pos, parts=None):
+    """The shape of the part of `command` holding position `pos`, or None."""
+    if pos is None:
+        return None
+    while pos < len(command) and command[pos] in " \t\n;&|`(":
+        pos += 1
+    for start, end, shape, _ in parts if parts is not None else command_parts(command):
+        if start <= pos < end:
+            return shape
+    return None
 
 
 def _log_event(data, input_kind, input_text, decision, matched, extra=None):
@@ -1174,7 +1258,7 @@ def _log_event(data, input_kind, input_text, decision, matched, extra=None):
         "tool": data.get("tool_name"),
         "mode": data.get("permission_mode"),
         "decision": decision,
-        "matched": matched,
+        "matched": [_message_plain(v) for v in matched],
         **(extra or {}),
     }
     if input_kind == "bash":
@@ -1183,6 +1267,9 @@ def _log_event(data, input_kind, input_text, decision, matched, extra=None):
         # is plaintext ([LOG-03]). The shape drops everything past the program and
         # its subcommand tokens, so no secret survives into the log.
         entry["command_shape"] = command_shape(input_text)
+        if matched:
+            parts = command_parts(input_text)
+            entry["matched_shapes"] = [matched_shape(input_text, v.get("pos"), parts) for v in matched]
     else:
         tool_input = data.get("tool_input", {}) or {}
         entry["path"] = tool_input.get("file_path")
@@ -1428,12 +1515,11 @@ def _decide():
         else:
             decision, chosen = "deny", [_unattended_escalation()] + chosen
 
-    messages = [_message_plain(v) for v in chosen]
-    _log_event(data, input_kind, input_text, decision, messages,
+    _log_event(data, input_kind, input_text, decision, chosen,
                {"unattended_allow": allowance} if allowance else None)
 
     if decision != "allow":
-        reason = "\n".join(messages)
+        reason = "\n".join(_message_plain(v) for v in chosen)
         # Claude Code tags ask prompts with the source plugin but leaves deny
         # errors unattributed, so append the tag ourselves on the deny path to
         # match — the user should always see which plugin made the call.

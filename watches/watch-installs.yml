@@ -1,5 +1,5 @@
 name: watch-installs
-filter: '\b(npm|yarn|pnpm|pip|pip3|cargo|go|brew|curl|wget|npx|gem|composer)\b'
+filter: '\b(npm|yarn|pnpm|pip|pip3|cargo|go|brew|choco|apt|curl|wget|npx|gem|composer)\b'
 
 rules:
   block:
@@ -18,15 +18,30 @@ rules:
       reason: modifies global system packages
       ref: https://docs.npmjs.com/cli/install
 
-    - name: pip install (no venv)
-      pattern: 'sudo\s+pip3?\s+install'
-      reason: installs packages system-wide as root
-      ref: https://pip.pypa.io/en/stable/cli/pip_install/
-
     - name: brew install
       pattern: 'brew\s+install'
       reason: modifies system-level packages
       ref: https://docs.brew.sh/Manpage
+
+    - name: brew upgrade/uninstall/reinstall
+      pattern: '(?:^|[\s;&|`(])brew(?:\s+-\S+)*\s+(?:upgrade|uninstall|remove|rm|reinstall)(?=$|[\s;&|)`<>])'
+      reason: modifies system-level packages
+      ref: https://docs.brew.sh/Manpage
+
+    - name: choco install
+      pattern: '(?:^|[\s;&|`(])choco(?:\.exe)?(?:\s+-\S+)*\s+install(?=$|[\s;&|)`<>])'
+      reason: modifies system-level packages
+      ref: https://docs.chocolatey.org/en-us/choco/commands/install/
+
+    - name: choco upgrade/uninstall
+      pattern: '(?:^|[\s;&|`(])choco(?:\.exe)?(?:\s+-\S+)*\s+(?:upgrade|uninstall)(?=$|[\s;&|)`<>])'
+      reason: modifies system-level packages
+      ref: https://docs.chocolatey.org/en-us/choco/commands/upgrade/
+
+    - name: apt install
+      pattern: '(?:^|[\s;&|`(])apt(?:-get)?(?:\s+-\S+)*\s+install(?=$|[\s;&|)`<>])'
+      reason: modifies system-level packages
+      ref: https://manpages.debian.org/apt/apt-get.8.en.html
 
   ask:
     - name: npm install

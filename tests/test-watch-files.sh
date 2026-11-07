@@ -72,6 +72,21 @@ t "rm -r dir"        ask   '{"tool_name":"Bash","tool_input":{"command":"rm -r o
 
 echo "--- ask: mv / ---"
 t "mv /etc"          ask   '{"tool_name":"Bash","tool_input":{"command":"mv /etc/config /etc/config.bak"}}'
+t "mv /etc/hosts"    ask   '{"tool_name":"Bash","tool_input":{"command":"mv /etc/hosts /tmp/hosts"}}'
+t "mv /usr/local/bin" ask  '{"tool_name":"Bash","tool_input":{"command":"mv /usr/local/bin/tool /tmp/"}}'
+t "mv / (root)"      ask   '{"tool_name":"Bash","tool_input":{"command":"mv / /tmp/root"}}'
+t "mv -f /etc"       ask   '{"tool_name":"Bash","tool_input":{"command":"mv -f /etc/hosts /tmp/hosts"}}'
+t "mv /private/etc"  ask   '{"tool_name":"Bash","tool_input":{"command":"mv /private/etc/hosts /tmp/hosts"}}'
+t "mv /var/log"      ask   '{"tool_name":"Bash","tool_input":{"command":"mv /var/log/system.log /tmp/"}}'
+t "mv /Library"      ask   '{"tool_name":"Bash","tool_input":{"command":"mv /Library/LaunchDaemons/x.plist /tmp/"}}'
+t "mv home path"     allow '{"tool_name":"Bash","tool_input":{"command":"mv /Users/me/src/repo/a.md /Users/me/src/repo/b.md"}}'
+t "mv /home path"    allow '{"tool_name":"Bash","tool_input":{"command":"mv /home/me/a.md /home/me/b.md"}}'
+t "mv /tmp"          allow '{"tool_name":"Bash","tool_input":{"command":"mv /tmp/draft.md ./docs/draft.md"}}'
+t "mv /private/tmp"  allow '{"tool_name":"Bash","tool_input":{"command":"mv /private/tmp/claude-502/out.json ./out.json"}}'
+t "mv /var/tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"mv /var/tmp/x ./x"}}'
+t "mv /var/folders (macOS TMPDIR)" allow '{"tool_name":"Bash","tool_input":{"command":"mv /var/folders/ab/T/x ./x"}}'
+t "mv /etcetera (not /etc)" allow '{"tool_name":"Bash","tool_input":{"command":"mv /etcetera/x ./x"}}'
+t "gmv /etc (not mv)" allow '{"tool_name":"Bash","tool_input":{"command":"gmv /etc/x ./x"}}'
 
 echo "--- ask: chmod ---"
 t "chmod 644"        ask   '{"tool_name":"Bash","tool_input":{"command":"chmod 644 readme.md"}}'

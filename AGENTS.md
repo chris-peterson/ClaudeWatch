@@ -35,9 +35,17 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
    stamps a timestamp and writes a file *after* the decision is computed, never
    feeding back into it. Keep it that way — the clock stays in `_log_event`, not
    in `evaluate_rules`.
-2. **Exit code is always 0.** A non-zero exit blocks the host (Claude Code)
-   from getting a useful decision. All errors are surfaced as `deny` decisions
-   with explanatory messages.
+2. **Exit code is always 0, and the guard fails closed.** The host reads a
+   silent exit as allow and a non-zero exit as a non-blocking error, so both
+   let the call through. Fail-closed has two layers:
+   - **The engine** turns every error it can see into a `deny` with an
+     explanatory message: unreadable input, a rules file that won't load, and
+     any exception, via the catch-all in `main()` ([EN-04], [EN-04b],
+     [EN-10a]).
+   - **The hook wiring** owns the errors the engine can't see: no `python3`, a
+     crash before `main()` runs, a timeout. Both guard hooks declare
+     `onFailure: block` in `hooks/hooks.yml`, so Claude Code blocks the call
+     ([HK-05]).
 3. **Single coalesced decision per invocation.** Multiple matching rules
    across multiple rule sets aggregate into one `deny` (preferred) or one
    `ask`. Never emit more than one decision.

@@ -283,7 +283,13 @@ run_test "$RULES_DIR" "subshell after & escalates to block"  block '{"tool_name"
 run_test "$RULES_DIR" "escaped paren mid-command stays ask"  ask   '{"tool_name":"Bash","tool_input":{"command":"find . \\( -name x.sh \\) -exec chmod +x {} +"}}'
 run_test "$RULES_DIR" "quoted paren in commit msg stays ask" ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"wip (part 2)\""}}'
 run_test "$RULES_DIR" "quoted operators in commit msg stay ask" ask '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"wip | cleanup; done\""}}'
-run_test "$RULES_DIR" "cmd-subst inside quotes stays ask"   ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"$(printf done)\""}}'
+# Command substitution is the exception: the shell runs it inside double quotes,
+# so only single quotes make `$(` or a backtick data.
+run_test "$RULES_DIR" "cmd-subst in double quotes escalates" block '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"$(printf done)\""}}'
+run_test "$RULES_DIR" "backtick in double quotes escalates"  block '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"`printf done`\""}}'
+run_test "$RULES_DIR" "cmd-subst in single quotes stays ask" ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m '"'"'$(printf done)'"'"'"}}'
+run_test "$RULES_DIR" "escaped backtick in double quotes stays ask" ask '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"fix \\`foo\\`\""}}'
+run_test "$RULES_DIR" "quoted rm target from cmd-subst escalates" block '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -rf \"$(mktemp -d)\""}}'
 run_test "$RULES_DIR" "block through pipe unaffected"       block '{"tool_name":"Bash","tool_input":{"command":"git push --force origin main | tail -4"}}'
 run_test "$RULES_DIR" "allow through pipe stays silent"     allow '{"tool_name":"Bash","tool_input":{"command":"ls -la | tail -4"}}'
 # A subshell and a process substitution each run their own command, and a lone
@@ -393,6 +399,85 @@ run_test "$TMPDIR_CWD/watch-scratch.yml" "a glob cannot stand in for the name" a
   '{"tool_name":"Bash","tool_input":{"command":"rm -r /anywhere/*/__pycache__"}}'
 run_test "$TMPDIR_CWD/watch-scratch.yml" "a non-scratch directory still asks" ask \
   '{"tool_name":"Bash","tool_input":{"command":"rm -r /anywhere/src"}}'
+
+echo ""
+echo "=== unless_condition (scratch-root exemption) ==="
+# `is_under_scratch_root` reads each target on its own, so a scratch path never
+# exempts the target beside it, and declines on the markers the in-tree check
+# does, applied to the part of the path past the root.
+cat > "$TMPDIR_CWD/watch-scratch-root.yml" <<'YAMLEOF'
+name: watch-scratch-root
+filter: '\b(rm|Remove-Item)\b'
+rules:
+  ask:
+    - name: rm -r
+      pattern: 'rm\s+-[a-zA-Z]*r'
+      unless_condition: [is_under_scratch_root]
+      reason: recursively deletes directories
+      ref: n/a
+    - name: Remove-Item
+      pattern: '\bRemove-Item\b'
+      unless_condition: [is_under_scratch_root]
+      reason: deletes files or directories
+      ref: n/a
+YAMLEOF
+SR="$TMPDIR_CWD/watch-scratch-root.yml"
+run_test "$SR" "every scratch root is exempt" allow \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /tmp/a /var/tmp/b /private/tmp/c /private/var/tmp/d ~/.cache/e"}}'
+run_test "$SR" "a scratch root itself is not exempt" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /tmp/"}}'
+run_test "$SR" "a dot under a scratch root is the root" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /tmp/."}}'
+run_test "$SR" "a .. past the root is not scratch" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /tmp/../Users/foo"}}'
+run_test "$SR" "a variable past the root is not scratch" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /tmp/$USER"}}'
+run_test "$SR" "a glob past the root is not scratch" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /tmp/*"}}'
+run_test "$SR" "a prefix that only looks like a root" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /tmpfoo/x"}}'
+run_test "$SR" "a scratch target first does not exempt the next" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /tmp/build /etc/x"}}'
+run_test "$SR" "a scratch target last does not exempt the first" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /etc/x /tmp/build"}}'
+run_test "$SR" "a pwsh Remove-Item under scratch is exempt" allow \
+  '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Remove-Item -Recurse /tmp/a, /private/tmp/b\""}}'
+run_test "$SR" "a pwsh Remove-Item path list is read per path" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Remove-Item -Recurse /tmp/a,/etc/x\""}}'
+run_test "$SR" "a pwsh script with a second statement declines" ask \
+  '{"tool_name":"Bash","tool_input":{"command":"pwsh -Command \"Remove-Item /tmp/a; Remove-Item /etc/x\""}}'
+
+echo ""
+echo "=== unless_condition (per-target in-tree or scratch) ==="
+# `is_in_tree_or_scratch` lets each target qualify under any of the in-tree,
+# regenerable-tool-directory and scratch-root checks, where listing those
+# side by side needs every target to pass one of them on its own.
+cat > "$TMPDIR_CWD/watch-tree-or-scratch.yml" <<'YAMLEOF'
+name: watch-tree-or-scratch
+filter: '\brm\b'
+rules:
+  ask:
+    - name: rm -r
+      pattern: 'rm\s+-[a-zA-Z]*r'
+      unless_condition: [is_in_tree_or_scratch]
+      reason: recursively deletes directories
+      ref: n/a
+YAMLEOF
+TS="$TMPDIR_CWD/watch-tree-or-scratch.yml"
+run_test "$TS" "in-tree plus scratch is exempt" allow \
+  '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r /work/repo/bin /tmp/build"}}'
+run_test "$TS" "scratch plus in-tree is exempt" allow \
+  '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r /tmp/build bin"}}'
+run_test "$TS" "tool directory plus scratch is exempt" allow \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /anywhere/__pycache__ /tmp/build"}}'
+run_test "$TS" "scratch with no cwd is exempt" allow \
+  '{"tool_name":"Bash","tool_input":{"command":"rm -r /private/tmp/build"}}'
+run_test "$TS" "one target qualifying nowhere asks" ask \
+  '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r bin /tmp/build /etc/x"}}'
+run_test "$TS" "the tree root itself still asks" ask \
+  '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"rm -r . /tmp/build"}}'
+run_test "$TS" "an rm inside a -c script declines" ask \
+  '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"bash -c \"rm -r bin\""}}'
 
 echo "--- unless_condition on a block rule is ignored (with warning) ---"
 cat > "$TMPDIR_CWD/cwd-block-warn.yml" <<'YAMLEOF'

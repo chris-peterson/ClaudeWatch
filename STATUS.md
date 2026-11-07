@@ -4,9 +4,9 @@ Tracking status of the requirements declared in [SPEC.md](SPEC.md). Updated
 whenever an audit (`/spec-audit`) is run, when implementation lands, or when
 the spec is revised.
 
-**Last audit:** 2026-09-06
+**Last audit:** 2026-10-19
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 95/95 normative requirements (100%).
+**Coverage:** 97/97 normative requirements (100%).
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
 for the contract, `scripts/watchdog.py` for engine behavior, and the per-set
@@ -23,8 +23,8 @@ the file and its tests.
 | EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py` (`main`) |
 | LOG-01..LOG-06 | Decision logging side channel: on by default (`CLAUDEWATCH_LOG=off` to opt out), records the command shape rather than the raw command, owner-only perms (0600/0700), schema-versioned header that discards pre-shape logs on upgrade | Covered | `scripts/watchdog.py` (`_log_event`, `command_shape`) + `tests/test-logging.sh` |
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
-| RL-01..RL-18 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning, the `unless_condition`/`unless_regex` exemptions and their `is_in_project_tree` / `is_ephemeral_scratch` / `is_recoverable` predicates | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-watch-files.sh` |
-| OUT-01..OUT-05, OUT-07, OUT-08 | Output decisions, formatting, aggregation, allow-by-default, deny source tag, compound-command ask→deny escalation across Bash and Monitor | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` + `tests/test-output.sh` |
+| RL-01..RL-20 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning, the `unless_condition`/`unless_regex` exemptions and their `is_in_project_tree` / `is_ephemeral_scratch` / `is_recoverable` / `is_under_scratch_root` / `is_in_tree_or_scratch` predicates | Covered | `scripts/watchdog.py` (`_targets_under_scratch_root`, `_targets_in_tree_or_scratch`, `_remove_item_targets`) + `tests/test-engine.sh` + `tests/test-watch-files.sh` + `tests/test-watch-pwsh.sh` |
+| OUT-01..OUT-05, OUT-07, OUT-08 | Output decisions, formatting, aggregation, allow-by-default, deny source tag, compound-command ask→deny escalation across Bash and Monitor, command substitution inside double quotes counted as compound | Covered | `scripts/watchdog.py` (`_is_compound_command`) + `tests/test-engine.sh` + `tests/test-output.sh` |
 | OUT-06 | Ref rendered as an OSC 8 hyperlink *(retired in 0.18.0)* | Removed | Claude Code 2.1.235 replaces control characters in a hook's reason with U+FFFD |
 | HK-01 | PreToolUse hooks for Bash, Monitor, Write, Edit | Covered | `hooks/hooks.yml` → `hooks/hooks.json` |
 | HK-02 | SessionStart plugin-update self-check *(retired in 0.18.0)* | Removed | Never implemented; the placeholder hook was deleted with the requirement |
@@ -46,6 +46,10 @@ the file and its tests.
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just preview-docs` | Covered | `justfile` + `tests/` |
 
 ## Audit history
+
+### 2026-10-19 — Coverage refresh (spec-status)
+
+STATUS.md updated: +2 IDs (RL-19 `is_under_scratch_root`, RL-20 `is_in_tree_or_scratch`), normative count 95 → 97. [OUT-08] now counts `$(` and unescaped backticks inside double quotes as compound. [SH-01] amended: `watch-files` exempts per target through RL-20 and bounds `rm` at a quoted `-c`/`eval` script, `watch-bash` takes the same boundary and records why its scratch exemption stays a regex, and `watch-pwsh` exempts `Remove-Item` through RL-19.
 
 ### 2026-09-30 — Coverage refresh (spec-status)
 

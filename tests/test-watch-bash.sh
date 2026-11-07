@@ -17,9 +17,14 @@ t "Write .sh curl|sh"       block '{"tool_name":"Write","tool_input":{"file_path
 t "Write .sh dd to /dev/sda" block '{"tool_name":"Write","tool_input":{"file_path":"wipe.sh","content":"dd if=/dev/zero of=/dev/sda bs=1M\n"}}'
 t "Write .sh mkfs"          block '{"tool_name":"Write","tool_input":{"file_path":"wipe.sh","content":"mkfs.ext4 /dev/sdb1\n"}}'
 t "Write .sh shred"         block '{"tool_name":"Write","tool_input":{"file_path":"wipe.sh","content":"shred -v secret.txt\n"}}'
+# An rm opening a quoted -c or eval script is still the rm the script runs (#42).
+t "Write .sh bash -c rm -rf /" block '{"tool_name":"Write","tool_input":{"file_path":"wipe.sh","content":"bash -c \"rm -rf /\"\n"}}'
+t "Write .sh eval rm -rf /"    block '{"tool_name":"Write","tool_input":{"file_path":"wipe.sh","content":"eval '"'"'rm -rf /'"'"'\n"}}'
 
 echo "--- ask (file target): general destructive primitives ---"
 t "Write .sh rm -rf build"  ask   '{"tool_name":"Write","tool_input":{"file_path":"clean.sh","content":"rm -rf ./build\n"}}'
+t "Write .sh sh -c rm -rf"  ask   '{"tool_name":"Write","tool_input":{"file_path":"clean.sh","content":"sh -c '"'"'rm -rf ~/Documents'"'"'\n"}}'
+t "Write .sh grep rm -rf /" allow '{"tool_name":"Write","tool_input":{"file_path":"find.sh","content":"grep -rn '"'"'rm -rf /'"'"' .\n"}}'
 t "Write .sh chmod 777"     ask   '{"tool_name":"Write","tool_input":{"file_path":"perms.sh","content":"chmod 777 foo\n"}}'
 t "Write .sh chmod -R 777"  ask   '{"tool_name":"Write","tool_input":{"file_path":"perms.sh","content":"chmod -R 777 dir\n"}}'
 t "Write .sh chown -R"      ask   '{"tool_name":"Write","tool_input":{"file_path":"perms.sh","content":"chown -R root:root /opt/app\n"}}'

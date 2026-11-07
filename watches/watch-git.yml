@@ -50,7 +50,7 @@ rules:
       ref: https://git-scm.com/docs/git-commit
 
     - name: git stash
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+stash(?=$|[\s;&|)`<>])'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+stash(?!\s+(?:list|show)(?=$|[\s;&|)`<>]))(?=$|[\s;&|)`<>])'
       reason: modifies the stash stack
       ref: https://git-scm.com/docs/git-stash
 

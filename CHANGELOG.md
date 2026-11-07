@@ -36,6 +36,35 @@
   `git switch`, or `git checkout -b` still goes through so the run can commit
   its work locally, and each one is logged as an `ALLOW` line. The first prompt
   you type clears the mark.
+- A new `watch-kill` rule set asks before `pkill` and `killall`, which kill
+  every process matching a name or pattern (with `pkill -f`, the whole command
+  line) and can take down other Claude Code sessions, editors, or dev servers.
+  It matches them run as a command, so `grep pkill notes.md` doesn't prompt.
+- A new `watch-su` rule set blocks `sudo` and `su`. With a cached sudo
+  timestamp or a `NOPASSWD` entry, `sudo` runs as root without a password
+  prompt. `sudo pip install` is covered here now, so watch-installs no longer
+  carries its own rule for it.
+- watch-installs blocks the rest of the system package changes: `brew upgrade`,
+  `uninstall` (and `remove` / `rm`), and `reinstall` alongside `brew install`;
+  `choco install`, `upgrade`, and `uninstall`; and `apt install` /
+  `apt-get install`.
+- The decision log files each matched rule under the part of the command it
+  matched: records carry `matched_shapes` beside `matched`, so
+  `cat msg.txt && git commit -F msg.txt` is filed under `git commit`, not `cat`.
+  `command_shape` skips `cd` and comment lines, so `cd repo && rm -rf build` is
+  `rm`. `/ClaudeWatch:learn` groups by the matched part, and reads older records
+  by their `command_shape`.
+
+### Fixes
+
+- `git stash list` and `git stash show` no longer ask; they only read the
+  stash. Every other `git stash` form still asks.
+- The `mv /` ask fires only for `/` itself and top-level system paths (`/etc`,
+  `/usr`, `/var`, `/Library`, and the like), not for any absolute path. Moving
+  files under a home directory, `/tmp`, `/private/tmp`, or `/var/folders` no
+  longer prompts.
+- A bare `VAR=value` command no longer writes its value into the decision log
+  as the command shape.
 
 ### Other
 

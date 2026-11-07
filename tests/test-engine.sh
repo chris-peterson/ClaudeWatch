@@ -319,7 +319,7 @@ echo "=== Monitor input ==="
 # included: a monitor command runs unattended and repeats on a single approval.
 # A Monitor call carrying a `ws` object has no shell command to screen.
 run_test "$RULES_DIR" "Monitor block"                  block '{"tool_name":"Monitor","tool_input":{"command":"git push --force origin main"}}'
-run_test "$RULES_DIR" "Monitor bare ask prompts"       ask   '{"tool_name":"Monitor","tool_input":{"command":"git stash list"}}'
+run_test "$RULES_DIR" "Monitor bare ask prompts"       ask   '{"tool_name":"Monitor","tool_input":{"command":"git stash pop"}}'
 run_test "$RULES_DIR" "Monitor poll loop escalates"    block '{"tool_name":"Monitor","tool_input":{"command":"while true; do git commit -m wip; sleep 30; done"}}'
 run_test "$RULES_DIR" "Monitor log tail stays silent"  allow '{"tool_name":"Monitor","tool_input":{"command":"tail -f app.log | grep --line-buffered ERROR"}}'
 run_test "$RULES_DIR" "Monitor ws form has no command" allow '{"tool_name":"Monitor","tool_input":{"ws":{"url":"wss://example.com/stream"}}}'
@@ -331,8 +331,8 @@ echo "=== compound-command ask escalation ==="
 # The engine escalates an ask to a deny when the bash command is compound, since
 # deny survives the pipe. Operators inside quotes are not shell operators and must
 # not escalate, so a guarded command bare or with a quoted operator still prompts.
-run_test "$RULES_DIR" "bare ask prompts"                    ask   '{"tool_name":"Bash","tool_input":{"command":"git stash list"}}'
-run_test "$RULES_DIR" "piped ask escalates to block"        block '{"tool_name":"Bash","tool_input":{"command":"git stash list | tail -4"}}'
+run_test "$RULES_DIR" "bare ask prompts"                    ask   '{"tool_name":"Bash","tool_input":{"command":"git stash pop"}}'
+run_test "$RULES_DIR" "piped ask escalates to block"        block '{"tool_name":"Bash","tool_input":{"command":"git stash pop | tail -4"}}'
 run_test "$RULES_DIR" "chained ask (&&) escalates to block" block '{"tool_name":"Bash","tool_input":{"command":"git add . && git commit -m \"wip\""}}'
 run_test "$RULES_DIR" "sequenced ask (;) escalates to block" block '{"tool_name":"Bash","tool_input":{"command":"git commit -m wip; echo done"}}'
 # A bare subshell groups without separating, so it carries none of the operators
@@ -375,7 +375,7 @@ run_test "$RULES_DIR" "quoted subcommand"       ask   '{"tool_name":"Bash","tool
 # `VAR=value` and `sudo` prefix a command without being the program, so they
 # cost no normalization budget — `sudo aws s3 rm` has to reach `rm`.
 run_test "$RULES_DIR" "quoted after assignment" ask   '{"tool_name":"Bash","tool_input":{"command":"FOO=1 \"git\" commit -m wip"}}'
-run_test "$RULES_DIR" "quoted after sudo"       ask   '{"tool_name":"Bash","tool_input":{"command":"sudo \"git\" commit -m wip"}}'
+run_test "$RULES_DIR/watch-git.yml" "quoted after sudo" ask  '{"tool_name":"Bash","tool_input":{"command":"sudo \"git\" commit -m wip"}}'
 # An operand keeps the quoting the rules and the compound check both read it
 # by: unquoting a commit message would turn its punctuation into what looks
 # like a command boundary, and a quoted word behind a program that takes no

@@ -35,8 +35,8 @@ echo "Running permission-mode tests..."
 
 echo "--- a guarded bare command grades ask in every mode ---"
 for mode in "${MODES[@]}" __absent__; do
-  run_test "$RULES" "git stash list -> ask (mode: $mode)" ask \
-    "$(bash_input "$mode" 'git stash list')"
+  run_test "$RULES" "git stash pop -> ask (mode: $mode)" ask \
+    "$(bash_input "$mode" 'git stash pop')"
 done
 
 echo "--- the compound escalation fires in every mode ---"

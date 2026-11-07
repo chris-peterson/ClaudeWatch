@@ -62,6 +62,16 @@ t "add && commit (compound → block)" block '{"tool_name":"Bash","tool_input":{
 echo "--- ask: stash ---"
 t "stash"               ask   '{"tool_name":"Bash","tool_input":{"command":"git stash"}}'
 t "stash pop"           ask   '{"tool_name":"Bash","tool_input":{"command":"git stash pop"}}'
+t "stash push -m"       ask   '{"tool_name":"Bash","tool_input":{"command":"git stash push -m wip"}}'
+t "stash apply"         ask   '{"tool_name":"Bash","tool_input":{"command":"git stash apply stash@{1}"}}'
+t "stash list"          allow '{"tool_name":"Bash","tool_input":{"command":"git stash list"}}'
+t "stash list --stat"   allow '{"tool_name":"Bash","tool_input":{"command":"git stash list --stat"}}'
+t "stash show"          allow '{"tool_name":"Bash","tool_input":{"command":"git stash show"}}'
+t "stash show -p ref"   allow '{"tool_name":"Bash","tool_input":{"command":"git stash show -p stash@{0}"}}'
+t "-C path stash list"  allow '{"tool_name":"Bash","tool_input":{"command":"git -C /tmp/repo stash list"}}'
+t "stash listing (not list)" ask '{"tool_name":"Bash","tool_input":{"command":"git stash listing"}}'
+# A read-only stash ahead of a mutating one must not exempt the chain.
+t "stash list; stash pop (compound → block)" block '{"tool_name":"Bash","tool_input":{"command":"git stash list; git stash pop"}}'
 
 echo "--- ask: branch -D (recoverable via reflog) ---"
 t "-D"                  ask   '{"tool_name":"Bash","tool_input":{"command":"git branch -D unmerged-feature"}}'

@@ -66,6 +66,51 @@ else
 fi
 rm -f "$MONLOG"
 
+echo "--- each matched rule is filed under the part of the command it matched (LOG-03) ---"
+# Asserts on the last record: `expr` sees it as `rec`, and `shape_of(name)` is
+# the matched shape logged beside the reason whose rule is `name`.
+log_shape_test() {
+  local label="$1" input="$2" expr="$3"
+  local f
+  f=$(mktemp /tmp/cw-shape.XXXXXX.jsonl)
+  echo "$input" | CLAUDEWATCH_LOG="$f" python3 "$HOOK" "$RULES_DIR" >/dev/null 2>&1 || true
+  TOTAL=$((TOTAL + 1))
+  if python3 -c "
+import json, sys
+rec = json.loads(open(sys.argv[1]).read().splitlines()[-1])
+def shape_of(name):
+    return next(s for r, s in zip(rec['matched'], rec['matched_shapes']) if r.startswith(name + ':'))
+sys.exit(0 if ($expr) else 1)
+" "$f" 2>/dev/null; then
+    PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: $label"
+  else
+    FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: $label (logged: $(tail -1 "$f"))"
+  fi
+  rm -f "$f"
+}
+
+log_shape_test "chain: git commit filed as git commit, not the leading cat" \
+  '{"tool_name":"Bash","tool_input":{"command":"cat msg.txt && git commit -F msg.txt"}}' \
+  "shape_of('git commit') == 'git commit' and rec['command_shape'] == 'cat'"
+log_shape_test "cd is skipped: cd repo && rm -rf build is rm" \
+  '{"tool_name":"Bash","tool_input":{"command":"cd repo && rm -rf build"}}' \
+  "shape_of('rm -rf') == 'rm' and rec['command_shape'] == 'rm'"
+log_shape_test "a leading comment line is skipped" \
+  '{"tool_name":"Bash","tool_input":{"command":"# clean up\nrm -r dist"}}' \
+  "shape_of('rm -r') == 'rm' and rec['command_shape'] == 'rm'"
+log_shape_test "single command keeps its shape" \
+  '{"tool_name":"Bash","tool_input":{"command":"git push"}}' \
+  "rec['matched_shapes'] == ['git push'] and rec['command_shape'] == 'git push'"
+log_shape_test "the compound-escalation note carries no shape of its own" \
+  '{"tool_name":"Bash","tool_input":{"command":"cat msg.txt && git commit -F msg.txt"}}' \
+  "rec['matched_shapes'][0] is None and rec['matched'][0].startswith('compound command')"
+log_shape_test "quoted and heredoc text stays out of the shapes" \
+  '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"$(cat <<EOF\ntoken s3cr3t; rm -rf x\nEOF\n)\""}}' \
+  "'s3cr3t' not in json.dumps(rec) and rec['command_shape'] == 'git commit'"
+log_shape_test "an allowed command logs no matched_shapes" \
+  '{"tool_name":"Bash","tool_input":{"command":"cd repo && ls"}}' \
+  "'matched_shapes' not in rec and rec['command_shape'] == 'ls'"
+
 echo "--- log file and dir are owner-only (LOG-05) ---"
 HOMEDIR=$(mktemp -d /tmp/cw-perms.XXXXXX)
 DEFAULT_LOG="$HOMEDIR/.claude/claudewatch/decisions.jsonl"

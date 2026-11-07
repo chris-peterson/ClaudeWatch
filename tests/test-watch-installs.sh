@@ -16,12 +16,35 @@ echo "--- block: global installs ---"
 t "npm install -g"       block '{"tool_name":"Bash","tool_input":{"command":"npm install -g typescript"}}'
 t "npm install --global" block '{"tool_name":"Bash","tool_input":{"command":"npm install --global eslint"}}'
 
-echo "--- block: sudo pip ---"
-t "sudo pip install"  block '{"tool_name":"Bash","tool_input":{"command":"sudo pip install flask"}}'
-t "sudo pip3 install" block '{"tool_name":"Bash","tool_input":{"command":"sudo pip3 install requests"}}'
-
 echo "--- block: brew install ---"
 t "brew install"    block '{"tool_name":"Bash","tool_input":{"command":"brew install jq"}}'
+
+echo "--- block: brew upgrade/uninstall/reinstall ---"
+t "brew upgrade"        block '{"tool_name":"Bash","tool_input":{"command":"brew upgrade"}}'
+t "brew upgrade pkg"    block '{"tool_name":"Bash","tool_input":{"command":"brew upgrade jq"}}'
+t "brew uninstall"      block '{"tool_name":"Bash","tool_input":{"command":"brew uninstall jq"}}'
+t "brew remove"         block '{"tool_name":"Bash","tool_input":{"command":"brew remove jq"}}'
+t "brew rm"             block '{"tool_name":"Bash","tool_input":{"command":"brew rm jq"}}'
+t "brew reinstall"      block '{"tool_name":"Bash","tool_input":{"command":"brew reinstall --cask iterm2"}}'
+t "brew list (read)"    allow '{"tool_name":"Bash","tool_input":{"command":"brew list --versions"}}'
+t "brew outdated (read)" allow '{"tool_name":"Bash","tool_input":{"command":"brew outdated"}}'
+t "brew info (read)"    allow '{"tool_name":"Bash","tool_input":{"command":"brew info jq"}}'
+
+echo "--- block: choco ---"
+t "choco install"       block '{"tool_name":"Bash","tool_input":{"command":"choco install git -y"}}'
+t "choco.exe install"   block '{"tool_name":"Bash","tool_input":{"command":"choco.exe install nodejs"}}'
+t "choco upgrade"       block '{"tool_name":"Bash","tool_input":{"command":"choco upgrade all -y"}}'
+t "choco uninstall"     block '{"tool_name":"Bash","tool_input":{"command":"choco uninstall git"}}'
+t "choco list (read)"   allow '{"tool_name":"Bash","tool_input":{"command":"choco list"}}'
+t "choco search (read)" allow '{"tool_name":"Bash","tool_input":{"command":"choco search git"}}'
+
+echo "--- block: apt install ---"
+t "apt install"       block '{"tool_name":"Bash","tool_input":{"command":"apt install jq"}}'
+t "apt-get install"   block '{"tool_name":"Bash","tool_input":{"command":"apt-get install jq"}}'
+t "apt-get -y install" block '{"tool_name":"Bash","tool_input":{"command":"apt-get -y install jq"}}'
+t "apt list (read)"   allow '{"tool_name":"Bash","tool_input":{"command":"apt list --installed"}}'
+t "apt-cache search"  allow '{"tool_name":"Bash","tool_input":{"command":"apt-cache search jq"}}'
+t "mapt install (not apt)" allow '{"tool_name":"Bash","tool_input":{"command":"mapt install x"}}'
 
 echo "--- ask: npm install ---"
 t "npm install"            ask '{"tool_name":"Bash","tool_input":{"command":"npm install"}}'

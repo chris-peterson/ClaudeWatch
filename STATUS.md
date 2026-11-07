@@ -4,9 +4,9 @@ Tracking status of the requirements declared in [SPEC.md](SPEC.md). Updated
 whenever an audit (`/spec-audit`) is run, when implementation lands, or when
 the spec is revised.
 
-**Last audit:** 2026-10-19
+**Last audit:** 2026-11-06
 **Spec version:** v1 (root SPEC.md, no versioned tree)
-**Coverage:** 100/100 normative requirements (100%).
+**Coverage:** 113/113 normative requirements (100%).
 
 Evidence below points to the authoritative source for each cluster — SPEC.md
 for the contract, `scripts/watchdog.py` for engine behavior, and the per-set
@@ -28,17 +28,23 @@ the file and its tests.
 | RS-01..RS-08 | Rule set format, discovery, `extensions` gating | Covered | `scripts/watchdog.py` + `tests/test-engine.sh` |
 | RL-01..RL-20 | Rule fields, `target`, evaluation order, error handling, unrecognized-field warning, the `unless_condition`/`unless_regex` exemptions and their `is_in_project_tree` / `is_ephemeral_scratch` / `is_recoverable` / `is_under_scratch_root` / `is_in_tree_or_scratch` predicates | Covered | `scripts/watchdog.py` (`_targets_under_scratch_root`, `_targets_in_tree_or_scratch`, `_remove_item_targets`) + `tests/test-engine.sh` + `tests/test-watch-files.sh` + `tests/test-watch-pwsh.sh` |
 | OUT-01..OUT-05, OUT-07, OUT-08 | Output decisions, formatting, aggregation, allow-by-default, deny source tag, compound-command ask→deny escalation across Bash and Monitor, command substitution inside double quotes counted as compound | Covered | `scripts/watchdog.py` (`_is_compound_command`) + `tests/test-engine.sh` + `tests/test-output.sh` |
+| OUT-09 | Unattended session: an `ask` escalates to `deny` while the session's marker exists | Covered | `scripts/watchdog.py` (`unattended_marker`, `_is_unattended`, `_decide`) + `tests/test-unattended.sh` |
 | OUT-06 | Ref rendered as an OSC 8 hyperlink *(retired in 0.18.0)* | Removed | Claude Code 2.1.235 replaces control characters in a hook's reason with U+FFFD |
 | HK-01 | PreToolUse hooks for Bash, Monitor, Write, Edit | Covered | `hooks/hooks.yml` → `hooks/hooks.json` |
 | HK-02 | SessionStart plugin-update self-check *(retired in 0.18.0)* | Removed | Never implemented; the placeholder hook was deleted with the requirement |
 | HK-03 | Hooks declared in hooks.json | Covered | `hooks/hooks.json` |
 | HK-04 | SessionStart ambient guidance emission | Covered | `hooks/emit-rules.sh`, `rules/*.md`, `tests/test-ambient.sh` |
 | HK-05 | Guard hooks fail closed: the engine denies every fault it observes, and `onFailure: block` blocks the rest | Covered | `scripts/watchdog.py` (`_decide`, `main`) + `tests/test-engine.sh`; `hooks/hooks.yml` → `hooks/hooks.json` + `tests/test-hooks.sh` |
+| HK-06 | UserPromptSubmit, PostToolUse (Skill), PermissionRequest, and PreToolUse (AskUserQuestion) hooks keep and act on the unattended marker; the prompt and question hooks fail closed | Covered | `hooks/hooks.yml` → `hooks/hooks.json`, `scripts/unattended.py` (`handle`, `main`) + `tests/test-unattended.sh` + `tests/test-hooks.sh` |
 | EXT-01..EXT-03 | Auto-discovery, disable-by-rename, no-code-change | Covered | `scripts/watchdog.py`, `tests/test-engine.sh` |
+| OVR-01..OVR-05 | User rule overrides outside the install folder: format, tier moves keeping exemptions, set off, stale ignored, malformed denies | Covered | `scripts/watchdog.py` (`load_overrides`, `apply_overrides`, `evaluate_rules`, `_decide`) + `tests/test-overrides.sh` |
+| OVR-06, OVR-07 | Session-start record of differences from the shipped rules; `overrides.py` as the one writer | Covered | `scripts/overrides.py` (`session_start`, `cmd_set`, `cmd_reset`, `show`), `scripts/watchdog.py` (`override_report`, `append_log_record`), `hooks/hooks.yml` + `tests/test-overrides.sh` |
 | SK-01 | `/ClaudeWatch:help` overview *(retired in 0.16.0)* | Removed | README + docs site |
-| SK-02..SK-12 | `/ClaudeWatch:rules` interactive editor | Covered | `skills/rules/SKILL.md` |
-| SK-13..SK-17 | `/ClaudeWatch:learn` decision-log analysis, allow candidates proposed per tool (`Bash(…)` vs `Monitor(…)`) | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` (`analyze`, `load_allow_patterns`, `is_already_allowed`) + `tests/test-analyze.sh` |
+| SK-02..SK-05, SK-07..SK-10, SK-12 | `/ClaudeWatch:rules` lists effective rules and edits the overrides file: tier moves, off, reset, set off/on, validation | Covered | `skills/rules/SKILL.md`, `scripts/overrides.py` + `tests/test-overrides.sh` |
+| SK-06, SK-11 | Pattern conflict scan; `new` rule set *(retired)* | Removed | Overrides cannot add a rule or pattern |
+| SK-13..SK-17 | `/ClaudeWatch:learn` decision-log analysis: ask candidates and deny summary, approved items applied as overrides | Covered | `skills/learn/SKILL.md`, `scripts/analyze-decisions.py` (`analyze`) + `tests/test-analyze.sh` |
 | SK-18, SK-19 | Window provenance on the analysis (records, sessions, span); post-apply log reset, archiving by default with `--hard` delete | Covered | `scripts/analyze-decisions.py` (`summarize_window`), `scripts/reset-decisions.py` + `tests/test-reset-decisions.sh` |
+| SK-20..SK-25 | `/ClaudeWatch:unattended`: mark on invocation, clear on a typed prompt, deny permission prompts and AskUserQuestion while marked, `on`/`off`/`status` CLI, the logged local-git allowance | Covered | `skills/unattended/SKILL.md`, `scripts/unattended.py` (`handle`, `cli`, `_shape`), `scripts/watchdog.py` (`unattended_allowance`, `record_unattended`) + `tests/test-unattended.sh` |
 | DOC-01, DOC-02, DOC-04, DOC-05 | Docsify site, `just docs` regen (rules + prompts pages), YAML schema reference | Covered | `docs/`, `SCHEMA.md`, `build/gen-rules-doc.py`, `justfile` |
 | DIST-01 | Expose install metadata in manifest | Covered | `.claude-plugin/plugin.json` (name, version, description, repository, license) — hosting/marketplace mechanism is out of scope per SPEC.md |
 | DIST-02 | `.claude-plugin/plugin.json` manifest | Covered | `.claude-plugin/plugin.json` |
@@ -50,6 +56,10 @@ the file and its tests.
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just preview-docs` | Covered | `justfile` + `tests/` |
 
 ## Audit history
+
+### 2026-11-06 — Coverage refresh (spec-status)
+
+STATUS.md updated: +15 IDs (OUT-09 unattended escalation, HK-06 unattended hooks, SK-20..SK-25 `/ClaudeWatch:unattended`, OVR-01..OVR-07 rule overrides), 2 retired (SK-06, SK-11), normative count 100 → 113. SK-02..SK-12 now describe `/ClaudeWatch:rules` editing the overrides file. The SK-13..SK-17 row drops the allow-candidate pointers (`load_allow_patterns`, `is_already_allowed`) with the code.
 
 ### 2026-10-19 — Coverage refresh (spec-status)
 

@@ -1,5 +1,50 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- `/ClaudeWatch:learn` no longer proposes allow rules. ClaudeWatch's decisions
+  are `ask` and `deny`, and what it lets through is Claude Code's to decide, so
+  a learn pass now covers the rules that ask most and the blocks in your way,
+  and never writes to `settings.json`. `analyze-decisions.py` drops its
+  `allow_candidates` bucket and its `--settings` flag.
+- The README no longer recommends broadening your Bash allow list
+  (`Bash(python3 *)`, `Bash(aws *)`) with ClaudeWatch as the safety net.
+
+- `/ClaudeWatch:rules` changes how the rules apply to you instead of editing
+  them: it writes `~/.claude/claudewatch/overrides.yml`, which survives plugin
+  upgrades, and can move a rule between block and ask or turn a rule or rule set
+  off. Adding rules and rule sets, and the `.yml.disabled` toggle, are gone from
+  the skill. Edits made the old way, in the plugin's `watches/` folder, were
+  lost at the last upgrade anyway; redo them with the skill.
+
+### Features
+
+- Rule overrides survive upgrades. The engine applies
+  `~/.claude/claudewatch/overrides.yml` on top of the shipped rules; a malformed
+  file denies every screened call until fixed, and an override naming a rule an
+  upgrade removed is ignored and reported. Each session start logs every
+  difference from the shipped rules to the decision log. `/ClaudeWatch:learn`
+  now proposes these overrides from your decision history.
+- `/ClaudeWatch:unattended` for handing a session work and stepping away. The
+  agent decides, logs each call in `NOTES.md`, and ends with a review map. While
+  the session is marked, ClaudeWatch's `ask` tier blocks in every mode (`auto`
+  included), and Claude Code permission prompts and `AskUserQuestion` are
+  denied at once, so nothing waits on a person who isn't there. The prompt and
+  question hooks fail closed, in attended sessions too. A bare `git add`, `git commit`,
+  `git switch`, or `git checkout -b` still goes through so the run can commit
+  its work locally, and each one is logged as an `ALLOW` line. The first prompt
+  you type clears the mark.
+
+### Other
+
+- The docs describe the two ask-tier changes in Claude Code 2.1.319:
+  `permissions.denyInsteadOfPrompting` denies an `ask` in every mode, and `auto`
+  with telemetry or feature flags off asks about or denies calls the auto-mode
+  server can't check instead of running them unprompted. The ambient note,
+  README, `/ClaudeWatch:learn`, and `SPEC.md` `[OUT-04]` carry both.
+
 ## 0.18.0
 
 ### Breaking

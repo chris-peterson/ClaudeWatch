@@ -29,7 +29,11 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
    be restored — a question with no textual answer. Its calls are
    read-only, bounded, and fail closed, so the decision stays a function of the
    command, the roots, and the on-disk state those name; a *second* predicate
-   wanting filesystem access is a spec change, not a local call.
+   wanting filesystem access is a spec change, not a local call. Outside the
+   predicates, the decision reads two more pieces of on-disk state: the user's
+   rule overrides ([OVR-01]), which belong with the `watches/` tree as the rules
+   in effect, and whether the session's unattended marker exists ([OUT-09]), an
+   existence test that only ever tightens `ask` to `deny`.
    Decision logging (on by default, see
    [LOG-01]–[LOG-04]; `CLAUDEWATCH_LOG=off` opts out) is a side channel: it
    stamps a timestamp and writes a file *after* the decision is computed, never
@@ -125,11 +129,11 @@ heredocs, and reordered flags are not bypassable by syntactic tricks.
 
 ## When making changes
 
-- **Rule edits** — Use `/ClaudeWatch:rules` for interactive edits; it
-  validates and previews. Manual edits to YAML are fine for bulk changes,
-  but run `just test` before committing.
-- **Toggling a rule set** — `skills/rules/SKILL.md` says when its
-  disable/enable rename needs an unsandboxed shell.
+- **Rule edits** — Edit the shipped rules in `watches/*.yml` directly and run
+  `just test`. `/ClaudeWatch:rules` is for users: it writes their overrides
+  file (`~/.claude/claudewatch/overrides.yml`, [OVR-01]), never `watches/`, so
+  it is not how a shipped rule changes. The test harness points `HOME` at an
+  empty path, so your own overrides never reach the suite.
 - **Engine changes** — Update `scripts/watchdog.py` and `tests/test-engine.sh`
   in the same change. The engine has a small surface; every behavior should
   be exercised by a test.

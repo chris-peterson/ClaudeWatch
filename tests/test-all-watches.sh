@@ -47,4 +47,18 @@ t "ls"                       allow '{"tool_name":"Bash","tool_input":{"command":
 t "cat a file"               allow '{"tool_name":"Bash","tool_input":{"command":"cat src/main.rs"}}'
 t "python3 -c print"         allow '{"tool_name":"Bash","tool_input":{"command":"python3 -c \"print(1)\""}}'
 
+echo "--- watch-secrets' reader set on ordinary files ---"
+# watch-secrets evaluates any command carrying a reader or a `<`, so these all
+# reach its rules. Whether a read is guarded depends on the path it names.
+t "grep | head"              allow '{"tool_name":"Bash","tool_input":{"command":"grep -rn TODO src | head -20"}}'
+t "git log | head"           allow '{"tool_name":"Bash","tool_input":{"command":"git log --oneline | head -5"}}'
+t "git rev-parse"            allow '{"tool_name":"Bash","tool_input":{"command":"git rev-parse --abbrev-ref HEAD"}}'
+t "echo | rev"               allow '{"tool_name":"Bash","tool_input":{"command":"echo hello | rev"}}'
+t "xxd | head"               allow '{"tool_name":"Bash","tool_input":{"command":"xxd build/app.bin | head"}}'
+t "strings | grep"           allow '{"tool_name":"Bash","tool_input":{"command":"strings build/app.bin | grep version"}}'
+t "tail -f a log"            allow '{"tool_name":"Bash","tool_input":{"command":"tail -f logs/app.log"}}'
+t "sort < file"              allow '{"tool_name":"Bash","tool_input":{"command":"sort < data.csv"}}'
+t "python3 < file"           allow '{"tool_name":"Bash","tool_input":{"command":"python3 -c \"import sys; print(sys.stdin.read())\" < input.txt"}}'
+t "skill cache | jq"         allow '{"tool_name":"Bash","tool_input":{"command":"cat ~/.claude/skills/example-skill/cache/status.json | jq .stage"}}'
+
 print_results

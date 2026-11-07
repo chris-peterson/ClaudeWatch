@@ -95,7 +95,11 @@ permission prompt for it. Claude Code refuses a sandboxed shell write into a
 `--plugin-dir` folder (`just rules`, `just try`), and an installed plugin's
 folder under `~/.claude/plugins/` is outside the working directory a sandboxed
 command writes to by default. The other commands write through Write/Edit,
-which this does not affect.
+which the sandbox does not affect. With
+`permissions.blockWritesOutsideWorkingDirectories` on, Write/Edit refuse the
+plugin folder too: tell the user to add it to
+`permissions.additionalDirectories`, or to run the skill from the plugin's
+checkout.
 
 For `new`: guide the user through creating a custom rule set:
 

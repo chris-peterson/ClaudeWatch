@@ -119,7 +119,7 @@ Coverage is preserved: ClaudeWatch's `Write` and `Edit` hooks run the same `targ
 
 ## Installation
 
-Requirements: `python3` on PATH, and on Windows, Git for Windows. On Windows, `python3` has to resolve inside Git Bash to a real interpreter rather than the Microsoft Store alias; `python3 --version` run in Git Bash should print a version. The hooks set no `shell`, and Claude Code 2.1.299 and later block a guarded call when a hook with no `shell` can't run. On Windows without Git for Windows, that means every Bash, Monitor, Write, and Edit call is refused.
+Requirements: `python3` on PATH, and on Windows, Git for Windows. On Windows, `python3` has to resolve inside Git Bash to a real interpreter rather than the Microsoft Store alias; `python3 --version` run in Git Bash should print a version. The hooks set no `shell`, and Claude Code 2.1.299 and later block a guarded call when a hook with no `shell` can't run. On Windows without Git for Windows, that means every Bash, Monitor, Write, and Edit call is refused. Both guard hooks also declare `onFailure: block`, so on Claude Code 2.1.295 and later a `python3` that is missing or isn't a working interpreter refuses those same calls on any platform.
 
 ```bash
 claude plugin marketplace add chris-peterson/claude-marketplace

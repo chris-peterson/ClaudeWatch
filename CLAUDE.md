@@ -19,5 +19,7 @@ claude --plugin-dir .
 
 Claude Code passes tool invocations as JSON on stdin. The hook outputs
 `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny|ask","permissionDecisionReason":"..."}}`
-to reject or prompt the user, or nothing (allow). Exit code must always be 0
+to reject or prompt the user, or nothing (allow). Exit code must always be 0,
+and every error the engine sees becomes a `deny`; errors outside the engine
+(no `python3`, a timeout) block the call through the hooks' `onFailure: block`
 (see [`AGENTS.md`](AGENTS.md) "Core contracts").

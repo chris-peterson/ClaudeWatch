@@ -47,6 +47,10 @@ the file and its tests.
 
 ## Audit history
 
+### 2026-09-30 — Coverage refresh (spec-status)
+
+STATUS.md updated: no ID change, normative count stays 95. OUT-04 now states that `auto` is the host's default for an unconfigured interactive session, and OUT-08's rationale records keeping bare asks unescalated, with the [HK-04] ambient rule recommending `permissions.defaultMode` instead (issue #37). The OUT and HK-04 rows' evidence is unchanged; `tests/test-ambient.sh` gains a check for the new guidance.
+
 ### 2026-09-06 — Coverage refresh (spec-status)
 
 STATUS.md updated: +1 ID (EN-15, command-word normalization), normative count 94 → 95. The EN row's range and summary extend to cover it.

@@ -156,26 +156,29 @@ nothing, leave the log alone.
 
 ## Auto mode
 
-ClaudeWatch's `PreToolUse` hook runs *before* the permission-mode check, so its
-`deny` blocks in every mode. An `ask` does not survive the same way: under `auto`
-the host clears the call before the `ask` has a prompt surface and the command
-runs unconfirmed
+A `deny` from ClaudeWatch blocks in every permission mode, because the hook runs
+before the mode is checked. An `ask` prompts only in a prompting mode. In `auto`
+the command runs without a prompt
 ([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)),
-and in a headless `--print` run nobody can answer so it is denied outright.
+and in a headless `--print` run it is denied, since nobody can answer. An
+interactive session with no permission mode configured starts in `auto`.
 
-**So an `ask` record means the engine asked, never that a person answered.**
-`permission_mode` reads `auto` whether or not a prompt was shown, and
-`--permission-prompts none` sets no field of its own, so the log cannot separate
-the two. Each record carries the active `mode`, and the analyzer reports
-`by_mode` plus an `auto_executed` count per allow candidate — read those as
-"how often this ran", not "how often this was reviewed".
+**An `ask` record means the engine asked, not that a person answered.** The log
+can't tell the two apart: `permission_mode` reads `auto` whether or not a prompt
+was shown, and `--permission-prompts none` sets no field of its own. The analyzer
+reports `by_mode`, and an `auto_executed` count per allow candidate. Read both as
+how often a command ran, not how often someone reviewed it.
 
-Under auto mode the prompts are already gone, so this skill's value shifts from
-*cutting prompts* to *auditing what ran unattended*: lead with the
-high-`auto_executed` allow candidates ("these ran N times, none of them
-necessarily reviewed — keep allowing, or add a watch rule?") and treat the deny
-summary as the record of what the hard backstop caught while you weren't
-watching.
+**When most records in `by_mode` are `auto`, report an audit instead.** The user
+saw few of the prompts this skill normally cuts, so what's worth their time is
+what ran unattended:
+
+- Lead with the allow candidates with the highest `auto_executed` ("these ran N
+  times, none necessarily reviewed: keep allowing, or add a watch rule?").
+- Present the deny summary as what the block tier caught while nobody was
+  watching.
+- Tell the user their sessions run in `auto`, and that setting
+  `"permissions": { "defaultMode": "default" }` makes the ask tier prompt again.
 
 ## Notes
 

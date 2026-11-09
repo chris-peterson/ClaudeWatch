@@ -35,6 +35,8 @@ check "names the setting that restores the prompt" '"permissions": { "defaultMod
 check "names the headless outcome" "Headless \`-p\` denies it"
 check "names the denyInsteadOfPrompting outcome" "\`permissions.denyInsteadOfPrompting\` denies it"
 check "scopes auto to a reachable server check" "where the auto-mode server check is"
+check "names the mod tool-call outcome" "A mod's own tool call denies it"
+check "holds the deny tier for mod calls" "a mod's own calls included"
 
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"

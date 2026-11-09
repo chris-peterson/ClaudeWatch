@@ -95,6 +95,10 @@
   longer prompts.
 - A bare `VAR=value` command no longer writes its value into the decision log
   as the command shape.
+- A program spelled by its path (`/bin/rm`, `/bin/mv`, `/usr/bin/tee`) is
+  screened as its name, so every rule that names the program catches it:
+  `/bin/rm -rf /` and `/bin/mv ~/.claude/claudewatch/overrides.yml /tmp/x`
+  ran unguarded.
 
 ### Other
 
@@ -103,6 +107,9 @@
   with telemetry or feature flags off asks about or denies calls the auto-mode
   server can't check instead of running them unprompted. The ambient note,
   README, `/ClaudeWatch:learn`, and `SPEC.md` `[OUT-04]` carry both.
+- The same places name a mod's own tool call (`$.tool.call`, Claude Code
+  2.1.321) as a case where an `ask` reaches nobody: the call does not run, and
+  a `deny` holds as well.
 
 ## 0.18.0
 

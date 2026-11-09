@@ -15,6 +15,14 @@ t "mv overrides"         block '{"tool_name":"Bash","tool_input":{"command":"mv 
 t "sed -i overrides"     block '{"tool_name":"Bash","tool_input":{"command":"sed -i \"\" \"s/block/off/\" ~/.claude/claudewatch/overrides.yml"}}'
 t "tee overrides"        block '{"tool_name":"Bash","tool_input":{"command":"echo x | tee ~/.claude/claudewatch/overrides.yml"}}'
 t "truncate decisions"   block '{"tool_name":"Bash","tool_input":{"command":"truncate -s 0 ~/.claude/claudewatch/decisions.jsonl"}}'
+t "/bin/mv overrides"    block '{"tool_name":"Bash","tool_input":{"command":"/bin/mv ~/.claude/claudewatch/overrides.yml /tmp/x"}}'
+t "/bin/cp overrides"    block '{"tool_name":"Bash","tool_input":{"command":"/bin/cp /tmp/x ~/.claude/claudewatch/overrides.yml"}}'
+t "/usr/bin/tee overrides" block '{"tool_name":"Bash","tool_input":{"command":"/usr/bin/tee ~/.claude/claudewatch/overrides.yml"}}'
+t "/bin/mv absolute path" block '{"tool_name":"Bash","tool_input":{"command":"/bin/mv /tmp/o.yml /Users/me/.claude/claudewatch/overrides.yml"}}'
+t "/bin/rm marker"       block '{"tool_name":"Bash","tool_input":{"command":"/bin/rm -f ~/.claude/claudewatch/unattended/abc123"}}'
+t "sudo /bin/cp overrides" block '{"tool_name":"Bash","tool_input":{"command":"sudo /bin/cp /tmp/x ~/.claude/claudewatch/overrides.yml"}}'
+t "piped /usr/bin/tee"   block '{"tool_name":"Bash","tool_input":{"command":"echo x | /usr/bin/tee ~/.claude/claudewatch/overrides.yml"}}'
+t ">| keeps its target"  block '{"tool_name":"Bash","tool_input":{"command":"echo x >| /Users/me/.claude/claudewatch/overrides.yml"}}'
 
 echo "--- block: loosening through the plugin's own scripts ---"
 t "overrides set off"    block '{"tool_name":"Bash","tool_input":{"command":"python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py\" set watch-git \"git push\" off"}}'
@@ -22,6 +30,7 @@ t "overrides set ask"    block '{"tool_name":"Bash","tool_input":{"command":"pyt
 t "overrides set set off" block '{"tool_name":"Bash","tool_input":{"command":"python3 scripts/overrides.py set watch-secrets off"}}'
 t "overrides reset"      block '{"tool_name":"Bash","tool_input":{"command":"python3 scripts/overrides.py reset watch-git"}}'
 t "overrides reset all"  block '{"tool_name":"Bash","tool_input":{"command":"python3 scripts/overrides.py reset"}}'
+t "overrides.py as program" block '{"tool_name":"Bash","tool_input":{"command":"/opt/cw/scripts/overrides.py reset watch-git"}}'
 t "unattended off"       block '{"tool_name":"Bash","tool_input":{"command":"python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/unattended.py\" off"}}'
 t "plugin disable"       block '{"tool_name":"Bash","tool_input":{"command":"claude plugin disable ClaudeWatch@chris-peterson"}}'
 t "plugin uninstall"     block '{"tool_name":"Bash","tool_input":{"command":"claude plugin uninstall claudewatch"}}'

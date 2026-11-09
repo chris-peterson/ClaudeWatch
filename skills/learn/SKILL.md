@@ -173,6 +173,9 @@ Claude Code 2.1.319 adds two more outcomes, per its changelog:
   gateways), calls the server can't check are asked about or denied, unless
   `CLAUDE_CODE_AUTO_MODE_SERVER=0` keeps the built-in classifier.
 
+A mod's own tool call (`$.tool.call`, Claude Code 2.1.321) raises no permission
+prompt, so an `ask` on it leaves the call unrun, and a `deny` holds there too.
+
 **An `ask` record means the engine asked, not that a person answered.** The log
 can't tell the outcomes apart: `permission_mode` reads `auto` whether or not a
 prompt was shown, `--permission-prompts none` sets no field of its own, and

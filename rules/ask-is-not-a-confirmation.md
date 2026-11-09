@@ -1,7 +1,7 @@
 # Don't treat ClaudeWatch's ask tier as a confirmation
 
 Whether an `ask` reaches a person depends on how the session was launched and
-configured, and the hook cannot tell which case it is in. Three are known:
+configured, and the hook cannot tell which case it is in. Known cases:
 
 - **Interactive `auto` runs it unprompted** where the auto-mode server check is
   reachable. The mode clears the call before the hook's `ask` has a surface to
@@ -17,8 +17,10 @@ configured, and the hook cannot tell which case it is in. Three are known:
   2.1.319).
 - **Headless `-p` denies it.** Nothing can answer, so the call fails closed and
   the command has no path forward.
+- **A mod's own tool call denies it.** `$.tool.call` opens no prompt, so the
+  call does not run (Claude Code 2.1.321).
 
-The `deny` tier is honored either way.
+The `deny` tier is honored in each case, a mod's own calls included.
 
 So when a step is genuinely consequential — a push, a force, a remote branch
 delete — say what you are about to do and why in the turn before you do it,

@@ -426,6 +426,11 @@ run_test "$RULES_DIR" "quoted word resolves"    block '{"tool_name":"Bash","tool
 run_test "$RULES_DIR" "quoted behind -C"        block '{"tool_name":"Bash","tool_input":{"command":"git -C /repo \"push\" --force"}}'
 run_test "$RULES_DIR" "quoted behind -c"        ask   '{"tool_name":"Bash","tool_input":{"command":"git -c user.name=x \"commit\" -m wip"}}'
 run_test "$RULES_DIR" "quoted behind --profile" block '{"tool_name":"Bash","tool_input":{"command":"aws --profile prod \"s3\" rm s3://bucket/x"}}'
+run_test "$RULES_DIR" "path to program"         ask   '{"tool_name":"Bash","tool_input":{"command":"/bin/mv /etc/hosts /tmp/hosts"}}'
+run_test "$RULES_DIR" "quoted path to program"  ask   '{"tool_name":"Bash","tool_input":{"command":"\"/usr/bin/git\" commit -m wip"}}'
+run_test "$RULES_DIR" "relative path to program" ask  '{"tool_name":"Bash","tool_input":{"command":"bin/git commit -m wip"}}'
+run_test "$RULES_DIR" "path argument keeps its path" allow '{"tool_name":"Bash","tool_input":{"command":"file /usr/bin/git"}}'
+run_test "$RULES_DIR" "/dev/tcp after continuation" block '{"tool_name":"Bash","tool_input":{"command":"cat \\\n/dev/tcp/192.0.2.1/80"}}'
 
 echo ""
 echo "=== unless_condition (in-tree exemption) ==="

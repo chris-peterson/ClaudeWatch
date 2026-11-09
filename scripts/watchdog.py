@@ -417,6 +417,25 @@ def _is_command_prefix(word):
     return word == "sudo" or bool(_COMMAND_PREFIX.match(word))
 
 
+def _starts_command(command, sep):
+    """Whether a `_WORD_POSITION` match begins a command ([EN-15]).
+
+    Two of the characters that match there continue a command instead: an
+    escaped one (`\\;`, or a backslash before the newline) and the `&` or `|`
+    of a redirection (`>& /dev/tcp/...`, `>| file`). The word after either is
+    an operand, so its path has to survive for the rules that read it.
+    """
+    if not sep.group().strip(" \t"):
+        return True
+    i = sep.start()
+    backslashes = 0
+    while i - backslashes > 0 and command[i - backslashes - 1] == "\\":
+        backslashes += 1
+    if backslashes % 2:
+        return False
+    return not (command[i] in "&|" and i > 0 and command[i - 1] in "<>")
+
+
 def _unquote_word(word):
     """`"git"` / `g""it` / `g\\it` -> `git`; None when the word isn't one word.
 
@@ -437,8 +456,11 @@ def _normalize_command_words(command):
     """Resolve the leading words of each command to the word the shell reads ([EN-15]).
 
     Walks each command position and rewrites the program, then the words behind
-    it, into the single word the shell resolves each to. An option is stepped
-    over rather than ending the walk, because git and aws both carry their
+    it, into the single word the shell resolves each to. A program spelled by
+    its path (`/bin/rm`) becomes its basename, so a rule anchored on the
+    program name reaches it. Only the program does: the words behind it keep
+    their paths, which the file rules read. An option is stepped over rather
+    than ending the walk, because git and aws both carry their
     global options ahead of the subcommand a rule matches — so what keeps an
     *operand* out of the rewrite is two guards: a word is rewritten only where
     it resolves to a bare word, so an operand carrying an operator
@@ -454,6 +476,7 @@ def _normalize_command_words(command):
         pos = sep.end()
         budget = _MAX_NORMALIZED_WORDS
         program = None
+        starts_command = _starts_command(command, sep)
         while budget:
             end = _WORD_SCAN.match(command, pos).end()
             if end < len(command) and command[end] not in _WORD_STOP:
@@ -484,9 +507,11 @@ def _normalize_command_words(command):
                     out.append(word)
                     budget -= 1
                 else:
-                    out.append(resolved)
                     if program is None:
-                        program = os.path.basename(resolved)
+                        program = os.path.basename(resolved) or resolved
+                        if starts_command:
+                            resolved = program
+                    out.append(resolved)
                     budget -= 1
             pos = end
             gap = pos

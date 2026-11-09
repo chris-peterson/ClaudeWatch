@@ -172,6 +172,12 @@ export CLAUDE_PROJECT_DIR=/
 t "rm -rf project root is /"     ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /etc/foo"}}'
 unset CLAUDE_PROJECT_DIR
 
+echo "--- a program spelled by its path (EN-15) ---"
+t "/bin/rm -rf /"            block '{"tool_name":"Bash","tool_input":{"command":"/bin/rm -rf /"}}'
+t "/bin/mv /etc"             ask   '{"tool_name":"Bash","tool_input":{"command":"/bin/mv /etc/config /etc/config.bak"}}'
+t "/bin/rm -r in-tree"       allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"/bin/rm -r build"}}'
+t "path argument untouched"  allow '{"tool_name":"Bash","tool_input":{"command":"ls -l /bin/rm"}}'
+
 echo "--- is_ephemeral_scratch: regenerable tool output allowed from any cwd ---"
 t "rm -rf playwright scratch"    allow '{"tool_name":"Bash","cwd":"/somewhere/else","tool_input":{"command":"rm -rf /work/repo/.playwright-mcp"}}'
 t "rm -rf scratch, no cwd"       allow '{"tool_name":"Bash","tool_input":{"command":"rm -rf .playwright-mcp"}}'

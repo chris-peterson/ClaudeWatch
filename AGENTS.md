@@ -232,7 +232,9 @@ consumers see the update; the tag and the marketplace notify are not what
   literal word**, not obfuscation in general. `"git" commit`, `g\it commit`,
   `git "commit"` and `rm "-r" /etc` all resolve before matching, and the walk
   steps over an option to reach the subcommand behind it (`git -C /repo
-  "push"`). What stays out of reach is a word assembled at runtime, because
+  "push"`), and a program spelled by its path (`/bin/rm`) reaches the rules as
+  its basename while the words behind it keep their paths. What stays out of
+  reach is a word assembled at runtime, because
   nothing in the command text says what it will be — `C=git; $C commit` is the
   shape to expect. A shell has unbounded ways to spell a word, so treat the
   rules as a guard against the destructive command an agent writes plainly, not

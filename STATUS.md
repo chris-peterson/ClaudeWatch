@@ -4,7 +4,7 @@ Tracking status of the requirements declared in [SPEC.md](SPEC.md). Updated
 whenever an audit (`/spec-audit`) is run, when implementation lands, or when
 the spec is revised.
 
-**Last audit:** 2026-11-06
+**Last audit:** 2026-11-09
 **Spec version:** v1 (root SPEC.md, no versioned tree)
 **Coverage:** 113/113 normative requirements (100%).
 
@@ -18,7 +18,7 @@ the file and its tests.
 
 | ID | Requirement | Status | Evidence |
 |----|-------------|--------|----------|
-| EN-01..EN-15 | Engine lifecycle, IO, tool dispatch (Bash, Monitor, Write, Edit), command-word normalization, error handling | Covered | `scripts/watchdog.py` (`_resolve_input`) + `tests/test-engine.sh` |
+| EN-01..EN-15 | Engine lifecycle, IO, tool dispatch (Bash, Monitor, Write, Edit), command-word normalization, error handling | Covered | `scripts/watchdog.py` (`_resolve_input`, `_normalize_command_words`, `_starts_command`) + `tests/test-engine.sh` + `tests/test-watch-self.sh` |
 | EN-04, EN-04b | Unreadable hook input (not UTF-8, not JSON, wrong shape) denies, naming the error | Covered | `scripts/watchdog.py` (`_read_hook_input`, `_resolve_input`, `_string_field`) + `tests/test-engine.sh` |
 | EN-04a | Log JSON parse error to stderr | Covered | `scripts/watchdog.py` (`_read_hook_input`) + `tests/test-engine.sh` |
 | EN-05a | No-arg fallback to `../watches` | Covered | `scripts/watchdog.py` (`_decide`) |
@@ -56,6 +56,10 @@ the file and its tests.
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just preview-docs` | Covered | `justfile` + `tests/` |
 
 ## Audit history
+
+### 2026-11-09 — Coverage refresh (spec-status)
+
+STATUS.md updated: no ID change, normative count stays 113. EN-15 now reduces a program spelled by its path to its basename at the start of a command; the EN row's evidence gains `tests/test-watch-self.sh`. OUT-04 lists the established ask outcomes without a fixed count and adds a mod's own `$.tool.call`, where the hook's `ask` leaves the call unrun and its `deny` holds (hand probe on Claude Code 2.1.321); `tests/test-ambient.sh` checks the new guidance.
 
 ### 2026-11-06 — Coverage refresh (spec-status)
 

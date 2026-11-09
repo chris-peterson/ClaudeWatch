@@ -79,8 +79,9 @@ An `ask` is a request for confirmation, not a guarantee of one. Whether it reach
 | Interactive, `auto` | **runs unprompted** where the auto-mode server check is reachable: the mode clears the call before the hook's `ask` has a prompt surface ([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)). With telemetry or feature flags off, including behind an LLM gateway, Claude Code 2.1.319 asks about or denies calls the server can't check, unless `CLAUDE_CODE_AUTO_MODE_SERVER=0` keeps the built-in classifier |
 | Interactive, no permission mode configured | as `auto`: the session starts there ([which mode a session starts in](https://code.claude.com/docs/en/permission-modes#which-mode-a-session-starts-in)) |
 | Headless (`--print`) | **denied**: nobody can answer, so the call fails closed |
+| A mod's own tool call (`$.tool.call`) | **not run**: a mod's call raises no permission prompt (Claude Code 2.1.321; probed headless in `default`, `acceptEdits`, `auto`, `bypassPermissions` and `dontAsk`) |
 
-`deny` is honored in every case. The `auto` + telemetry-off row is what the 2.1.319 changelog states; `tests/probe-host-ask-behavior.sh` grades headless runs only. The practical consequences:
+`deny` is honored in every case, a mod's own calls included. The `auto` + telemetry-off row is what the 2.1.319 changelog states; `tests/probe-host-ask-behavior.sh` grades headless runs only. The practical consequences:
 
 - **Set `permissions.defaultMode`, and leave `permissions.denyInsteadOfPrompting` off, if you want the `ask` tier to prompt.** In `~/.claude/settings.json` (or a project's `.claude/settings.json`), add the key to the `permissions` object:
 

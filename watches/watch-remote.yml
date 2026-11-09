@@ -1,0 +1,19 @@
+name: watch-remote
+filter: '\b(gh|glab|terraform|tofu|pulumi|kubectl)\b'
+
+rules:
+  block:
+    - name: gh/glab repo delete
+      pattern: '(?:^|[\s;&|`(])(?:gh|glab)(?:\s+-\S+(?:\s+[^-\s]\S*)?)*\s+repo\s+delete(?![\w-])(?![^\n;&|]*(?<=\s)(?:--help)(?![\w-]))'
+      reason: deletes the hosted repository with its issues, pull requests, and wiki
+      ref: https://cli.github.com/manual/gh_repo_delete
+
+    - name: terraform/tofu/pulumi destroy
+      pattern: '(?:^|[\s;&|`(])(?:(?:terraform|tofu)(?:\s+-\S+)*\s+(?:destroy(?![\w-])|apply\s(?:.*\s)?-destroy(?![\w-]))|pulumi(?:\s+-\S+(?:\s+[^-\s]\S*)?)*\s+(?:destroy|down)(?![\w-]))(?![^\n;&|]*(?<=\s)(?:-help|--help)(?![\w-]))'
+      reason: tears down every resource the stack manages
+      ref: https://developer.hashicorp.com/terraform/cli/commands/destroy
+
+    - name: kubectl delete namespace/--all
+      pattern: '(?:^|[\s;&|`(])kubectl(?:\s+-\S+(?:\s+[^-\s]\S*)?)*\s+delete\s(?:.*\s)?(?:(?:ns|namespaces?)(?![\w-])|--all(?:-namespaces)?(?![\w-])|-A(?![\w-]))(?![^\n;&|]*(?<=\s)(?:--dry-run(?:=(?:client|server))?(?!=)|--help)(?![\w-]))'
+      reason: deletes a namespace and everything in it, or every resource of a kind
+      ref: https://kubernetes.io/docs/reference/kubectl/generated/kubectl_delete/

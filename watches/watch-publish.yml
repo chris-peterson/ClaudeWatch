@@ -1,0 +1,16 @@
+name: watch-publish
+filter: '\b(npm|pnpm|yarn|gem)\b'
+
+rules:
+  block:
+    - name: npm unpublish / gem yank
+      pattern: '(?:^|[\s;&|`(])(?:(?:npm|pnpm|yarn(?:\s+npm)?)(?:\s+-\S+)*\s+unpublish|gem(?:\s+-\S+)*\s+yank)(?![\w-])(?![^\n;&|]*(?<=\s)(?:--help|--dry-run)(?![\w-]))'
+      reason: removes a published version that other projects may depend on, and the registry won't accept that version again
+      ref: https://docs.npmjs.com/cli/commands/npm-unpublish
+
+  ask:
+    - name: npm publish
+      pattern: '(?:^|[\s;&|`(])(?:npm|pnpm|yarn(?:\s+npm)?)(?:\s+-\S+)*\s+publish(?![\w-])'
+      except: '(?<=\s)--dry-run\b'
+      reason: publishes a package version to the registry
+      ref: https://docs.npmjs.com/cli/commands/npm-publish

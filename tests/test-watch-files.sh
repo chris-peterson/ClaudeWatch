@@ -20,6 +20,11 @@ t "rm -Rf /"         block '{"tool_name":"Bash","tool_input":{"command":"rm -Rf 
 t "rm -R --force /"  block '{"tool_name":"Bash","tool_input":{"command":"rm -R --force /"}}'
 t "rm -Rf /*"        block '{"tool_name":"Bash","tool_input":{"command":"rm -Rf /*"}}'
 t "(rm --long /)"    block '{"tool_name":"Bash","tool_input":{"command":"(rm --recursive --force /)"}}'
+# GNU rm takes any unique prefix of a long option (getopt_long).
+t "rm --rec --forc /" block '{"tool_name":"Bash","tool_input":{"command":"rm --rec --forc /"}}'
+t "rm --r --f /"     block '{"tool_name":"Bash","tool_input":{"command":"rm --r --f /"}}'
+t "rm --recur dir"   ask   '{"tool_name":"Bash","tool_input":{"command":"rm --recur /srv/data"}}'
+t "rm --verbose file" allow '{"tool_name":"Bash","tool_input":{"command":"rm --verbose notes.txt"}}'
 
 echo "--- allow: rm near misses ---"
 # Force alone is not recursive; `rm` is bounded as its own shell word; and the
@@ -59,6 +64,20 @@ t "chmod -R 777"     block '{"tool_name":"Bash","tool_input":{"command":"chmod -
 
 echo "--- block: mv to /dev/null ---"
 t "mv /dev/null"     block '{"tool_name":"Bash","tool_input":{"command":"mv important.log /dev/null"}}'
+
+echo "--- block: raw disk writes ---"
+t "dd of=/dev/sda"       block '{"tool_name":"Bash","tool_input":{"command":"dd if=/dev/zero of=/dev/sda bs=1M"}}'
+t "sudo dd of=rdisk"     block '{"tool_name":"Bash","tool_input":{"command":"sudo dd if=img.iso of=/dev/rdisk4 bs=4m"}}'
+t "dd of=/dev/nvme0n1"   block '{"tool_name":"Bash","tool_input":{"command":"dd if=/dev/urandom of=/dev/nvme0n1"}}'
+t "mkfs.ext4 /dev/sdb1"  block '{"tool_name":"Bash","tool_input":{"command":"mkfs.ext4 /dev/sdb1"}}'
+t "mkfs -t ext4 /dev"    block '{"tool_name":"Bash","tool_input":{"command":"mkfs -t ext4 /dev/sdb1"}}'
+t "> /dev/sda"           block '{"tool_name":"Bash","tool_input":{"command":"cat image.bin > /dev/sda"}}'
+t "diskutil eraseDisk"   block '{"tool_name":"Bash","tool_input":{"command":"diskutil eraseDisk APFS Blank /dev/disk4"}}'
+t "dd of=file"           allow '{"tool_name":"Bash","tool_input":{"command":"dd if=/dev/zero of=./blank.img bs=1M count=10"}}'
+t "dd if=/dev/sda (read)" allow '{"tool_name":"Bash","tool_input":{"command":"dd if=/dev/sda of=./backup.img"}}'
+t "> /dev/null"          allow '{"tool_name":"Bash","tool_input":{"command":"make build > /dev/null"}}'
+t "diskutil list"        allow '{"tool_name":"Bash","tool_input":{"command":"diskutil list"}}'
+t "grep mkfs"            allow '{"tool_name":"Bash","tool_input":{"command":"grep -rn mkfs docs/"}}'
 
 echo "--- block: shred ---"
 t "shred file"       block '{"tool_name":"Bash","tool_input":{"command":"shred secret.key"}}'

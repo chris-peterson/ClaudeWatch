@@ -13,14 +13,14 @@ rules:
   block:                       # rules that reject the command outright
     - name: <string>
       pattern: '<regex>'
-      target: bash | file-content  # optional
+      target: bash | file-content | file-path  # optional
       reason: <string>
       ref: <url>
 
   ask:                         # rules that require user confirmation
     - name: <string>
       pattern: '<regex>'
-      target: bash | file-content  # optional
+      target: bash | file-content | file-path  # optional
       except: '<regex>'        # optional — skip this rule if except matches
       unless_condition: [name] # optional — skip this rule if a named predicate matches
       unless_regex: ['<regex>'] # optional — skip this rule if any listed regex matches
@@ -137,10 +137,11 @@ Selects which engine input the rule's `pattern` runs against. Values:
 
 - `bash` (default) — match against the Bash command string.
 - `file-content` — match against the body of a file being authored via `Write` or modified via `Edit`. Requires the rule set to declare `extensions` listing applicable file extensions; otherwise the rule is never evaluated.
+- `file-path` — match against the `file_path` of a `Write` or `Edit`, for a file guarded by where it is rather than what is written into it. Neither `filter` nor `extensions` gates it, and it runs even when the edit leaves the file empty. `watch-self.yml` uses it to keep the agent out of `~/.claude/claudewatch/`.
 
-A single rule set may mix bash-target and file-content-target rules. For example, `watch-pwsh.yml` ships both inline-script rules (run against `pwsh -Command "..."` bash invocations) and file-content rules (run against `.ps1`/`.psm1`/`.psd1` script bodies).
+A single rule set may mix targets. For example, `watch-pwsh.yml` ships both inline-script rules (run against `pwsh -Command "..."` bash invocations) and file-content rules (run against `.ps1`/`.psm1`/`.psd1` script bodies).
 
-Any value other than `bash` or `file-content` causes the engine to emit a `deny` decision naming the rule.
+Any value other than `bash`, `file-content`, or `file-path` causes the engine to emit a `deny` decision naming the rule.
 
 ### `except` (optional, ask rules only)
 

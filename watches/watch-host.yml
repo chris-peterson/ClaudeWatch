@@ -1,0 +1,19 @@
+name: watch-host
+filter: '\b(shutdown|reboot|halt|poweroff|systemctl|crontab)\b|\(\)\s*\{'
+
+rules:
+  block:
+    - name: shutdown/reboot
+      pattern: '(?:(?:^|[;&|`(\n])\s*(?:(?:sudo|nohup|exec|command|env)(?:\s+-\S+)*\s+|[A-Za-z_]\w*=\S*\s+)*(?:\S*/)?(?:shutdown|reboot|halt|poweroff)|(?:^|[\s;&|`(])systemctl(?![^\n;&|]*(?<=\s)(?:--dry-run|--help)(?![\w-]))(?:\s+-\S+)*\s+(?:poweroff|reboot|halt|kexec))(?=$|[\s;&|)`<>])(?![^\n;&|]*(?<=\s)(?:-c|--help)(?![\w-]))'
+      reason: shuts down or restarts the machine, ending every session on it
+      ref: https://man7.org/linux/man-pages/man8/shutdown.8.html
+
+    - name: crontab -r
+      pattern: '(?:^|[\s;&|`(])crontab\b[^\n;&|]*(?<=\s)-[a-zA-Z]*r(?![\w-])'
+      reason: deletes the user's whole crontab with no backup
+      ref: https://man7.org/linux/man-pages/man1/crontab.1.html
+
+    - name: fork bomb
+      pattern: '([\w:.-]+)\s*\(\)\s*\{\s*\1\s*(?:\|\s*\1\s*&|&\s*\1\s*&)'
+      reason: spawns processes until the machine stops responding
+      ref: https://en.wikipedia.org/wiki/Fork_bomb

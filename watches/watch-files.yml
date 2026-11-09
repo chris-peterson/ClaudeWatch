@@ -1,10 +1,10 @@
 name: watch-files
-filter: '\b(rm|chmod|chown|mv|shred)\b'
+filter: '\b(rm|chmod|chown|mv|shred|dd|mkfs|diskutil)\b|/dev/'
 
 rules:
   block:
     - name: rm -rf /
-      pattern: '(?:^|[\s;&|`(]|(?:^|[\s;&|`(/])(?:ba|z|da|k)?sh\s+(?:[-+][oO]\s+\w+\s+|-\S+\s+)*-[a-zA-Z]*c[a-zA-Z]*\s+["\x27]|(?<![\w.-])eval\s+["\x27])rm(?=(?:\s+-\S+)*\s+(?:--recursive\b|-[a-zA-Z]*[rR]))(?=(?:\s+-\S+)*\s+(?:--force\b|-[a-zA-Z]*f))(?:\s+-\S+)*\s+/\*?(?![\w.~/*-])'
+      pattern: '(?:^|[\s;&|`(]|(?:^|[\s;&|`(/])(?:ba|z|da|k)?sh\s+(?:[-+][oO]\s+\w+\s+|-\S+\s+)*-[a-zA-Z]*c[a-zA-Z]*\s+["\x27]|(?<![\w.-])eval\s+["\x27])rm(?=(?:\s+-\S+)*\s+(?:--r(?:e(?:c(?:u(?:r(?:s(?:i(?:ve?)?)?)?)?)?)?)?(?![\w-])|-[a-zA-Z]*[rR]))(?=(?:\s+-\S+)*\s+(?:--f(?:o(?:r(?:ce?)?)?)?(?![\w-])|-[a-zA-Z]*f))(?:\s+-\S+)*\s+/\*?(?![\w.~/*-])'
       reason: destroys the entire filesystem
       ref: https://man7.org/linux/man-pages/man1/rm.1.html
 
@@ -23,16 +23,36 @@ rules:
       reason: irrecoverably destroys file contents
       ref: https://man7.org/linux/man-pages/man1/shred.1.html
 
+    - name: dd to raw device
+      pattern: '(?:^|[\s;&|`(])dd\b[^\n;&|]*\bof\s*=\s*/dev/(?:sd|nvme|r?disk|hd|xvd|vd|mmcblk)'
+      reason: writes raw bytes directly to a block device
+      ref: https://man7.org/linux/man-pages/man1/dd.1.html
+
+    - name: mkfs on device
+      pattern: '(?:^|[\s;&|`(])mkfs(?:\.\w+)?\b[^\n;&|]*\s/dev/'
+      reason: creates a new filesystem on a block device (wipes existing data)
+      ref: https://man7.org/linux/man-pages/man8/mkfs.8.html
+
+    - name: redirect to raw device
+      pattern: '>\s*/dev/(?:sd|nvme|r?disk|hd|xvd|vd|mmcblk)'
+      reason: overwrites a block device with the command's output
+      ref: https://man7.org/linux/man-pages/man4/sd.4.html
+
+    - name: diskutil erase
+      pattern: '(?:^|[\s;&|`(])diskutil\s+(?:erase\w*|zeroDisk|randomDisk|secureErase|partitionDisk)\b'
+      reason: erases or repartitions a disk
+      ref: https://ss64.com/mac/diskutil.html
+
   ask:
     - name: rm -rf
-      pattern: '(?:^|[\s;&|`(]|(?:^|[\s;&|`(/])(?:ba|z|da|k)?sh\s+(?:[-+][oO]\s+\w+\s+|-\S+\s+)*-[a-zA-Z]*c[a-zA-Z]*\s+["\x27]|(?<![\w.-])eval\s+["\x27])rm(?=(?:\s+-\S+)*\s+(?:--recursive\b|-[a-zA-Z]*[rR]))(?=(?:\s+-\S+)*\s+(?:--force\b|-[a-zA-Z]*f))'
+      pattern: '(?:^|[\s;&|`(]|(?:^|[\s;&|`(/])(?:ba|z|da|k)?sh\s+(?:[-+][oO]\s+\w+\s+|-\S+\s+)*-[a-zA-Z]*c[a-zA-Z]*\s+["\x27]|(?<![\w.-])eval\s+["\x27])rm(?=(?:\s+-\S+)*\s+(?:--r(?:e(?:c(?:u(?:r(?:s(?:i(?:ve?)?)?)?)?)?)?)?(?![\w-])|-[a-zA-Z]*[rR]))(?=(?:\s+-\S+)*\s+(?:--f(?:o(?:r(?:ce?)?)?)?(?![\w-])|-[a-zA-Z]*f))'
       unless_condition: [is_in_tree_or_scratch]
       unless_regex: ['\bgit\b[^;&|]*\brm(?=$|[\s;&|)`<>])']
       reason: recursively deletes files and directories
       ref: https://man7.org/linux/man-pages/man1/rm.1.html
 
     - name: rm -r
-      pattern: '(?:^|[\s;&|`(]|(?:^|[\s;&|`(/])(?:ba|z|da|k)?sh\s+(?:[-+][oO]\s+\w+\s+|-\S+\s+)*-[a-zA-Z]*c[a-zA-Z]*\s+["\x27]|(?<![\w.-])eval\s+["\x27])rm(?=(?:\s+-\S+)*\s+(?:--recursive\b|-[a-zA-Z]*[rR]))'
+      pattern: '(?:^|[\s;&|`(]|(?:^|[\s;&|`(/])(?:ba|z|da|k)?sh\s+(?:[-+][oO]\s+\w+\s+|-\S+\s+)*-[a-zA-Z]*c[a-zA-Z]*\s+["\x27]|(?<![\w.-])eval\s+["\x27])rm(?=(?:\s+-\S+)*\s+(?:--r(?:e(?:c(?:u(?:r(?:s(?:i(?:ve?)?)?)?)?)?)?)?(?![\w-])|-[a-zA-Z]*[rR]))'
       unless_condition: [is_in_tree_or_scratch]
       unless_regex: ['\bgit\b[^;&|]*\brm(?=$|[\s;&|)`<>])']
       reason: recursively deletes directories

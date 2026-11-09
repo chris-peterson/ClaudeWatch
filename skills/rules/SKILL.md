@@ -109,7 +109,7 @@ with. Name each one in the preview so the confirmation covers it.
 
 ### 6. Apply
 
-Run one command per change, by the rule's set name and its `name` exactly as
+Each change is one command, by the rule's set name and its `name` exactly as
 `show` reported it:
 
 ```bash
@@ -122,6 +122,15 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" reset
 `<id>:reset` and `on <name>` are `reset`; setting a rule to its shipped tier
 also removes its entry. Never edit `watches/` or the overrides file by hand from
 this skill.
+
+**Run only the tightening changes** (a `set … block`). ClaudeWatch blocks the
+agent from running a `set … ask`, a `set … off`, or any `reset` ([SH-01]
+`watch-self`), since a prompt-injected agent could use them to switch off the
+rules guarding it. For those, print the exact commands, each prefixed with `! `
+and with `${CLAUDE_PLUGIN_ROOT}` expanded to the plugin's path, and ask the user
+to type them into the prompt. A command the user types with `!` runs in the
+shell without passing through PreToolUse hooks, so ClaudeWatch doesn't screen it.
+Wait for the user to say they ran them before step 7.
 
 ### 7. Verify
 

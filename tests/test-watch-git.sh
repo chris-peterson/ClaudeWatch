@@ -20,6 +20,12 @@ echo "--- block: clean -f ---"
 t "-f"                  block '{"tool_name":"Bash","tool_input":{"command":"git clean -f"}}'
 t "-xdf"                block '{"tool_name":"Bash","tool_input":{"command":"git clean -xdf"}}'
 t "-n (dry run)"        allow '{"tool_name":"Bash","tool_input":{"command":"git clean -n"}}'
+# git accepts any unique prefix of a long option; each of these deletes.
+t "--force"             block '{"tool_name":"Bash","tool_input":{"command":"git clean --force"}}'
+t "-d --force"          block '{"tool_name":"Bash","tool_input":{"command":"git clean -d --force"}}'
+t "--f (prefix)"        block '{"tool_name":"Bash","tool_input":{"command":"git clean --f"}}'
+t "--forc (prefix)"     block '{"tool_name":"Bash","tool_input":{"command":"git clean --forc -d"}}'
+t "--format-like word"  allow '{"tool_name":"Bash","tool_input":{"command":"git clean -n --foo"}}'
 
 echo "--- block: stash drop/clear ---"
 t "drop"                block '{"tool_name":"Bash","tool_input":{"command":"git stash drop stash@{0}"}}'
@@ -28,6 +34,27 @@ t "clear"               block '{"tool_name":"Bash","tool_input":{"command":"git 
 echo "--- block: reflog expire/delete ---"
 t "expire"              block '{"tool_name":"Bash","tool_input":{"command":"git reflog expire --expire=now --all"}}'
 t "delete"              block '{"tool_name":"Bash","tool_input":{"command":"git reflog delete HEAD@{2}"}}'
+
+echo "--- block: gc --prune=now / prune ---"
+t "gc --prune=now"      block '{"tool_name":"Bash","tool_input":{"command":"git gc --prune=now"}}'
+t "gc --aggressive --prune=all" block '{"tool_name":"Bash","tool_input":{"command":"git gc --aggressive --prune=all"}}'
+t "gc --prune now"      block '{"tool_name":"Bash","tool_input":{"command":"git gc --prune now"}}'
+t "prune"               block '{"tool_name":"Bash","tool_input":{"command":"git prune"}}'
+t "prune --expire=now"  block '{"tool_name":"Bash","tool_input":{"command":"git prune --expire=now"}}'
+t "prune -n (dry run)"  allow '{"tool_name":"Bash","tool_input":{"command":"git prune -n"}}'
+t "gc (default)"        allow '{"tool_name":"Bash","tool_input":{"command":"git gc"}}'
+t "remote prune"        allow '{"tool_name":"Bash","tool_input":{"command":"git remote prune origin"}}'
+t "worktree prune"      allow '{"tool_name":"Bash","tool_input":{"command":"git worktree prune"}}'
+t "fetch --prune"       allow '{"tool_name":"Bash","tool_input":{"command":"git fetch --prune"}}'
+t "prune-packed"        allow '{"tool_name":"Bash","tool_input":{"command":"git prune-packed"}}'
+
+echo "--- block: filter-branch / filter-repo ---"
+t "filter-branch"       block '{"tool_name":"Bash","tool_input":{"command":"git filter-branch --tree-filter \"rm -f secrets.txt\" -- --all"}}'
+t "filter-repo"         block '{"tool_name":"Bash","tool_input":{"command":"git filter-repo --path secrets.txt --invert-paths"}}'
+t "-C path filter-repo" block '{"tool_name":"Bash","tool_input":{"command":"git -C build filter-repo --force"}}'
+t "filter-repo --analyze" allow '{"tool_name":"Bash","tool_input":{"command":"git filter-repo --analyze"}}'
+t "filter-repo --dry-run" allow '{"tool_name":"Bash","tool_input":{"command":"git filter-repo --path secrets.txt --invert-paths --dry-run"}}'
+t "filter-branch --help" allow '{"tool_name":"Bash","tool_input":{"command":"git filter-branch --help"}}'
 
 echo "--- allow: stage manipulation ---"
 t "add file"            allow '{"tool_name":"Bash","tool_input":{"command":"git add src/main.rs"}}'
@@ -47,6 +74,10 @@ echo "--- ask: reset --hard (boundary vs allowed non-hard reset) ---"
 t "reset --hard"        ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --hard"}}'
 t "reset --hard HEAD~3" ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --hard HEAD~3"}}'
 t "reset --hard=no"     ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --hard=no"}}'
+t "reset --h (prefix)"  ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --h"}}'
+t "reset --har HEAD~1"  ask   '{"tool_name":"Bash","tool_input":{"command":"git reset --har HEAD~1"}}'
+t "reset --help"        allow '{"tool_name":"Bash","tool_input":{"command":"git reset --help"}}'
+t "reset --hardware (not a prefix)" allow '{"tool_name":"Bash","tool_input":{"command":"git reset --hardware"}}'
 
 echo "--- ask: commit ---"
 t "commit -m"           ask   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"fix: update readme\""}}'
@@ -76,6 +107,13 @@ t "stash list; stash pop (compound → block)" block '{"tool_name":"Bash","tool_
 echo "--- ask: branch -D (recoverable via reflog) ---"
 t "-D"                  ask   '{"tool_name":"Bash","tool_input":{"command":"git branch -D unmerged-feature"}}'
 t "-d (lowercase)"      allow '{"tool_name":"Bash","tool_input":{"command":"git branch -d merged-feature"}}'
+# -d with force deletes an unmerged branch, the same as -D.
+t "-d -f"               ask   '{"tool_name":"Bash","tool_input":{"command":"git branch -d -f unmerged-feature"}}'
+t "-df"                 ask   '{"tool_name":"Bash","tool_input":{"command":"git branch -df unmerged-feature"}}'
+t "--delete --force"    ask   '{"tool_name":"Bash","tool_input":{"command":"git branch --delete --force unmerged-feature"}}'
+t "--d --forc (prefixes)" ask '{"tool_name":"Bash","tool_input":{"command":"git branch --d --forc unmerged-feature"}}'
+t "--delete (no force)" allow '{"tool_name":"Bash","tool_input":{"command":"git branch --delete merged-feature"}}'
+t "-f (create, no delete)" allow '{"tool_name":"Bash","tool_input":{"command":"git branch -f topic HEAD~1"}}'
 
 echo "--- ask: push ---"
 t "push"                ask   '{"tool_name":"Bash","tool_input":{"command":"git push"}}'
@@ -89,6 +127,7 @@ echo "--- ask: push --delete (remote branch delete) ---"
 t "--delete"            ask   '{"tool_name":"Bash","tool_input":{"command":"git push origin --delete docs-pages-preview"}}'
 t "-d (short)"          ask   '{"tool_name":"Bash","tool_input":{"command":"git push -d origin feature"}}'
 t ":branch (colon refspec)" ask '{"tool_name":"Bash","tool_input":{"command":"git push origin :feature"}}'
+t "--del (prefix)"      ask   '{"tool_name":"Bash","tool_input":{"command":"git push origin --del feature"}}'
 
 echo "--- allow: safe operations ---"
 t "status"              allow '{"tool_name":"Bash","tool_input":{"command":"git status"}}'

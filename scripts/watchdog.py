@@ -15,6 +15,7 @@ Supports these tool inputs:
 - Edit: matches against the full post-edit file content reconstructed from
   the on-disk file plus tool_input.old_string -> tool_input.new_string
   substitution (target: file-content rules)
+- Write and Edit also match tool_input.file_path (target: file-path rules)
 
 CLAUDE_PROJECT_DIR, which Claude Code exports to hook commands, is the only
 environment variable on the decision path: it bounds the in-tree `rm` exemption
@@ -41,7 +42,7 @@ import sys
 import traceback
 
 
-VALID_TARGETS = ("bash", "file-content")
+VALID_TARGETS = ("bash", "file-content", "file-path")
 
 
 def _unquote(s):
@@ -99,13 +100,13 @@ def parse_rules_yml(path):
         block:
           - name: ...
             pattern: '...'
-            target: bash | file-content  # optional, default bash
+            target: bash | file-content | file-path  # optional, default bash
             reason: ...
             ref: ...
         ask:
           - name: ...
             pattern: '...'
-            target: bash | file-content  # optional, default bash
+            target: bash | file-content | file-path  # optional, default bash
             reason: ...
             ref: ...
     """
@@ -998,14 +999,16 @@ def _unattended_escalation():
     }
 
 
-def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None):
+def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None, file_path=None):
     """Evaluate a single rule set against an input.
 
     input_kind is "bash" or "file-content". input_text is the string to match
-    against. file_extension is the lowercase extension (including the dot) of
-    the target file, used to filter rule sets for file-content inputs. cwd is
-    the working directory from the hook input, used by the `is_in_project_tree`
-    unless-condition to tell in-tree deletes from out-of-tree ones.
+    against (for file-content, empty when the edit leaves the file empty).
+    file_extension is the lowercase extension (including the dot) of the target
+    file, used to filter rule sets for file-content inputs. cwd is the working
+    directory from the hook input, used by the `is_in_project_tree`
+    unless-condition to tell in-tree deletes from out-of-tree ones. file_path is
+    the Write/Edit target path that `file-path` rules match ([RL-21]).
 
     Returns (blocks, asks) — lists of violation dicts (see `_violation`).
     """
@@ -1025,12 +1028,14 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
             except re.error as e:
                 _block(f"{label} — invalid filter regex: {e}")
                 return blocks, asks
+        texts = {"bash": input_text}
     else:  # file-content
-        extensions = config.get("extensions") or []
-        if not extensions:
-            return blocks, asks
-        if file_extension is None or file_extension.lower() not in [e.lower() for e in extensions]:
-            return blocks, asks
+        extensions = [e.lower() for e in config.get("extensions") or []]
+        extension_matches = file_extension is not None and file_extension.lower() in extensions
+        texts = {
+            "file-content": input_text if input_text and extension_matches else None,
+            "file-path": file_path or None,
+        }
 
     rules = config.get("rules", {})
 
@@ -1039,13 +1044,14 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
         if target not in VALID_TARGETS:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid target {target!r}")
             continue
-        if target != input_kind:
+        text = texts.get(target)
+        if text is None:
             continue
         if not rule.get("pattern"):
             _block(f"{label} — rule {rule.get('name', '?')!r} has empty pattern")
             continue
         try:
-            match = re.search(rule["pattern"], input_text)
+            match = re.search(rule["pattern"], text)
         except re.error as e:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid regex: {e}")
             continue
@@ -1053,7 +1059,7 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
             continue
         # The parser drops exemptions from a shipped block rule, so only a rule an
         # override moved here from ask carries one ([OVR-03]).
-        exempted, err = _is_exempted(rule, input_kind, input_text, cwd)
+        exempted, err = _is_exempted(rule, target, text, cwd)
         if err:
             _block(f"{label} — rule {rule.get('name', '?')!r} {err}")
             continue
@@ -1065,19 +1071,20 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
         if target not in VALID_TARGETS:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid target {target!r}")
             continue
-        if target != input_kind:
+        text = texts.get(target)
+        if text is None:
             continue
         if not rule.get("pattern"):
             _block(f"{label} — rule {rule.get('name', '?')!r} has empty pattern")
             continue
         try:
-            match = re.search(rule["pattern"], input_text)
+            match = re.search(rule["pattern"], text)
         except re.error as e:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid regex: {e}")
             continue
         if not match:
             continue
-        exempted, err = _is_exempted(rule, input_kind, input_text, cwd)
+        exempted, err = _is_exempted(rule, target, text, cwd)
         if err:
             _block(f"{label} — rule {rule.get('name', '?')!r} {err}")
             continue
@@ -1384,7 +1391,11 @@ def _decode_file(raw):
 
 
 def _resolve_input(data):
-    """Map tool_input -> (input_kind, input_text, file_extension) or None."""
+    """Map tool_input -> (input_kind, input_text, file_extension, file_path) or None.
+
+    A Write or Edit that leaves the file empty still resolves, with empty
+    text, so its path reaches the `file-path` rules ([EN-03], [RL-21]).
+    """
     tool_name = data.get("tool_name")
     if tool_name not in ("Bash", "Monitor", "Write", "Edit"):
         return None
@@ -1401,15 +1412,15 @@ def _resolve_input(data):
         cmd = _string_field(tool_input, "command")
         if not cmd:
             return None
-        return "bash", _normalize_command_words(cmd), None
+        return "bash", _normalize_command_words(cmd), None, None
 
     path = _string_field(tool_input, "file_path")
 
     if tool_name == "Write":
         content = _string_field(tool_input, "content")
-        if not content:
+        if not content and not path:
             return None
-        return "file-content", content, os.path.splitext(path)[1]
+        return "file-content", content, os.path.splitext(path)[1], path
 
     old_string = _string_field(tool_input, "old_string")
     new_string = _string_field(tool_input, "new_string")
@@ -1427,9 +1438,9 @@ def _resolve_input(data):
         content = existing.replace(old_string, new_string)
     else:
         content = existing.replace(old_string, new_string, 1)
-    if not content:
+    if not content and not path:
         return None
-    return "file-content", content, os.path.splitext(path)[1]
+    return "file-content", content, os.path.splitext(path)[1], path
 
 
 def _emit(decision, reason):
@@ -1451,7 +1462,7 @@ def _decide():
         return
     if resolved is None:
         return
-    input_kind, input_text, file_extension = resolved
+    input_kind, input_text, file_extension, file_path = resolved
     cwd = data.get("cwd")
 
     if len(sys.argv) > 1:
@@ -1485,7 +1496,7 @@ def _decide():
         config = apply_overrides(config, overrides)
         if config is None:
             continue
-        blocks, asks = evaluate_rules(config, input_kind, input_text, file_extension, cwd)
+        blocks, asks = evaluate_rules(config, input_kind, input_text, file_extension, cwd, file_path)
         all_blocks.extend(blocks)
         all_asks.extend(asks)
 

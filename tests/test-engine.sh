@@ -231,6 +231,39 @@ run_test "$TMPDIR_TARGETS/watch-target.yml" "bash filter skips non-matching" all
 run_test "$TMPDIR_TARGETS/watch-target.yml" "filter does not gate file-content" block \
   '{"tool_name":"Write","tool_input":{"file_path":"x.foo","content":"destroy-file without filter keyword"}}'
 
+echo "--- target=file-path matches the Write/Edit path ([RL-21]) ---"
+cat > "$TMPDIR_TARGETS/path-target.yml" <<'YAMLEOF'
+name: path-target
+filter: '\bnever-matches\b'
+rules:
+  block:
+    - name: guarded dir
+      pattern: '/guarded/'
+      target: file-path
+      reason: path rule fired
+      ref: n/a
+  ask:
+    - name: guarded ask
+      pattern: '/asked/'
+      target: file-path
+      reason: path ask fired
+      ref: n/a
+YAMLEOF
+run_test "$TMPDIR_TARGETS/path-target.yml" "path rule fires on Write" block \
+  '{"tool_name":"Write","tool_input":{"file_path":"/w/guarded/x.txt","content":"anything"}}'
+run_test "$TMPDIR_TARGETS/path-target.yml" "path rule fires on Edit" block \
+  '{"tool_name":"Edit","tool_input":{"file_path":"/w/guarded/x.txt","old_string":"a","new_string":"b"}}'
+run_test "$TMPDIR_TARGETS/path-target.yml" "path rule fires on an emptying Write" block \
+  '{"tool_name":"Write","tool_input":{"file_path":"/w/guarded/x.txt","content":""}}'
+run_test "$TMPDIR_TARGETS/path-target.yml" "path ask rule asks" ask \
+  '{"tool_name":"Write","tool_input":{"file_path":"/w/asked/x.txt","content":"x"}}'
+run_test "$TMPDIR_TARGETS/path-target.yml" "path rule ignores other paths" allow \
+  '{"tool_name":"Write","tool_input":{"file_path":"/w/open/x.txt","content":"x"}}'
+run_test "$TMPDIR_TARGETS/path-target.yml" "path rule never reads a bash command" allow \
+  '{"tool_name":"Bash","tool_input":{"command":"cat /w/guarded/x.txt never-matches"}}'
+run_test "$TMPDIR_TARGETS/watch-target.yml" "emptying Write skips file-content rules" allow \
+  '{"tool_name":"Write","tool_input":{"file_path":"x.foo","content":""}}'
+
 echo "--- invalid target blocks ---"
 cat > "$TMPDIR_TARGETS/bad-target.yml" <<'YAMLEOF'
 name: bad-target

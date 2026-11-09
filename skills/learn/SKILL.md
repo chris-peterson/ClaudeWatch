@@ -108,10 +108,20 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" show --json
 
 Before writing, list each change as `<set> / <rule>: <shipped tier> -> <new
 tier>` and get an explicit `yes`. Name every block being lowered to ask or
-turned off, since that removes a refusal ClaudeWatch ships with. Then:
+turned off, since that removes a refusal ClaudeWatch ships with. Each change is:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" set <set> "<rule name>" <ask|block|off>
+```
+
+Run a change that moves a rule to `block` directly. ClaudeWatch blocks the agent
+from running a change to `ask` or `off` ([SH-01] `watch-self`), so print those
+commands, each prefixed with `! ` and with `${CLAUDE_PLUGIN_ROOT}` expanded to
+the plugin's path, and ask the user to type them into the prompt. A command the
+user types with `!` runs without passing through PreToolUse hooks. Once they say
+they ran them, check the file:
+
+```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" check
 ```
 

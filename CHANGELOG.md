@@ -54,8 +54,38 @@
   `command_shape` skips `cd` and comment lines, so `cd repo && rm -rf build` is
   `rm`. `/ClaudeWatch:learn` groups by the matched part, and reads older records
   by their `command_shape`.
+- A new `watch-exec` rule set blocks running code nobody can read first: a
+  download run through `$(curl …)` or `<(curl …)` or piped to an interpreter
+  such as `python` or `node`, a `base64 -d` payload piped to a shell, and
+  shells attached to a network connection (`nc -e`, `socat … exec:`,
+  `/dev/tcp/`).
+- watch-files blocks writes to a raw disk run as a command (`dd of=/dev/sda`,
+  `mkfs /dev/sdb1`, `> /dev/sda`, `diskutil eraseDisk`), not only inside `.sh`
+  files.
+- More commands with no recovery are blocked: `git gc --prune=now`,
+  `git prune`, and `git filter-branch`/`filter-repo` (watch-git);
+  `gh`/`glab repo delete`, `terraform`/`tofu`/`pulumi destroy`, and
+  `kubectl delete` of a namespace or with `--all` (new watch-remote);
+  `npm unpublish` and `gem yank` (new watch-publish, which also asks before
+  `npm publish`); and `shutdown`/`reboot`, `crontab -r`, and fork bombs (new
+  watch-host).
+- ClaudeWatch protects itself from the agent. A new `watch-self` rule set
+  blocks every way the agent can loosen it: writing or deleting under
+  `~/.claude/claudewatch/`, running `overrides.py` to move a rule to `ask` or
+  `off` or to reset, `unattended.py off`, disabling or uninstalling the plugin,
+  and a settings file that disables it or every hook. `/ClaudeWatch:rules` and
+  `/ClaudeWatch:learn` print a loosening change for you to type with a `!`
+  prefix, which runs it without passing through ClaudeWatch, instead of
+  running it. Rules can now match a Write or Edit's file path
+  (`target: file-path`), which is how the overrides file is guarded even
+  against a Write that empties it.
 
 ### Fixes
+
+- `git clean --force` and `git branch --delete --force` (or `-d -f`, `-df`)
+  are caught like their short forms, and every rule naming a long option also
+  matches the prefixes git and GNU `rm` accept for it: `git reset --h` resets
+  hard and `git clean --f` deletes, and both ran unguarded.
 
 - `git stash list` and `git stash show` no longer ask; they only read the
   stash. Every other `git stash` form still asks.

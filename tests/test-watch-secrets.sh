@@ -114,8 +114,22 @@ t "openssl < server.pem"  ask   '{"tool_name":"Bash","tool_input":{"command":"op
 
 echo "--- ask: env / printenv ---"
 t "env"                   ask   '{"tool_name":"Bash","tool_input":{"command":"env"}}'
-t "env -i"                ask   '{"tool_name":"Bash","tool_input":{"command":"env -i bash"}}'
+t "env -i"                ask   '{"tool_name":"Bash","tool_input":{"command":"env -i"}}'
+t "env -u PATH"           ask   '{"tool_name":"Bash","tool_input":{"command":"env -u PATH"}}'
+t "env --unset=PATH"      ask   '{"tool_name":"Bash","tool_input":{"command":"env --unset=PATH"}}'
+t "env A=1 (no command)"  ask   "$(bash_input 'env A=1 B="x y"')"
+t "env > out"             ask   '{"tool_name":"Bash","tool_input":{"command":"env > out.txt"}}'
+t "env A=1 | grep (compound → block)" block '{"tool_name":"Bash","tool_input":{"command":"env A=1 | grep KEY"}}'
 t "printenv"              ask   '{"tool_name":"Bash","tool_input":{"command":"printenv"}}'
+t "printenv HOME"         ask   '{"tool_name":"Bash","tool_input":{"command":"printenv HOME"}}'
+
+echo "--- allow: env running a command ---"
+t "env -i bash"           allow '{"tool_name":"Bash","tool_input":{"command":"env -i bash"}}'
+t "env A=1 cmd"           allow '{"tool_name":"Bash","tool_input":{"command":"env HTTPS_PROXY=proxy.example:3128 NO_PROXY=localhost,.example dotnet run check.cs"}}'
+t "env quoted value cmd"  allow "$(bash_input 'env A="x y" B='"'"'z'"'"' make test')"
+t "env -u X cmd"          allow '{"tool_name":"Bash","tool_input":{"command":"env -u HOME ls"}}'
+t "env A=\$(x) cmd"       allow "$(bash_input 'env A=$(pwd) make')"
+t "/usr/bin/env python3"  allow '{"tool_name":"Bash","tool_input":{"command":"/usr/bin/env python3 x.py"}}'
 # Compound commands: the env ask is escalated to a block (engine-level, see
 # test-engine.sh). The bare env/printenv asks above keep rule-match coverage.
 t "&& env (compound → block)"  block '{"tool_name":"Bash","tool_input":{"command":"cd /tmp && env"}}'

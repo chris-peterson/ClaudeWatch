@@ -3,23 +3,17 @@
 analyze-decisions: turn a ClaudeWatch decision log into review proposals.
 
 Reads the JSONL written by watchdog.py (on by default unless CLAUDEWATCH_LOG is
-off), groups records by command shape, cross-references the current Claude Code allow list,
-and emits a structured proposal the /ClaudeWatch:learn skill renders for
-batch approval.
+off), groups records by command shape, and emits a structured proposal the
+/ClaudeWatch:learn skill renders for batch approval.
 
-Three buckets:
-  - allow_candidates  — commands ClaudeWatch allows that are NOT covered by an
-                        allow rule in settings.json, so Claude Code prompts on
-                        them. Promoting these to the allow list removes prompts.
+Two buckets:
   - except_candidates — commands ClaudeWatch repeatedly asks about. Candidates
                         for an `except` (if a safe variant) or for acceptance.
   - deny_summary      — commands ClaudeWatch blocked, grouped by reason.
                         Informational: a high count may mean a workflow you
                         need is blocked.
 
-Read-only, stdlib-only, no network. The allow-pattern match is an approximate
-coverage check (Claude Code's own matcher is the source of truth); it exists only
-to avoid re-proposing commands you already allow.
+Read-only, stdlib-only, no network.
 """
 
 import argparse
@@ -33,14 +27,13 @@ from datetime import datetime, timedelta, timezone
 
 # `command_shape` is defined in the engine (it writes the shape to the log per
 # [LOG-03]); the analyzer imports it so the reducer has one definition. Applying
-# it to an already-logged shape is idempotent, so it also re-derives the allow
-# pattern from a logged shape and reduces any legacy raw-command records.
+# it to an already-logged shape is idempotent, so it also reduces any legacy
+# raw-command records.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from watchdog import command_shape  # noqa: E402
 
 
 DEFAULT_LOG = "~/.claude/claudewatch/decisions.jsonl"
-DEFAULT_SETTINGS = "~/.claude/settings.json"
 
 DURATION_UNITS = {"m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
 
@@ -51,48 +44,6 @@ def parse_duration(text):
     if not m:
         raise ValueError(f"invalid duration {text!r} (use forms like 90m, 2h, 1d, 1w)")
     return timedelta(**{DURATION_UNITS[m.group(2)]: int(m.group(1))})
-
-
-def load_allow_patterns(settings_path):
-    """Return a list of (tool, literal, open_ended) from settings.json allow rules.
-
-    Reduces `Bash(git push:*)` / `Monitor(cat *)` to the literal a shape must
-    lead with, and a wildcard-free `Bash(git push)` to one it must equal. The
-    tool is carried through because the two rule families are separate: a
-    `Bash(…)` rule does not cover the same command via `Monitor`.
-    """
-    path = os.path.expanduser(settings_path)
-    if not os.path.isfile(path):
-        return []
-    with open(path) as f:
-        settings = json.load(f)
-    patterns = []
-    for rule in settings.get("permissions", {}).get("allow", []):
-        m = re.fullmatch(r"(Bash|Monitor)\((.*)\)", rule)
-        if not m:
-            continue
-        head, wildcard, tail = m.group(2).strip().partition("*")
-        # Pattern text after the wildcard (`Bash(git * main)`) constrains tokens
-        # the shape has already dropped, so nothing here can be compared against
-        # it. Contributing no literal errs toward proposing, per [SK-14].
-        if tail.strip():
-            continue
-        patterns.append((m.group(1), head.rstrip().rstrip(": "), bool(wildcard)))
-    return patterns
-
-
-def is_already_allowed(tool, shape, allow_patterns):
-    """True when an allow rule already covers this command shape.
-
-    `Bash(git:*)` covers `git status` and leaves `gitk` alone — a different
-    program the rule never named.
-    """
-    for rule_tool, literal, open_ended in allow_patterns:
-        if rule_tool != tool or not literal:
-            continue
-        if shape == literal or (open_ended and shape.startswith(literal + " ")):
-            return True
-    return False
 
 
 def read_records(log_path, cutoff):
@@ -109,8 +60,8 @@ def read_records(log_path, cutoff):
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if "schema" in rec and "decision" not in rec:
-                continue  # the log's schema header ([LOG-06]), not a decision record
+            if "decision" not in rec:
+                continue  # the schema header ([LOG-06]) or a session-start record ([OVR-06])
             if cutoff is not None:
                 ts = rec.get("ts")
                 if ts:
@@ -152,8 +103,7 @@ def summarize_window(records):
     }
 
 
-def analyze(records, allow_patterns, min_count, max_samples):
-    allow_groups = defaultdict(lambda: {"count": 0, "samples": [], "cwds": set(), "pattern": None, "auto": 0})
+def analyze(records, min_count, max_samples):
     ask_groups = defaultdict(lambda: {"count": 0, "samples": [], "reasons": set()})
     deny_groups = defaultdict(lambda: {"count": 0, "samples": []})
     by_mode = defaultdict(int)
@@ -167,48 +117,30 @@ def analyze(records, allow_patterns, min_count, max_samples):
         src = rec.get("command_shape") or rec.get("command")
         if not src:
             continue  # file-content (Write/Edit) records have no command to group
-        # Bash and Monitor both carry shell commands, but their host permission
-        # rules are separate families, so an allow candidate is grouped and
-        # proposed per tool. Legacy records predate the Monitor matcher.
-        tool = rec.get("tool") or "Bash"
-        shape, pattern = command_shape(src, tool)
+        shape = command_shape(src)
+        reasons = rec.get("matched") or []
+        # Each reason is filed under the shape of the part of the command its
+        # rule matched ([LOG-03]). A reason the engine added itself (the
+        # compound escalation) has none, so it takes the first rule's; a
+        # record from before `matched_shapes` takes the command's shape.
+        logged = rec.get("matched_shapes") or []
+        first = next((s for s in logged if s), shape)
+        reason_shapes = [(r, (logged[i] if i < len(logged) else None) or first) for i, r in enumerate(reasons)]
 
-        if decision == "allow":
-            # Suppress on the shape, not the raw src: grouping keys on the shape
-            # (which drops leading VAR=value/sudo), so the already-allowed check
-            # must too — else a command like `FOO=1 echo …` shapes to `echo` but
-            # its raw form doesn't start with the `echo` prefix and gets wrongly
-            # re-proposed despite `Bash(echo *)` already allowing it.
-            if is_already_allowed(tool, shape, allow_patterns):
-                continue
-            g = allow_groups[(tool, shape)]
-            g["count"] += 1
-            g["pattern"] = pattern
-            if rec.get("mode") == "auto":
-                g["auto"] += 1
-            if rec.get("cwd"):
-                g["cwds"].add(rec["cwd"])
-            if len(g["samples"]) < max_samples and shape not in g["samples"]:
-                g["samples"].append(shape)
-        elif decision == "ask":
-            g = ask_groups[shape]
-            g["count"] += 1
-            for reason in rec.get("matched", []):
-                g["reasons"].add(reason)
-            if len(g["samples"]) < max_samples and shape not in g["samples"]:
-                g["samples"].append(shape)
+        if decision == "ask":
+            for part_shape in dict.fromkeys(s for _, s in reason_shapes) or [shape]:
+                g = ask_groups[part_shape]
+                g["count"] += 1
+                g["reasons"].update(r for r, s in reason_shapes if s == part_shape)
+                if len(g["samples"]) < max_samples and part_shape not in g["samples"]:
+                    g["samples"].append(part_shape)
         elif decision == "deny":
-            for reason in rec.get("matched", []) or ["(unattributed)"]:
+            for reason, part_shape in reason_shapes or [("(unattributed)", shape)]:
                 g = deny_groups[reason]
                 g["count"] += 1
-                if len(g["samples"]) < max_samples and shape not in g["samples"]:
-                    g["samples"].append(shape)
+                if len(g["samples"]) < max_samples and part_shape not in g["samples"]:
+                    g["samples"].append(part_shape)
 
-    allow_candidates = [
-        {"tool": tool, "shape": shape, "suggested_allow": g["pattern"], "count": g["count"],
-         "auto_executed": g["auto"], "distinct_dirs": len(g["cwds"]), "samples": g["samples"]}
-        for (tool, shape), g in allow_groups.items() if g["count"] >= min_count
-    ]
     except_candidates = [
         {"shape": shape, "count": g["count"], "reasons": sorted(g["reasons"]),
          "samples": g["samples"]}
@@ -219,12 +151,10 @@ def analyze(records, allow_patterns, min_count, max_samples):
         for reason, g in deny_groups.items()
     ]
 
-    allow_candidates.sort(key=lambda x: (-x["count"], x["tool"], x["shape"]))
     except_candidates.sort(key=lambda x: (-x["count"], x["shape"]))
     deny_summary.sort(key=lambda x: (-x["count"], x["reason"]))
 
     return {
-        "allow_candidates": allow_candidates,
         "except_candidates": except_candidates,
         "deny_summary": deny_summary,
         "by_mode": dict(by_mode),
@@ -236,8 +166,6 @@ def main():
     parser.add_argument("--log", default=os.environ.get("CLAUDEWATCH_LOG"),
                         help="path to decisions.jsonl (default: resolved from $CLAUDEWATCH_LOG, "
                              f"else {DEFAULT_LOG})")
-    parser.add_argument("--settings", default=DEFAULT_SETTINGS,
-                        help="path to settings.json for the current allow list")
     parser.add_argument("--since", default=None,
                         help="only consider records newer than this (e.g. 1h, 1d, 1w)")
     parser.add_argument("--min-count", type=int, default=3,
@@ -287,8 +215,7 @@ def main():
             )
         sys.exit(2)
 
-    allow_patterns = load_allow_patterns(args.settings)
-    result = analyze(records, allow_patterns, args.min_count, args.max_samples)
+    result = analyze(records, args.min_count, args.max_samples)
     result["meta"] = {
         "log": os.path.expanduser(args.log),
         "records_considered": len(records),

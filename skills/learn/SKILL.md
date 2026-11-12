@@ -1,9 +1,9 @@
 ---
 name: learn
 description: >
-  Analyze the ClaudeWatch decision log to find commands that repeatedly prompt,
-  and propose allow-list entries and rule tweaks that cut prompt fatigue —
-  reviewed as one batch, then reset the log.
+  Analyze the ClaudeWatch decision log to find the rules that ask most and the
+  blocks that get in the way, and propose overrides (move a rule between ask and
+  block, or turn it off) reviewed as one batch, then reset the log.
 disable-model-invocation: true
 ---
 
@@ -65,10 +65,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/analyze-decisions.py" --since 1d
 ```
 
 Useful flags: `--min-count N` (default 3) sets how many times a command must
-recur before it is proposed; `--settings PATH` points at a different
-`settings.json`; `--log PATH` reads a different log.
+recur before it is proposed; `--log PATH` reads a different log.
 
-## 2. Present the three buckets
+## 2. Present the two buckets
 
 Open with the window the proposals are drawn from, so the user can weigh how
 much history backs them. Read it from `meta`: `records_considered`,
@@ -77,68 +76,69 @@ one line — e.g. *"Based on 1,650 decisions across 23 sessions over 2.1 days
 (2026-06-01 → 2026-06-03)."* A short span or few sessions means the suggestions
 are thin; say so.
 
-Then render the JSON as three tables. Lead with the one that removes the most
-prompts.
+Then render the JSON as two tables. ClaudeWatch's own decisions are only ever
+`ask` or `deny`; what it lets through is Claude Code's to decide, so the log's
+allowed records feed `by_mode` and the window, never a proposal.
 
-- **Allow candidates** — commands ClaudeWatch already allows that are *not*
-  covered by your allow list, so Claude Code prompts on them in the modes that
-  prompt. Columns: tool, shape, count, distinct dirs, suggested `allow` pattern.
-  These are the prompt-fatigue wins. `Bash` and `Monitor` are separate rule
-  families in the host, so the same shape can appear once per tool and each
-  row's suggested pattern names its own; add them as given rather than folding
-  them into one.
 - **Ask candidates** — commands ClaudeWatch repeatedly *asks* about. Columns:
-  shape, count, the matched rule(s). For each, the choice is: add an `except`
-  for a demonstrably-safe variant, promote it to the block tier if it guards
-  something unrecoverable, or leave it. A high count under `auto` is *not*
-  evidence the prompt is doing its job — see "Auto mode" below for why an `ask`
-  record can't tell you whether anyone saw it.
-- **Deny summary** — commands ClaudeWatch *blocked*, grouped by reason.
-  Informational. A high count means a workflow you need is blocked — worth a
-  conversation, never an automatic change.
+  shape, count, the matched rule(s). For each, the choice is: move the rule to
+  `block` if it guards something unrecoverable, turn it `off` if every prompt
+  it raised was approved and the user doesn't want it, or leave it. A high
+  count under `auto` is *not* evidence the prompt is doing its job — see "Auto
+  mode" below for why an `ask` record can't tell you whether anyone saw it.
+- **Deny summary** — commands ClaudeWatch *blocked*, grouped by reason. A high
+  count means a workflow the user needs is blocked. The choice is: move the rule
+  to `ask`, turn it `off`, or leave it. Default to leaving it; a block is there
+  because what it guards has no recovery.
 
-## 3. Let the user choose, then confirm
+## 3. Apply the approved items as overrides
 
-Ask which items to apply. For the **allow candidates**, confirm the scope:
+Ask which items to apply, one decision per item. Each one becomes an override
+in `~/.claude/claudewatch/overrides.yml`, written by the same program
+`/ClaudeWatch:rules` uses, so it survives a plugin upgrade and never touches the
+shipped rules.
 
-- **User** (`~/.claude/settings.json`) — applies to every session.
-- **Project** (`.claude/settings.json` in the repo) — applies to that repo only.
+A `matched` entry is `<rule name>: <reason> — <ref>`, without the rule set. Find
+the set in `show --json`: the rule whose `name` and `reason` both match. Rule
+names repeat across sets (`eval (bash)` is in three), so match the reason too.
 
-Each suggested pattern is conservative (as narrow as the commands actually
-run). Offer to widen or narrow any pattern before writing. Before writing,
-show the exact `permissions.allow` additions and get an explicit `yes`.
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" show --json
+```
 
-Apply by reading the chosen `settings.json`, appending the approved patterns to
-`permissions.allow` (creating the keys if absent, de-duplicating), and writing
-it back. Do not reorder or drop existing entries.
+Before writing, list each change as `<set> / <rule>: <shipped tier> -> <new
+tier>` and get an explicit `yes`. Name every block being lowered to ask or
+turned off, since that removes a refusal ClaudeWatch ships with. Each change is:
 
-> If the user keeps their `settings.json` under external management (synced from
-> another source rather than hand-edited), do not edit `~/.claude/settings.json`
-> directly — show them the patches to apply at their source instead.
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" set <set> "<rule name>" <ask|block|off>
+```
 
-## 4. Ask candidates → rule changes
+Run a change that moves a rule to `block` directly. ClaudeWatch blocks the agent
+from running a change to `ask` or `off` ([SH-01] `watch-self`), so print those
+commands, each prefixed with `! ` and with `${CLAUDE_PLUGIN_ROOT}` expanded to
+the plugin's path, and ask the user to type them into the prompt. A command the
+user types with `!` runs without passing through PreToolUse hooks. Once they say
+they ran them, check the file:
 
-For approved **ask candidates**, the change is an `except` on the matched rule
-(to stop prompting on a safe variant) — that is a rule edit, so route it
-through `/ClaudeWatch:rules`, which validates and previews. Name the rule (the
-`matched` reason identifies the set) and the `except` regex to add. Do not
-hand-edit shipped rule YAML from this skill.
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/overrides.py" check
+```
 
-## 5. Deny summary → never automatic
+A deny-summary rule changes only when the user approves that item.
 
-Surface blocked-command counts so the user sees what is in their way, but make
-no change. If a block is genuinely unwanted, that is a deliberate rule decision
-for `/ClaudeWatch:rules` (demote block → ask) or a spec discussion — not a
-side effect of a learn pass. A frequently-allowed but consequential command in
-the *allow* bucket (e.g. `terraform apply`) is the inverse signal: a coverage
-gap where a new ask rule may belong.
+## 4. Changes the overrides can't make
 
-## 6. Offer to reset the log
+An override can't add an `except` for one safe variant of a command; it moves
+or drops the whole rule. When the better fix is narrower than that (stop asking
+about `rm -rf ./build` but keep asking about other deletes), say so and point
+the user at the plugin's issue tracker rather than turning the rule off.
+
+## 5. Offer to reset the log
 
 Once the approved changes are applied, offer to reset the decision log. This is
-the *adjust, then reset* loop: after you promote commands to the allow list or
-change a rule, the accumulated history keeps re-surfacing those same commands on
-the next pass. Resetting starts the next window from the post-change baseline,
+the *adjust, then reset* loop: after you change a rule, the accumulated history
+keeps re-surfacing those same commands on the next pass. Resetting starts the next window from the post-change baseline,
 so the next learn measures only what the new configuration still prompts on.
 
 Reset **archives** by default — it moves the log to
@@ -163,18 +163,31 @@ the command runs without a prompt
 and in a headless `--print` run it is denied, since nobody can answer. An
 interactive session with no permission mode configured starts in `auto`.
 
+Claude Code 2.1.319 adds two more outcomes, per its changelog:
+
+- **`permissions.denyInsteadOfPrompting` denies the `ask`** in every mode,
+  interactive sessions, subagents and teammates included, and the turn
+  continues.
+- **`auto` runs the `ask` unprompted only where the auto-mode server check is
+  reachable.** With telemetry or feature flags off (including behind LLM
+  gateways), calls the server can't check are asked about or denied, unless
+  `CLAUDE_CODE_AUTO_MODE_SERVER=0` keeps the built-in classifier.
+
+A mod's own tool call (`$.tool.call`, Claude Code 2.1.321) raises no permission
+prompt, so an `ask` on it leaves the call unrun, and a `deny` holds there too.
+
 **An `ask` record means the engine asked, not that a person answered.** The log
-can't tell the two apart: `permission_mode` reads `auto` whether or not a prompt
-was shown, and `--permission-prompts none` sets no field of its own. The analyzer
-reports `by_mode`, and an `auto_executed` count per allow candidate. Read both as
-how often a command ran, not how often someone reviewed it.
+can't tell the outcomes apart: `permission_mode` reads `auto` whether or not a
+prompt was shown, `--permission-prompts none` sets no field of its own, and
+`denyInsteadOfPrompting` leaves the mode as configured. Read `by_mode` as how
+often a command ran, not how often someone reviewed it.
 
 **When most records in `by_mode` are `auto`, report an audit instead.** The user
-saw few of the prompts this skill normally cuts, so what's worth their time is
+saw few of the prompts this skill normally tunes, so what's worth their time is
 what ran unattended:
 
-- Lead with the allow candidates with the highest `auto_executed` ("these ran N
-  times, none necessarily reviewed: keep allowing, or add a watch rule?").
+- Lead with the ask candidates ("these asked N times, none necessarily
+  reviewed: keep asking, or promote to block?").
 - Present the deny summary as what the block tier caught while nobody was
   watching.
 - Tell the user their sessions run in `auto`, and that setting
@@ -182,12 +195,7 @@ what ran unattended:
 
 ## Notes
 
-- The analyzer's allow-list match is an approximate coverage check; Claude Code's
-  own matcher is the source of truth. Its only job is to avoid re-proposing
-  commands you already allow, so it errs toward proposing: a rule's literal
-  covers a command only on a token boundary (`Bash(git:*)` leaves `gitk` alone),
-  and a rule whose wildcard sits mid-pattern (`Bash(git * main)`) covers nothing
-  it can characterize, so it suppresses nothing.
 - `command_shape` groups by program plus its leading subcommand tokens, so
-  `gh pr view` and `gh pr merge` are distinct candidates — promoting one does
-  not silently allow the other.
+  `git push` and `git commit` are distinct candidates. An override acts on the
+  matched rule, though, so overriding the rule behind one shape changes every
+  command that rule matches.

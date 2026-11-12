@@ -1,0 +1,37 @@
+name: watch-self
+filter: '\.claude/claudewatch\b|\boverrides\.py\b|\bunattended\.py\b|\bclaude\s+plugins?\b'
+extensions: ['.json']
+
+rules:
+  block:
+    - name: shell write to ClaudeWatch state
+      pattern: '>{1,2}\|?\s*["\x27]?[^\s;&|]*\.claude/claudewatch/|(?:^|[\s;&|`(])(?:rm|rmdir|mv|cp|tee|truncate|ln|install|unlink|sed\s+(?:-\S+\s+)*-i\S*|perl\s+-\S*i\S*)(?![\w-])[^\n;&|]*\.claude/claudewatch\b'
+      reason: changes ClaudeWatch's own rules or state; ask the user to make this change themselves
+      ref: https://github.com/chris-peterson/ClaudeWatch#self-protection
+
+    - name: loosen an override
+      pattern: '\boverrides\.py["\x27]?\s+(?:reset(?![\w-])|set\s[^\n;&|]*\s["\x27]?(?:ask|off)["\x27]?\s*(?=$|[;&|)`<>\n]))'
+      reason: turns a ClaudeWatch rule off or down a tier; ask the user to run this themselves
+      ref: https://github.com/chris-peterson/ClaudeWatch#self-protection
+
+    - name: end unattended mode
+      pattern: '\bunattended\.py["\x27]?\s+off(?![\w-])'
+      reason: lifts the unattended block on asks; the user's next prompt ends unattended mode
+      ref: https://github.com/chris-peterson/ClaudeWatch#self-protection
+
+    - name: disable the ClaudeWatch plugin
+      pattern: '(?:^|[\s;&|`(])claude\s+plugins?\s+(?:disable|uninstall|remove|rm)(?![\w-])[^\n;&|]*\b(?i:claudewatch)\b'
+      reason: turns ClaudeWatch off; ask the user to run this themselves
+      ref: https://github.com/chris-peterson/ClaudeWatch#self-protection
+
+    - name: Write/Edit of ClaudeWatch state
+      pattern: '/\.claude/claudewatch/'
+      target: file-path
+      reason: changes ClaudeWatch's own rules or state; ask the user to make this change themselves
+      ref: https://github.com/chris-peterson/ClaudeWatch#self-protection
+
+    - name: settings that disable ClaudeWatch
+      pattern: '"(?i:claudewatch)@[^"]*"\s*:\s*false|"disableAllHooks"\s*:\s*true'
+      target: file-content
+      reason: a settings file that disables the ClaudeWatch plugin or every hook; ask the user to make this change themselves
+      ref: https://code.claude.com/docs/en/settings

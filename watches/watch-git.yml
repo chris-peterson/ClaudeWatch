@@ -19,7 +19,7 @@ rules:
       ref: https://git-scm.com/docs/git-restore
 
     - name: git clean -f
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+clean\s.*(?<=\s)-[a-zA-Z]*f'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+clean\s.*(?<=\s)(?:-[a-zA-Z]*f|--f(?:o(?:r(?:ce?)?)?)?(?![\w-]))'
       reason: deletes untracked files with no recovery
       ref: https://git-scm.com/docs/git-clean#Documentation/git-clean.txt--f
 
@@ -33,6 +33,16 @@ rules:
       reason: destroys the local recovery log
       ref: https://git-scm.com/docs/git-reflog#Documentation/git-reflog.txt-expire
 
+    - name: git gc --prune=now / git prune
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+(?:gc\s.*(?<=\s)--p(?:r(?:u(?:ne?)?)?)?(?:=|\s+)(?:now|all)\b|prune(?![\w-])(?!.*(?<=\s)(?:-n|--dry-run)\b))'
+      reason: permanently deletes unreachable objects, ending recovery of dropped stashes and lost commits through git fsck
+      ref: https://git-scm.com/docs/git-prune
+
+    - name: git filter-branch/filter-repo
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+filter-(?:branch|repo)(?![\w-])(?![^\n;&|]*(?<=\s)(?:--help|--version|--dry-run|--analyze)(?![\w-]))'
+      reason: rewrites every commit in the repository's history (filter-repo also expires the reflog)
+      ref: https://git-scm.com/docs/git-filter-branch
+
   ask:
     - name: git checkout -- <file>
       pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+checkout\s+--\s'
@@ -40,7 +50,7 @@ rules:
       ref: https://git-scm.com/docs/git-checkout
 
     - name: git reset --hard
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+reset\s.*--hard'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+reset\s.*(?<=\s)--h(?:a(?:rd?)?)?(?![\w-])'
       reason: discards uncommitted changes with no recovery
       ref: https://git-scm.com/docs/git-reset#Documentation/git-reset.txt---hard
 
@@ -50,7 +60,7 @@ rules:
       ref: https://git-scm.com/docs/git-commit
 
     - name: git stash
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+stash(?=$|[\s;&|)`<>])'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+stash(?!\s+(?:list|show)(?=$|[\s;&|)`<>]))(?=$|[\s;&|)`<>])'
       reason: modifies the stash stack
       ref: https://git-scm.com/docs/git-stash
 
@@ -60,16 +70,16 @@ rules:
       ref: https://git-scm.com/docs/git-push#Documentation/git-push.txt---no-force-with-lease
 
     - name: git push --delete
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push\s.*(--delete\b|(?<=\s)-d\b|(?<=\s):\S)'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push\s.*(--de(?:l(?:e(?:te?)?)?)?(?![\w-])|(?<=\s)-d\b|(?<=\s):\S)'
       reason: deletes the remote branch — the remote keeps no reflog, so recovery needs a local copy of the commits
       ref: https://git-scm.com/docs/git-push#Documentation/git-push.txt---delete
 
     - name: git push
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push(?!\s.*(?:--force-with-lease|--delete\b|(?<=\s)-d\b|(?<=\s):\S))(?=$|[\s;&|)`<>])'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+push(?!\s.*(?:--force-with-lease|--de(?:l(?:e(?:te?)?)?)?(?![\w-])|(?<=\s)-d\b|(?<=\s):\S))(?=$|[\s;&|)`<>])'
       reason: publishes commits to the shared remote
       ref: https://git-scm.com/docs/git-push
 
     - name: git branch -D
-      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+branch\s.*(?<=\s)-[a-zA-Z]*D'
+      pattern: 'git(?:\s+-\S+(?:\s+(?:"[^"]*"|''[^'']*''|[^-\s]\S*))?)*\s+branch\s(?:.*(?<=\s)-[a-zA-Z]*D|(?=.*(?<=\s)(?:-[a-zA-Z]*d[a-zA-Z]*|--d(?:e(?:l(?:e(?:te?)?)?)?)?)(?![\w-]))(?=.*(?<=\s)(?:-[a-zA-Z]*f[a-zA-Z]*|--forc(?:e)?)(?![\w-])))'
       reason: force-deletes a branch regardless of merge status (recoverable via reflog)
       ref: https://git-scm.com/docs/git-branch#Documentation/git-branch.txt--D

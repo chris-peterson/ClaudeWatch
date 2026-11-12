@@ -54,12 +54,12 @@ if [ -n "$READER_GROUPS" ] && [ "$(printf '%s\n' "$READER_GROUPS" | wc -l | tr -
 else
   FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: reader alternations differ: $(printf '%s ' $READER_GROUPS)"
 fi
-# The span from a reader to its path is repeated the same way, in the five rules
+# The span from a reader to its path is repeated the same way, in the six rules
 # that pair a reader with a path later in its command.
 READER_SPANS=$(grep -o '\\s+(?:(?<=.*)?|(?<!<)<' "$RULES" || true)
 TOTAL=$((TOTAL + 1))
-if [ "$(printf '%s\n' "$READER_SPANS" | sort -u | wc -l | tr -d ' ')" = 1 ] && [ "$(printf '%s\n' "$READER_SPANS" | wc -l | tr -d ' ')" = 5 ]; then
-  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: one reader-to-path span across the five path rules"
+if [ "$(printf '%s\n' "$READER_SPANS" | sort -u | wc -l | tr -d ' ')" = 1 ] && [ "$(printf '%s\n' "$READER_SPANS" | wc -l | tr -d ' ')" = 6 ]; then
+  PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: one reader-to-path span across the six path rules"
 else
   FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: reader-to-path spans differ or are missing: $(printf '%s ' $READER_SPANS)"
 fi
@@ -83,6 +83,18 @@ echo "--- ask: read files with secret-like names ---"
 t "cat credentials.json"  ask   '{"tool_name":"Bash","tool_input":{"command":"cat /app/credentials.json"}}'
 t "head .netrc_token"     ask   '{"tool_name":"Bash","tool_input":{"command":"head ~/.netrc_token"}}'
 t "cat secrets.md"        ask   '{"tool_name":"Bash","tool_input":{"command":"cat secrets.md"}}'
+t "cat -n token.json"     ask   "$(bash_input "cat -n config/token.json")"
+t "secret name 2nd arg"   ask   "$(bash_input "cat README.md appsettings.secrets.json")"
+t "no-extension name"     ask   "$(bash_input "cat config/tokens")"
+t "secret dir + data file" ask  "$(bash_input "cat SecurityTokenImpl/api_key.txt")"
+
+echo "--- allow: secret-like words outside a data file's name ---"
+t "token in a dir name"   allow "$(bash_input "cat SecurityTokenImpl/Domain/Jwt/JwtValidator.cs")"
+t "credential dir name"   allow "$(bash_input "cat SecurityTokenImpl/Domain/SsoCredentials/ClaimsJwtSsoAuthority.cs")"
+t "token in a .cs name"   allow "$(bash_input "cat SecurityTokenImpl/Operations/GetUserTokenForSso/GetuserTokenForSsoOperation.cs")"
+t "token in a .py name"   allow "$(bash_input "head -40 src/auth/token_store.py")"
+t "token in a .ts name"   allow "$(bash_input "tail src/secretsClient.ts")"
+t "secret word in egrep"  allow "$(bash_input "egrep 'token|secret' src/")"
 t "< secrets.md"          ask   '{"tool_name":"Bash","tool_input":{"command":"sort < config/secrets.md"}}'
 
 echo "--- ask: export secrets inline ---"
@@ -102,8 +114,22 @@ t "openssl < server.pem"  ask   '{"tool_name":"Bash","tool_input":{"command":"op
 
 echo "--- ask: env / printenv ---"
 t "env"                   ask   '{"tool_name":"Bash","tool_input":{"command":"env"}}'
-t "env -i"                ask   '{"tool_name":"Bash","tool_input":{"command":"env -i bash"}}'
+t "env -i"                ask   '{"tool_name":"Bash","tool_input":{"command":"env -i"}}'
+t "env -u PATH"           ask   '{"tool_name":"Bash","tool_input":{"command":"env -u PATH"}}'
+t "env --unset=PATH"      ask   '{"tool_name":"Bash","tool_input":{"command":"env --unset=PATH"}}'
+t "env A=1 (no command)"  ask   "$(bash_input 'env A=1 B="x y"')"
+t "env > out"             ask   '{"tool_name":"Bash","tool_input":{"command":"env > out.txt"}}'
+t "env A=1 | grep (compound → block)" block '{"tool_name":"Bash","tool_input":{"command":"env A=1 | grep KEY"}}'
 t "printenv"              ask   '{"tool_name":"Bash","tool_input":{"command":"printenv"}}'
+t "printenv HOME"         ask   '{"tool_name":"Bash","tool_input":{"command":"printenv HOME"}}'
+
+echo "--- allow: env running a command ---"
+t "env -i bash"           allow '{"tool_name":"Bash","tool_input":{"command":"env -i bash"}}'
+t "env A=1 cmd"           allow '{"tool_name":"Bash","tool_input":{"command":"env HTTPS_PROXY=proxy.example:3128 NO_PROXY=localhost,.example dotnet run check.cs"}}'
+t "env quoted value cmd"  allow "$(bash_input 'env A="x y" B='"'"'z'"'"' make test')"
+t "env -u X cmd"          allow '{"tool_name":"Bash","tool_input":{"command":"env -u HOME ls"}}'
+t "env A=\$(x) cmd"       allow "$(bash_input 'env A=$(pwd) make')"
+t "/usr/bin/env python3"  allow '{"tool_name":"Bash","tool_input":{"command":"/usr/bin/env python3 x.py"}}'
 # Compound commands: the env ask is escalated to a block (engine-level, see
 # test-engine.sh). The bare env/printenv asks above keep rule-match coverage.
 t "&& env (compound → block)"  block '{"tool_name":"Bash","tool_input":{"command":"cd /tmp && env"}}'

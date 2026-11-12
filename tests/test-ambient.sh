@@ -33,6 +33,10 @@ check "names the auto-mode outcome" "Interactive \`auto\` runs it unprompted"
 check "names the unconfigured default" "where a session with no permission mode configured starts"
 check "names the setting that restores the prompt" '"permissions": { "defaultMode": "default" }'
 check "names the headless outcome" "Headless \`-p\` denies it"
+check "names the denyInsteadOfPrompting outcome" "\`permissions.denyInsteadOfPrompting\` denies it"
+check "scopes auto to a reachable server check" "where the auto-mode server check is"
+check "names the mod tool-call outcome" "A mod's own tool call denies it"
+check "holds the deny tier for mod calls" "a mod's own calls included"
 
 echo ""
 echo "Results: ${PASS} passed, ${FAIL} failed"

@@ -1,5 +1,116 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- `/ClaudeWatch:learn` no longer proposes allow rules. ClaudeWatch's decisions
+  are `ask` and `deny`, and what it lets through is Claude Code's to decide, so
+  a learn pass now covers the rules that ask most and the blocks in your way,
+  and never writes to `settings.json`. `analyze-decisions.py` drops its
+  `allow_candidates` bucket and its `--settings` flag.
+- The README no longer recommends broadening your Bash allow list
+  (`Bash(python3 *)`, `Bash(aws *)`) with ClaudeWatch as the safety net.
+
+- `/ClaudeWatch:rules` changes how the rules apply to you instead of editing
+  them: it writes `~/.claude/claudewatch/overrides.yml`, which survives plugin
+  upgrades, and can move a rule between block and ask or turn a rule or rule set
+  off. Adding rules and rule sets, and the `.yml.disabled` toggle, are gone from
+  the skill. Edits made the old way, in the plugin's `watches/` folder, were
+  lost at the last upgrade anyway; redo them with the skill.
+
+### Features
+
+- Rule overrides survive upgrades. The engine applies
+  `~/.claude/claudewatch/overrides.yml` on top of the shipped rules; a malformed
+  file denies every screened call until fixed, and an override naming a rule an
+  upgrade removed is ignored and reported. Each session start logs every
+  difference from the shipped rules to the decision log. `/ClaudeWatch:learn`
+  now proposes these overrides from your decision history.
+- `/ClaudeWatch:unattended` for handing a session work and stepping away. The
+  agent decides, logs each call in `NOTES.md`, and ends with a review map. While
+  the session is marked, ClaudeWatch's `ask` tier blocks in every mode (`auto`
+  included), and Claude Code permission prompts and `AskUserQuestion` are
+  denied at once, so nothing waits on a person who isn't there. The prompt and
+  question hooks fail closed, in attended sessions too. A bare `git add`, `git commit`,
+  `git switch`, or `git checkout -b` still goes through so the run can commit
+  its work locally, and each one is logged as an `ALLOW` line. The first prompt
+  you type clears the mark.
+- A new `watch-kill` rule set asks before `pkill` and `killall`, which kill
+  every process matching a name or pattern (with `pkill -f`, the whole command
+  line) and can take down other Claude Code sessions, editors, or dev servers.
+  It matches them run as a command, so `grep pkill notes.md` doesn't prompt.
+- A new `watch-su` rule set blocks `sudo` and `su`. With a cached sudo
+  timestamp or a `NOPASSWD` entry, `sudo` runs as root without a password
+  prompt. `sudo pip install` is covered here now, so watch-installs no longer
+  carries its own rule for it.
+- watch-installs blocks the rest of the system package changes: `brew upgrade`,
+  `uninstall` (and `remove` / `rm`), and `reinstall` alongside `brew install`;
+  `choco install`, `upgrade`, and `uninstall`; and `apt install` /
+  `apt-get install`.
+- The decision log files each matched rule under the part of the command it
+  matched: records carry `matched_shapes` beside `matched`, so
+  `cat msg.txt && git commit -F msg.txt` is filed under `git commit`, not `cat`.
+  `command_shape` skips `cd` and comment lines, so `cd repo && rm -rf build` is
+  `rm`. `/ClaudeWatch:learn` groups by the matched part, and reads older records
+  by their `command_shape`.
+- A new `watch-exec` rule set blocks running code nobody can read first: a
+  download run through `$(curl …)` or `<(curl …)` or piped to an interpreter
+  such as `python` or `node`, a `base64 -d` payload piped to a shell, and
+  shells attached to a network connection (`nc -e`, `socat … exec:`,
+  `/dev/tcp/`).
+- watch-files blocks writes to a raw disk run as a command (`dd of=/dev/sda`,
+  `mkfs /dev/sdb1`, `> /dev/sda`, `diskutil eraseDisk`), not only inside `.sh`
+  files.
+- More commands with no recovery are blocked: `git gc --prune=now`,
+  `git prune`, and `git filter-branch`/`filter-repo` (watch-git);
+  `gh`/`glab repo delete`, `terraform`/`tofu`/`pulumi destroy`, and
+  `kubectl delete` of a namespace or with `--all` (new watch-remote);
+  `npm unpublish` and `gem yank` (new watch-publish, which also asks before
+  `npm publish`); and `shutdown`/`reboot`, `crontab -r`, and fork bombs (new
+  watch-host).
+- ClaudeWatch protects itself from the agent. A new `watch-self` rule set
+  blocks every way the agent can loosen it: writing or deleting under
+  `~/.claude/claudewatch/`, running `overrides.py` to move a rule to `ask` or
+  `off` or to reset, `unattended.py off`, disabling or uninstalling the plugin,
+  and a settings file that disables it or every hook. `/ClaudeWatch:rules` and
+  `/ClaudeWatch:learn` print a loosening change for you to type with a `!`
+  prefix, which runs it without passing through ClaudeWatch, instead of
+  running it. Rules can now match a Write or Edit's file path
+  (`target: file-path`), which is how the overrides file is guarded even
+  against a Write that empties it.
+
+### Fixes
+
+- `git clean --force` and `git branch --delete --force` (or `-d -f`, `-df`)
+  are caught like their short forms, and every rule naming a long option also
+  matches the prefixes git and GNU `rm` accept for it: `git reset --h` resets
+  hard and `git clean --f` deletes, and both ran unguarded.
+
+- `git stash list` and `git stash show` no longer ask; they only read the
+  stash. Every other `git stash` form still asks.
+- The `mv /` ask fires only for `/` itself and top-level system paths (`/etc`,
+  `/usr`, `/var`, `/Library`, and the like), not for any absolute path. Moving
+  files under a home directory, `/tmp`, `/private/tmp`, or `/var/folders` no
+  longer prompts.
+- A bare `VAR=value` command no longer writes its value into the decision log
+  as the command shape.
+- A program spelled by its path (`/bin/rm`, `/bin/mv`, `/usr/bin/tee`) is
+  screened as its name, so every rule that names the program catches it:
+  `/bin/rm -rf /` and `/bin/mv ~/.claude/claudewatch/overrides.yml /tmp/x`
+  ran unguarded.
+
+### Other
+
+- The docs describe the two ask-tier changes in Claude Code 2.1.319:
+  `permissions.denyInsteadOfPrompting` denies an `ask` in every mode, and `auto`
+  with telemetry or feature flags off asks about or denies calls the auto-mode
+  server can't check instead of running them unprompted. The ambient note,
+  README, `/ClaudeWatch:learn`, and `SPEC.md` `[OUT-04]` carry both.
+- The same places name a mod's own tool call (`$.tool.call`, Claude Code
+  2.1.321) as a case where an `ask` reaches nobody: the call does not run, and
+  a `deny` holds as well.
+
 ## 0.18.0
 
 ### Breaking

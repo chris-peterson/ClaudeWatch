@@ -15,6 +15,7 @@ Supports these tool inputs:
 - Edit: matches against the full post-edit file content reconstructed from
   the on-disk file plus tool_input.old_string -> tool_input.new_string
   substitution (target: file-content rules)
+- Write and Edit also match tool_input.file_path (target: file-path rules)
 
 CLAUDE_PROJECT_DIR, which Claude Code exports to hook commands, is the only
 environment variable on the decision path: it bounds the in-tree `rm` exemption
@@ -41,7 +42,7 @@ import sys
 import traceback
 
 
-VALID_TARGETS = ("bash", "file-content")
+VALID_TARGETS = ("bash", "file-content", "file-path")
 
 
 def _unquote(s):
@@ -99,13 +100,13 @@ def parse_rules_yml(path):
         block:
           - name: ...
             pattern: '...'
-            target: bash | file-content  # optional, default bash
+            target: bash | file-content | file-path  # optional, default bash
             reason: ...
             ref: ...
         ask:
           - name: ...
             pattern: '...'
-            target: bash | file-content  # optional, default bash
+            target: bash | file-content | file-path  # optional, default bash
             reason: ...
             ref: ...
     """
@@ -206,14 +207,114 @@ def parse_rules_yml(path):
     return result
 
 
-def _violation(rule):
+OVERRIDES_PATH = "~/.claude/claudewatch/overrides.yml"
+OVERRIDE_TIERS = ("ask", "block", "off")
+
+
+class OverridesError(Exception):
+    """An overrides file the engine can't read; every screened call is denied ([OVR-05])."""
+
+
+def load_overrides(path=OVERRIDES_PATH):
+    """Read the user's rule overrides ([OVR-01], [OVR-02]).
+
+    Returns `{set_name: "off" | {rule_name: tier}}`, or `{}` when the file is
+    absent. Raises OverridesError on anything it can't interpret, since guessing
+    at a malformed override could silently drop a block the user added.
+    """
+    path = os.path.expanduser(path)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except (OSError, UnicodeDecodeError) as e:
+        raise OverridesError(f"{path}: {e}") from e
+
+    overrides = {}
+    current = None
+    for n, raw in enumerate(lines, 1):
+        line = re.sub(r"\s+#.*$", "", raw.rstrip())
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key, sep, value = stripped.rpartition(":")
+        key, value = _unquote(key.strip()), value.strip()
+        if not sep or not key:
+            raise OverridesError(f"{path}:{n}: expected '<name>: <value>', got {stripped!r}")
+        if line == stripped:
+            if key in overrides:
+                raise OverridesError(f"{path}:{n}: rule set {key!r} appears twice")
+            if value == "":
+                overrides[key], current = {}, key
+            elif value == "off":
+                overrides[key], current = "off", None
+            else:
+                raise OverridesError(f"{path}:{n}: rule set {key!r} takes 'off' or a list of rules, not {value!r}")
+        elif current is None:
+            raise OverridesError(f"{path}:{n}: rule {key!r} is not under a rule set")
+        elif value not in OVERRIDE_TIERS:
+            raise OverridesError(f"{path}:{n}: rule {key!r} has tier {value!r}; use ask, block, or off")
+        else:
+            overrides[current][key] = value
+    return overrides
+
+
+def apply_overrides(config, overrides):
+    """The rule set as the user's overrides leave it ([OVR-03]), or None when it is off.
+
+    A moved rule keeps every field, exemptions included, so a rule promoted from
+    ask to block refuses what it used to ask about and nothing it used to exempt.
+    """
+    entry = overrides.get(config.get("name"))
+    if entry is None:
+        return config
+    if entry == "off":
+        return None
+    rules = {"block": [], "ask": []}
+    for tier in ("block", "ask"):
+        for rule in config.get("rules", {}).get(tier, []):
+            effective = entry.get(rule.get("name"), tier)
+            if effective != "off":
+                rules[effective].append(rule)
+    return {**config, "rules": rules}
+
+
+def override_report(configs, overrides):
+    """What the overrides change against the shipped rule sets ([OVR-04], [OVR-06])."""
+    shipped = {}
+    for config in configs:
+        shipped[config.get("name")] = {
+            rule.get("name"): tier
+            for tier in ("block", "ask")
+            for rule in config.get("rules", {}).get(tier, [])
+        }
+    changed, sets_off, stale = [], [], []
+    for set_name, entry in overrides.items():
+        if set_name not in shipped:
+            stale.append({"set": set_name})
+        elif entry == "off":
+            sets_off.append(set_name)
+        else:
+            for rule_name, tier in entry.items():
+                if rule_name not in shipped[set_name]:
+                    stale.append({"set": set_name, "rule": rule_name})
+                elif tier != shipped[set_name][rule_name]:
+                    changed.append({"set": set_name, "rule": rule_name,
+                                    "shipped": shipped[set_name][rule_name], "effective": tier})
+    return {"changed": changed, "sets_off": sets_off, "stale": stale}
+
+
+def _violation(rule, pos=None):
     """A matched violation as structured data.
 
     `prefix` is the rule's `name` (the rule-set name is redundant once the
     reason carries the ref, so it's dropped); `reason` is the human prose;
-    `ref` is the doc URL (or "" when absent).
+    `ref` is the doc URL (or "" when absent). `pos` is where the pattern matched
+    in a bash input, which the log uses to name the part of a compound command
+    the rule fired on ([LOG-03]).
     """
-    return {"prefix": rule.get("name") or "", "reason": rule["reason"], "ref": rule.get("ref") or ""}
+    return {"prefix": rule.get("name") or "", "reason": rule["reason"], "ref": rule.get("ref") or "", "pos": pos}
 
 
 def _error_violation(text):
@@ -316,6 +417,25 @@ def _is_command_prefix(word):
     return word == "sudo" or bool(_COMMAND_PREFIX.match(word))
 
 
+def _starts_command(command, sep):
+    """Whether a `_WORD_POSITION` match begins a command ([EN-15]).
+
+    Two of the characters that match there continue a command instead: an
+    escaped one (`\\;`, or a backslash before the newline) and the `&` or `|`
+    of a redirection (`>& /dev/tcp/...`, `>| file`). The word after either is
+    an operand, so its path has to survive for the rules that read it.
+    """
+    if not sep.group().strip(" \t"):
+        return True
+    i = sep.start()
+    backslashes = 0
+    while i - backslashes > 0 and command[i - backslashes - 1] == "\\":
+        backslashes += 1
+    if backslashes % 2:
+        return False
+    return not (command[i] in "&|" and i > 0 and command[i - 1] in "<>")
+
+
 def _unquote_word(word):
     """`"git"` / `g""it` / `g\\it` -> `git`; None when the word isn't one word.
 
@@ -336,8 +456,11 @@ def _normalize_command_words(command):
     """Resolve the leading words of each command to the word the shell reads ([EN-15]).
 
     Walks each command position and rewrites the program, then the words behind
-    it, into the single word the shell resolves each to. An option is stepped
-    over rather than ending the walk, because git and aws both carry their
+    it, into the single word the shell resolves each to. A program spelled by
+    its path (`/bin/rm`) becomes its basename, so a rule anchored on the
+    program name reaches it. Only the program does: the words behind it keep
+    their paths, which the file rules read. An option is stepped over rather
+    than ending the walk, because git and aws both carry their
     global options ahead of the subcommand a rule matches — so what keeps an
     *operand* out of the rewrite is two guards: a word is rewritten only where
     it resolves to a bare word, so an operand carrying an operator
@@ -353,6 +476,7 @@ def _normalize_command_words(command):
         pos = sep.end()
         budget = _MAX_NORMALIZED_WORDS
         program = None
+        starts_command = _starts_command(command, sep)
         while budget:
             end = _WORD_SCAN.match(command, pos).end()
             if end < len(command) and command[end] not in _WORD_STOP:
@@ -383,9 +507,11 @@ def _normalize_command_words(command):
                     out.append(word)
                     budget -= 1
                 else:
-                    out.append(resolved)
                     if program is None:
-                        program = os.path.basename(resolved)
+                        program = os.path.basename(resolved) or resolved
+                        if starts_command:
+                            resolved = program
+                    out.append(resolved)
                     budget -= 1
             pos = end
             gap = pos
@@ -830,14 +956,84 @@ def _compound_escalation():
     }
 
 
-def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None):
+UNATTENDED_DIR = "~/.claude/claudewatch/unattended"
+_SESSION_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def unattended_marker(session_id):
+    """The marker file that says a session is unattended ([OUT-09]), or None.
+
+    Shared with `scripts/unattended.py`, which writes and removes it, so the
+    engine and the hook agree on one path. An id that could escape the
+    directory names no marker.
+    """
+    if not isinstance(session_id, str) or not _SESSION_ID.match(session_id):
+        return None
+    return os.path.join(os.path.expanduser(UNATTENDED_DIR), session_id)
+
+
+def _is_unattended(session_id):
+    marker = unattended_marker(session_id)
+    return marker is not None and os.path.isfile(marker)
+
+
+_GIT = r"git(?:\s+-C\s+\S+)?\s+"
+UNATTENDED_ALLOWANCE = (
+    ("git add", re.compile(_GIT + r"add(?:\s.*)?")),
+    ("git commit", re.compile(_GIT + r"commit(?!.*\s--amend\b)(?:\s.*)?")),
+    ("git switch", re.compile(_GIT + r"switch(?!.*\s(?:-f|--force|--discard-changes)(?:\s|$))(?:\s.*)?")),
+    ("git checkout -b", re.compile(_GIT + r"checkout\s+-b\s.*")),
+)
+
+
+def unattended_allowance(command):
+    """The [SK-24] operation a bare command is, or None.
+
+    The engine and the PermissionRequest hook both ask this, so the set an
+    unattended run may still perform is defined once.
+    """
+    command = command.strip()
+    if _is_compound_command(command):
+        return None
+    for name, form in UNATTENDED_ALLOWANCE:
+        if form.fullmatch(command):
+            return name
+    return None
+
+
+def record_unattended(session_id, verdict, what):
+    """Append an ALLOW or DENY line to the session's unattended log ([SK-22], [SK-24])."""
+    marker = unattended_marker(session_id)
+    if marker is None:
+        return
+    from datetime import datetime
+
+    try:
+        with open(marker + ".log", "a") as f:
+            f.write(f"{datetime.now().astimezone().isoformat(timespec='seconds')}\t{verdict}\t{what}\n")
+    except OSError as e:
+        print(f"watchdog: unattended log write failed: {e}", file=sys.stderr)
+
+
+def _unattended_escalation():
+    """The note prepended when an `ask` is escalated to `deny` for an unattended session."""
+    return {
+        "prefix": "unattended session",
+        "reason": "escalated to block — nobody is here to answer this ask; leave the step prepared for the user to run on return",
+        "ref": "",
+    }
+
+
+def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None, file_path=None):
     """Evaluate a single rule set against an input.
 
     input_kind is "bash" or "file-content". input_text is the string to match
-    against. file_extension is the lowercase extension (including the dot) of
-    the target file, used to filter rule sets for file-content inputs. cwd is
-    the working directory from the hook input, used by the `is_in_project_tree`
-    unless-condition to tell in-tree deletes from out-of-tree ones.
+    against (for file-content, empty when the edit leaves the file empty).
+    file_extension is the lowercase extension (including the dot) of the target
+    file, used to filter rule sets for file-content inputs. cwd is the working
+    directory from the hook input, used by the `is_in_project_tree`
+    unless-condition to tell in-tree deletes from out-of-tree ones. file_path is
+    the Write/Edit target path that `file-path` rules match ([RL-21]).
 
     Returns (blocks, asks) — lists of violation dicts (see `_violation`).
     """
@@ -857,12 +1053,14 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
             except re.error as e:
                 _block(f"{label} — invalid filter regex: {e}")
                 return blocks, asks
+        texts = {"bash": input_text}
     else:  # file-content
-        extensions = config.get("extensions") or []
-        if not extensions:
-            return blocks, asks
-        if file_extension is None or file_extension.lower() not in [e.lower() for e in extensions]:
-            return blocks, asks
+        extensions = [e.lower() for e in config.get("extensions") or []]
+        extension_matches = file_extension is not None and file_extension.lower() in extensions
+        texts = {
+            "file-content": input_text if input_text and extension_matches else None,
+            "file-path": file_path or None,
+        }
 
     rules = config.get("rules", {})
 
@@ -871,41 +1069,53 @@ def evaluate_rules(config, input_kind, input_text, file_extension=None, cwd=None
         if target not in VALID_TARGETS:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid target {target!r}")
             continue
-        if target != input_kind:
+        text = texts.get(target)
+        if text is None:
             continue
         if not rule.get("pattern"):
             _block(f"{label} — rule {rule.get('name', '?')!r} has empty pattern")
             continue
         try:
-            if re.search(rule["pattern"], input_text):
-                blocks.append(_violation(rule))
+            match = re.search(rule["pattern"], text)
         except re.error as e:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid regex: {e}")
+            continue
+        if not match:
+            continue
+        # The parser drops exemptions from a shipped block rule, so only a rule an
+        # override moved here from ask carries one ([OVR-03]).
+        exempted, err = _is_exempted(rule, target, text, cwd)
+        if err:
+            _block(f"{label} — rule {rule.get('name', '?')!r} {err}")
+            continue
+        if not exempted:
+            blocks.append(_violation(rule, match.start()))
 
     for rule in rules.get("ask", []):
         target = _rule_target(rule)
         if target not in VALID_TARGETS:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid target {target!r}")
             continue
-        if target != input_kind:
+        text = texts.get(target)
+        if text is None:
             continue
         if not rule.get("pattern"):
             _block(f"{label} — rule {rule.get('name', '?')!r} has empty pattern")
             continue
         try:
-            matched = bool(re.search(rule["pattern"], input_text))
+            match = re.search(rule["pattern"], text)
         except re.error as e:
             _block(f"{label} — rule {rule.get('name', '?')!r} has invalid regex: {e}")
             continue
-        if not matched:
+        if not match:
             continue
-        exempted, err = _is_exempted(rule, input_kind, input_text, cwd)
+        exempted, err = _is_exempted(rule, target, text, cwd)
         if err:
             _block(f"{label} — rule {rule.get('name', '?')!r} {err}")
             continue
         if exempted:
             continue
-        asks.append(_violation(rule))
+        asks.append(_violation(rule, match.start()))
 
     return blocks, asks
 
@@ -942,31 +1152,51 @@ SUBCOMMAND_TOOLS = frozenset((
 ))
 # A subcommand token is a bare lowercase word (e.g. `pr`, `view`, `commit`).
 # Stopping at the first flag, path, or value keeps the shape free of secrets and
-# keeps the learn skill's suggested allow pattern as narrow as the real commands.
+# keeps the learn skill's groups as narrow as the real commands.
 _SUBCOMMAND_LIKE = re.compile(r"^[a-z][a-z0-9-]*$")
 _MAX_SHAPE_TOKENS = 4
 
+# A heredoc's body is data for the command that opens it, not commands of its own.
+_HEREDOC_OPEN = re.compile(r"(?<!<)<<-?[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+_COMMENT = re.compile(r"(?:^|(?<=[ \t;&|(]))#[^\n]*", re.M)
+# What ends one part of a compound command and starts the next. Redirections
+# that share `&` (`2>&1`, `&>log`) are not separators.
+_PART_SEPARATOR = re.compile(r"\|\||&&|\|&?|;|(?<![<>&])&(?![>&])|\n|\$\(|`|\)")
+# Words ahead of a part's program that only group or sequence it.
+_PART_LEAD = re.compile(r"(?:[ \t]*(?:[({!]|(?:if|then|else|elif|do|while|until|time)(?=[ \t]|$)))+")
+# Parts that only move the shell or close a group, so they say nothing about
+# what a command does.
+_INCIDENTAL_PROGRAMS = frozenset(("cd", "pushd", "popd", "fi", "done", "esac", "}"))
 
-def command_shape(command, tool):
-    """Reduce a bash command to a stable, secret-free grouping prefix.
 
-    Skips leading `VAR=value` assignments and `sudo`, then keeps the program and
-    (for known subcommand tools) its leading subcommand tokens, stopping at the
-    first flag, path, or value. Returns `(shape, allow_pattern)`, where the
-    pattern names `tool` because a host `Bash(…)` allow rule does not cover the
-    same command issued through `Monitor`. This is what
-    `[LOG-03]` records in place of the raw command, and what `/ClaudeWatch:learn`
-    groups by — defined here so the engine (which writes the log) and the
-    analyzer (which reads it) share one definition. Applying it to an already-
-    reduced shape is idempotent, so the analyzer can re-derive the pattern from a
-    logged shape.
+def _mask_shell_data(command):
+    """The command with heredoc bodies, quoted spans, and comments blanked out.
+
+    Lengths are preserved, so a position in the result is the same position in
+    the command. What remains is the shell syntax that separates commands.
     """
-    tokens = command.strip().split()
+    chars = list(command)
+    for m in _HEREDOC_OPEN.finditer(command):
+        body = command.find("\n", m.end())
+        if body < 0:
+            continue
+        end = re.compile(r"^[ \t]*%s[ \t]*$" % re.escape(m.group(2)), re.M).search(command, body + 1)
+        stop = end.end() if end else len(command)
+        for k in range(body, stop):
+            chars[k] = " "
+    masked = "".join(chars)
+    masked = _QUOTED_SPAN.sub(lambda s: s.group(0)[0] + "_" * (len(s.group(0)) - 2) + s.group(0)[-1], masked)
+    return _COMMENT.sub(lambda s: " " * len(s.group(0)), masked)
+
+
+def _program_shape(text):
+    """The program plus its leading subcommand tokens, or "" when there is none."""
+    tokens = text.split()
     i = 0
     while i < len(tokens) and _is_command_prefix(tokens[i]):
         i += 1
     if i >= len(tokens):
-        return command.strip(), f"{tool}({command.strip()})"
+        return ""
 
     prog = os.path.basename(tokens[i])
     shape_tokens = [prog]
@@ -976,11 +1206,69 @@ def command_shape(command, tool):
             shape_tokens.append(tokens[j])
             j += 1
 
-    shape = " ".join(shape_tokens)
-    return shape, f"{tool}({shape}:*)"
+    return " ".join(shape_tokens)
 
 
-def _log_event(data, input_kind, input_text, decision, matched):
+def command_parts(command):
+    """Split a bash command into its parts: `(start, end, shape, incidental)` each.
+
+    A part is one simple command of a pipe, chain, sequence, substitution, or
+    multi-line script. Its shape is `_program_shape` of the part with quoted
+    text, heredoc bodies, and comments blanked, so the shape keeps no argument
+    text. A part holding only a comment has shape `#`. `incidental` marks parts
+    that say nothing about what the command does: comments, `cd`, and group
+    closers.
+    """
+    masked = _mask_shell_data(command)
+    parts = []
+    start = 0
+    for sep in list(_PART_SEPARATOR.finditer(masked)) + [None]:
+        end = sep.start() if sep else len(masked)
+        lead = _PART_LEAD.match(masked, start, end)
+        body_start = lead.end() if lead else start
+        shape = _program_shape(masked[body_start:end])
+        if shape:
+            parts.append((start, end, shape, shape.split()[0] in _INCIDENTAL_PROGRAMS))
+        elif command[start:end].lstrip().startswith("#"):
+            parts.append((start, end, "#", True))
+        start = sep.end() if sep else end
+    return parts
+
+
+def command_shape(command):
+    """Reduce a bash command to a stable, secret-free grouping prefix.
+
+    The shape of the command's first part that isn't incidental (see
+    `command_parts`), so `cd repo && rm -rf build` and a script opening with a
+    comment are filed under what they run. Within a part, skips leading
+    `VAR=value` assignments and `sudo`, then keeps the program and (for known
+    subcommand tools) its leading subcommand tokens, stopping at the first flag,
+    path, or value. This is what `[LOG-03]` records in place of the raw command,
+    and what `/ClaudeWatch:learn` groups by — defined here so the engine (which
+    writes the log) and the analyzer (which reads it) share one definition.
+    Applying it to an already-reduced shape is idempotent, so the analyzer can
+    reduce legacy raw-command records the same way.
+    """
+    parts = command_parts(command)
+    for _, _, shape, incidental in parts:
+        if not incidental:
+            return shape
+    return parts[0][2] if parts else ""
+
+
+def matched_shape(command, pos, parts=None):
+    """The shape of the part of `command` holding position `pos`, or None."""
+    if pos is None:
+        return None
+    while pos < len(command) and command[pos] in " \t\n;&|`(":
+        pos += 1
+    for start, end, shape, _ in parts if parts is not None else command_parts(command):
+        if start <= pos < end:
+            return shape
+    return None
+
+
+def _log_event(data, input_kind, input_text, decision, matched, extra=None):
     """Append a decision record to the log unless logging is disabled.
 
     The side channel the `/ClaudeWatch:learn` workflow reads. It never
@@ -993,16 +1281,6 @@ def _log_event(data, input_kind, input_text, decision, matched):
       - "off"/"0"/"false"/"none"/"" -> logging disabled (this is the opt-out)
       - anything else -> treated as the destination path
     """
-    raw = os.environ.get("CLAUDEWATCH_LOG")
-    if raw is None:
-        dest = DEFAULT_LOG_PATH
-    else:
-        token = raw.strip().lower()
-        if token in _LOG_OFF_VALUES:
-            return
-        dest = DEFAULT_LOG_PATH if token in _LOG_DEFAULT_VALUES else raw
-    dest = os.path.expanduser(dest)
-
     from datetime import datetime, timezone
 
     entry = {
@@ -1012,18 +1290,44 @@ def _log_event(data, input_kind, input_text, decision, matched):
         "tool": data.get("tool_name"),
         "mode": data.get("permission_mode"),
         "decision": decision,
-        "matched": matched,
+        "matched": [_message_plain(v) for v in matched],
+        **(extra or {}),
     }
     if input_kind == "bash":
         # Log the shape, not the raw command: a command can carry inline secrets
         # (credentials in flags, URLs, or VAR=value prefixes), and the durable log
         # is plaintext ([LOG-03]). The shape drops everything past the program and
         # its subcommand tokens, so no secret survives into the log.
-        entry["command_shape"] = command_shape(input_text, entry["tool"])[0]
+        entry["command_shape"] = command_shape(input_text)
+        if matched:
+            parts = command_parts(input_text)
+            entry["matched_shapes"] = [matched_shape(input_text, v.get("pos"), parts) for v in matched]
     else:
         tool_input = data.get("tool_input", {}) or {}
         entry["path"] = tool_input.get("file_path")
+    append_log_record(entry)
 
+
+def log_destination():
+    """The decision log's path per CLAUDEWATCH_LOG, or None when logging is off."""
+    raw = os.environ.get("CLAUDEWATCH_LOG")
+    if raw is None:
+        return os.path.expanduser(DEFAULT_LOG_PATH)
+    token = raw.strip().lower()
+    if token in _LOG_OFF_VALUES:
+        return None
+    return os.path.expanduser(DEFAULT_LOG_PATH if token in _LOG_DEFAULT_VALUES else raw)
+
+
+def append_log_record(entry):
+    """Append one record to the decision log, writing the schema header first when needed.
+
+    Shared by the engine's decision records and the session-start overrides
+    record ([OVR-06]). A write failure is reported to stderr and swallowed.
+    """
+    dest = log_destination()
+    if dest is None:
+        return
     try:
         parent = os.path.dirname(dest)
         if parent:
@@ -1112,7 +1416,11 @@ def _decode_file(raw):
 
 
 def _resolve_input(data):
-    """Map tool_input -> (input_kind, input_text, file_extension) or None."""
+    """Map tool_input -> (input_kind, input_text, file_extension, file_path) or None.
+
+    A Write or Edit that leaves the file empty still resolves, with empty
+    text, so its path reaches the `file-path` rules ([EN-03], [RL-21]).
+    """
     tool_name = data.get("tool_name")
     if tool_name not in ("Bash", "Monitor", "Write", "Edit"):
         return None
@@ -1129,15 +1437,15 @@ def _resolve_input(data):
         cmd = _string_field(tool_input, "command")
         if not cmd:
             return None
-        return "bash", _normalize_command_words(cmd), None
+        return "bash", _normalize_command_words(cmd), None, None
 
     path = _string_field(tool_input, "file_path")
 
     if tool_name == "Write":
         content = _string_field(tool_input, "content")
-        if not content:
+        if not content and not path:
             return None
-        return "file-content", content, os.path.splitext(path)[1]
+        return "file-content", content, os.path.splitext(path)[1], path
 
     old_string = _string_field(tool_input, "old_string")
     new_string = _string_field(tool_input, "new_string")
@@ -1155,9 +1463,9 @@ def _resolve_input(data):
         content = existing.replace(old_string, new_string)
     else:
         content = existing.replace(old_string, new_string, 1)
-    if not content:
+    if not content and not path:
         return None
-    return "file-content", content, os.path.splitext(path)[1]
+    return "file-content", content, os.path.splitext(path)[1], path
 
 
 def _emit(decision, reason):
@@ -1179,7 +1487,7 @@ def _decide():
         return
     if resolved is None:
         return
-    input_kind, input_text, file_extension = resolved
+    input_kind, input_text, file_extension, file_path = resolved
     cwd = data.get("cwd")
 
     if len(sys.argv) > 1:
@@ -1195,6 +1503,12 @@ def _decide():
         _emit("deny", f"watchdog: rules not found: {target}")
         return
 
+    try:
+        overrides = load_overrides()
+    except OverridesError as e:
+        _emit("deny", f"watchdog: rule overrides unreadable: {e} {_PLUGIN_TAG}")
+        return
+
     all_blocks = []
     all_asks = []
 
@@ -1204,7 +1518,10 @@ def _decide():
         except Exception as e:
             all_blocks.append(_error_violation(f"watchdog: failed to load rules: {e}"))
             continue
-        blocks, asks = evaluate_rules(config, input_kind, input_text, file_extension, cwd)
+        config = apply_overrides(config, overrides)
+        if config is None:
+            continue
+        blocks, asks = evaluate_rules(config, input_kind, input_text, file_extension, cwd, file_path)
         all_blocks.extend(blocks)
         all_asks.extend(asks)
 
@@ -1224,12 +1541,21 @@ def _decide():
     # to escalate selectively on.
     if decision == "ask" and input_kind == "bash" and _is_compound_command(input_text):
         decision, chosen = "deny", [_compound_escalation()] + chosen
+    allowance = None
+    if decision == "ask" and _is_unattended(data.get("session_id")):
+        allowance = unattended_allowance(input_text) if input_kind == "bash" else None
+        if allowance:
+            asked = "; ".join(v["prefix"] or v["reason"] for v in chosen)
+            record_unattended(data.get("session_id"), "ALLOW", f"{allowance} (ClaudeWatch ask not escalated: {asked})")
+            decision, chosen = "allow", []
+        else:
+            decision, chosen = "deny", [_unattended_escalation()] + chosen
 
-    messages = [_message_plain(v) for v in chosen]
-    _log_event(data, input_kind, input_text, decision, messages)
+    _log_event(data, input_kind, input_text, decision, chosen,
+               {"unattended_allow": allowance} if allowance else None)
 
     if decision != "allow":
-        reason = "\n".join(messages)
+        reason = "\n".join(_message_plain(v) for v in chosen)
         # Claude Code tags ask prompts with the source plugin but leaves deny
         # errors unattributed, so append the tag ourselves on the deny path to
         # match — the user should always see which plugin made the call.

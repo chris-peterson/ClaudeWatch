@@ -17,6 +17,11 @@ export CLAUDEWATCH_LOG=off
 # would otherwise feed it a root the fixtures never asked for. Clear it here and
 # let the cases that exercise it export their own.
 unset CLAUDE_PROJECT_DIR
+# The engine reads the user's rule overrides from ~/.claude/claudewatch
+# ([OVR-01]), so a real overrides file would change what the shipped rules
+# decide here. Point HOME at a path that doesn't exist; cases that need a home
+# directory make their own.
+export HOME="$(mktemp -u /tmp/cw-home.XXXXXX)"
 PASS=0
 FAIL=0
 TOTAL=0

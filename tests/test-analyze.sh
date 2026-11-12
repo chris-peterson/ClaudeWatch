@@ -1,6 +1,6 @@
 #!/bin/bash
 # Decision-log analyzer (scripts/analyze-decisions.py). Builds a synthetic log
-# plus a stub allow list and asserts the three proposal buckets.
+# and asserts the two proposal buckets.
 source "$(cd "$(dirname "$0")" && pwd)/harness.sh"
 
 ANALYZE="$SCRIPT_DIR/../scripts/analyze-decisions.py"
@@ -9,19 +9,13 @@ echo "=== decision log analysis ==="
 
 TMP=$(mktemp -d /tmp/cw-analyze.XXXXXX)
 LOG="$TMP/decisions.jsonl"
-SETTINGS="$TMP/settings.json"
 OUT="$TMP/out.json"
 
-# Allow list already covers jq, so jq must NOT be re-proposed.
-cat > "$SETTINGS" <<'EOF'
-{"permissions":{"allow":["Bash(jq:*)"]}}
-EOF
-
 # Synthetic log. Records carry the current `command_shape` field ([LOG-03]); the
-# fourth `gh pr view` record keeps the legacy raw `command` field to prove the
+# third `git commit` record keeps the legacy raw `command` field to prove the
 # analyzer still reduces pre-change logs via its fallback path.
-#   gh pr view  x4  allow, not allow-listed   -> allow_candidate
-#   jq          x3  allow, allow-listed       -> suppressed
+#   gh pr view  x4  allow                     -> no bucket (by_mode only)
+#   jq          x5  allow                     -> no bucket (by_mode only)
 #   git commit  x3  ask                       -> except_candidate
 #   force push  x2  deny                      -> deny_summary
 cat > "$LOG" <<'EOF'
@@ -37,7 +31,7 @@ cat > "$LOG" <<'EOF'
 {"ts":"2026-05-31T10:06:40+00:00","decision":"allow","tool":"Bash","command":"OUT=/tmp/y jq .b g.json","cwd":"/a"}
 {"ts":"2026-05-31T10:07:00+00:00","session":"s2","decision":"ask","tool":"Bash","command_shape":"git commit","matched":["watch-git — git commit"],"cwd":"/a"}
 {"ts":"2026-05-31T10:08:00+00:00","decision":"ask","tool":"Bash","command_shape":"git commit","matched":["watch-git — git commit"],"cwd":"/a"}
-{"ts":"2026-05-31T10:09:00+00:00","decision":"ask","tool":"Bash","command_shape":"git commit","matched":["watch-git — git commit"],"cwd":"/a"}
+{"ts":"2026-05-31T10:09:00+00:00","decision":"ask","tool":"Bash","command":"GIT_TRACE=1 git commit -m wip","matched":["watch-git — git commit"],"cwd":"/a"}
 {"ts":"2026-05-31T10:10:00+00:00","decision":"deny","tool":"Bash","command_shape":"git push","matched":["watch-git — force push"],"cwd":"/a"}
 {"ts":"2026-05-31T10:11:00+00:00","decision":"deny","tool":"Bash","command_shape":"git push","matched":["watch-git — force push"],"cwd":"/a"}
 EOF
@@ -56,22 +50,12 @@ sys.exit(0 if ($expr) else 1)
   fi
 }
 
-analyze_case() {
-  local name="$1" settings="$2"   # log lines on stdin
-  printf '%s\n' "$settings" > "$TMP/$name-settings.json"
-  cat > "$TMP/$name.jsonl"
-  python3 "$ANALYZE" --log "$TMP/$name.jsonl" --settings "$TMP/$name-settings.json" \
-    --min-count 2 > "$OUT" 2>/dev/null
-}
+python3 "$ANALYZE" --log "$LOG" --min-count 2 > "$OUT" 2>/dev/null
 
-python3 "$ANALYZE" --log "$LOG" --settings "$SETTINGS" --min-count 2 > "$OUT" 2>/dev/null
-
-assert_json "gh pr view is an allow candidate (count 4)" \
-  "any(c['shape']=='gh pr view' and c['count']==4 for c in d['allow_candidates'])"
-assert_json "gh pr view suggests Bash(gh pr view:*)" \
-  "any(c['shape']=='gh pr view' and c['suggested_allow']=='Bash(gh pr view:*)' for c in d['allow_candidates'])"
-assert_json "gh pr view shows 3 auto-executed of 4" \
-  "any(c['shape']=='gh pr view' and c['auto_executed']==3 for c in d['allow_candidates'])"
+assert_json "allow records propose nothing" \
+  "set(d) == {'except_candidates', 'deny_summary', 'by_mode', 'meta'}"
+assert_json "gh pr view (allowed) is in no bucket" \
+  "all(c['shape']!='gh pr view' for c in d['except_candidates'])"
 assert_json "by_mode tallies auto and default" \
   "d['by_mode'].get('auto')==3 and d['by_mode'].get('default')==1"
 assert_json "schema header is skipped (14 records, not counted in by_mode)" \
@@ -82,23 +66,42 @@ assert_json "meta reports the oldest and newest record ts" \
   "d['meta']['oldest_ts']=='2026-05-31T10:00:00+00:00' and d['meta']['newest_ts']=='2026-05-31T10:11:00+00:00'"
 assert_json "meta reports the span in days" \
   "d['meta']['span_days']==0.01"
-# jq is allow-listed; the two `OUT=… jq …` records shape to `jq` after the leading
-# VAR= is stripped, so suppression must key on the shape, not the raw command.
-assert_json "allow-listed jq is suppressed, including VAR=-prefixed variants" \
-  "all(c['shape']!='jq' for c in d['allow_candidates'])"
 assert_json "git commit is an except candidate (count 3)" \
   "any(c['shape']=='git commit' and c['count']==3 for c in d['except_candidates'])"
 assert_json "force push appears in deny summary (count 2)" \
   "any('force push' in s['reason'] and s['count']==2 for s in d['deny_summary'])"
 
 echo "--- min-count filters low-frequency shapes ---"
-python3 "$ANALYZE" --log "$LOG" --settings "$SETTINGS" --min-count 5 > "$OUT" 2>/dev/null
-assert_json "gh pr view (count 4) dropped at min-count 5" \
-  "all(c['shape']!='gh pr view' for c in d['allow_candidates'])"
+python3 "$ANALYZE" --log "$LOG" --min-count 4 > "$OUT" 2>/dev/null
+assert_json "git commit (count 3) dropped at min-count 4" \
+  "all(c['shape']!='git commit' for c in d['except_candidates'])"
+
+echo "--- records with matched_shapes group by the part each rule matched ---"
+# A chain logs its leading command as command_shape; the rule fired on a later
+# part, which matched_shapes names. The compound note (null shape) takes the
+# first rule's shape.
+cat > "$LOG" <<'EOF'
+{"schema":2}
+{"ts":"2026-05-31T10:00:00+00:00","decision":"deny","tool":"Bash","command_shape":"cat","matched":["compound command: escalated","git commit: creates a permanent commit"],"matched_shapes":[null,"git commit"]}
+{"ts":"2026-05-31T10:01:00+00:00","decision":"deny","tool":"Bash","command_shape":"echo","matched":["rm -rf: recursively deletes"],"matched_shapes":["rm"]}
+{"ts":"2026-05-31T10:02:00+00:00","decision":"ask","tool":"Bash","command_shape":"git stash","matched":["git stash: modifies the stash stack"],"matched_shapes":["git stash"]}
+{"ts":"2026-05-31T10:03:00+00:00","decision":"ask","tool":"Bash","command_shape":"git stash","matched":["git stash: modifies the stash stack"]}
+EOF
+python3 "$ANALYZE" --log "$LOG" --min-count 1 > "$OUT" 2>/dev/null
+assert_json "deny sample is the matched part (git commit), not the leading cat" \
+  "any(s['reason'].startswith('git commit') and s['samples']==['git commit'] for s in d['deny_summary'])"
+assert_json "compound note samples the rule's part" \
+  "any(s['reason'].startswith('compound') and s['samples']==['git commit'] for s in d['deny_summary'])"
+assert_json "rm -rf deny samples rm, not echo" \
+  "any(s['reason'].startswith('rm -rf') and s['samples']==['rm'] for s in d['deny_summary'])"
+assert_json "ask records with and without matched_shapes group together" \
+  "any(c['shape']=='git stash' and c['count']==2 for c in d['except_candidates'])"
+assert_json "no group is keyed by the leading command" \
+  "all(c['shape'] not in ('cat','echo') for c in d['except_candidates']) and all('cat' not in s['samples'] for s in d['deny_summary'])"
 
 echo "--- missing log exits non-zero with guidance ---"
 TOTAL=$((TOTAL + 1))
-if python3 "$ANALYZE" --log "$TMP/nope.jsonl" --settings "$SETTINGS" >/dev/null 2>&1; then
+if python3 "$ANALYZE" --log "$TMP/nope.jsonl" >/dev/null 2>&1; then
   FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: missing log should exit non-zero"
 else
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: missing log exits non-zero"
@@ -108,66 +111,12 @@ echo "--- CLAUDEWATCH_LOG=off reports logging disabled ---"
 TOTAL=$((TOTAL + 1))
 # Sandbox HOME so the default path resolves to a nonexistent file, forcing the
 # not-found branch; env off must produce the "disabled" guidance, not "no sessions".
-OFFERR=$(CLAUDEWATCH_LOG=off HOME="$TMP" python3 "$ANALYZE" --settings "$SETTINGS" 2>&1 >/dev/null || true)
+OFFERR=$(CLAUDEWATCH_LOG=off HOME="$TMP" python3 "$ANALYZE" 2>&1 >/dev/null || true)
 if echo "$OFFERR" | grep -qi "disabled"; then
   PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${NC}: CLAUDEWATCH_LOG=off reports logging disabled"
 else
   FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${NC}: CLAUDEWATCH_LOG=off reports logging disabled (got: ${OFFERR:-none})"
 fi
-
-echo "--- Bash and Monitor candidates are proposed per tool ---"
-# The same shell command reaching the host through Bash and through Monitor needs
-# two different permission rules, so candidates group per tool and a Bash allow
-# rule does not suppress the Monitor one.
-MLOG="$TMP/monitor.jsonl"
-MSETTINGS="$TMP/monitor-settings.json"
-cat > "$MSETTINGS" <<'EOF'
-{"permissions":{"allow":["Bash(gh pr checks:*)"]}}
-EOF
-cat > "$MLOG" <<'EOF'
-{"schema":2}
-{"ts":"2026-05-31T11:00:00+00:00","decision":"allow","tool":"Bash","command_shape":"gh pr checks","cwd":"/a"}
-{"ts":"2026-05-31T11:01:00+00:00","decision":"allow","tool":"Bash","command_shape":"gh pr checks","cwd":"/a"}
-{"ts":"2026-05-31T11:02:00+00:00","decision":"allow","tool":"Monitor","command_shape":"gh pr checks","cwd":"/a"}
-{"ts":"2026-05-31T11:03:00+00:00","decision":"allow","tool":"Monitor","command_shape":"gh pr checks","cwd":"/a"}
-EOF
-python3 "$ANALYZE" --log "$MLOG" --settings "$MSETTINGS" --min-count 2 > "$OUT" 2>/dev/null
-assert_json "the allow-listed Bash shape is suppressed" \
-  "all(not (c['tool']=='Bash' and c['shape']=='gh pr checks') for c in d['allow_candidates'])"
-assert_json "the same shape via Monitor is still proposed" \
-  "any(c['tool']=='Monitor' and c['shape']=='gh pr checks' and c['count']==2 for c in d['allow_candidates'])"
-assert_json "the Monitor candidate suggests a Monitor rule" \
-  "any(c['suggested_allow']=='Monitor(gh pr checks:*)' for c in d['allow_candidates'])"
-rm -f "$MLOG" "$MSETTINGS"
-
-echo "--- a rule whose wildcard sits mid-pattern suppresses nothing ---"
-# `Bash(git * main)` covers far less than the literal `git` it leads with, and
-# the reducer cannot tell which commands it does cover. Reducing it to `git`
-# would withhold every git candidate, so it contributes no literal instead.
-analyze_case wildcard '{"permissions":{"allow":["Bash(git * main)","Bash(bash *.claude/hooks/x.sh)"]}}' <<'EOF'
-{"schema":2}
-{"ts":"2026-05-31T12:00:00+00:00","decision":"allow","tool":"Bash","command_shape":"git status","cwd":"/a"}
-{"ts":"2026-05-31T12:01:00+00:00","decision":"allow","tool":"Bash","command_shape":"git status","cwd":"/a"}
-{"ts":"2026-05-31T12:02:00+00:00","decision":"allow","tool":"Bash","command_shape":"bash","cwd":"/a"}
-{"ts":"2026-05-31T12:03:00+00:00","decision":"allow","tool":"Bash","command_shape":"bash","cwd":"/a"}
-EOF
-assert_json "git status is proposed despite Bash(git * main)" \
-  "any(c['shape']=='git status' and c['count']==2 for c in d['allow_candidates'])"
-assert_json "bash is proposed despite Bash(bash *.claude/hooks/x.sh)" \
-  "any(c['shape']=='bash' and c['count']==2 for c in d['allow_candidates'])"
-
-echo "--- coverage lands on a token boundary ---"
-analyze_case boundary '{"permissions":{"allow":["Bash(git:*)"]}}' <<'EOF'
-{"schema":2}
-{"ts":"2026-05-31T13:00:00+00:00","decision":"allow","tool":"Bash","command_shape":"git status","cwd":"/a"}
-{"ts":"2026-05-31T13:01:00+00:00","decision":"allow","tool":"Bash","command_shape":"git status","cwd":"/a"}
-{"ts":"2026-05-31T13:02:00+00:00","decision":"allow","tool":"Bash","command_shape":"gitk","cwd":"/a"}
-{"ts":"2026-05-31T13:03:00+00:00","decision":"allow","tool":"Bash","command_shape":"gitk","cwd":"/a"}
-EOF
-assert_json "git status is suppressed by Bash(git:*)" \
-  "all(c['shape']!='git status' for c in d['allow_candidates'])"
-assert_json "gitk is proposed despite Bash(git:*)" \
-  "any(c['shape']=='gitk' and c['count']==2 for c in d['allow_candidates'])"
 
 rm -f "$TMP"/*
 rmdir "$TMP" 2>/dev/null || true

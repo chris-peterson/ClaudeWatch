@@ -20,6 +20,11 @@ t "rm -Rf /"         block '{"tool_name":"Bash","tool_input":{"command":"rm -Rf 
 t "rm -R --force /"  block '{"tool_name":"Bash","tool_input":{"command":"rm -R --force /"}}'
 t "rm -Rf /*"        block '{"tool_name":"Bash","tool_input":{"command":"rm -Rf /*"}}'
 t "(rm --long /)"    block '{"tool_name":"Bash","tool_input":{"command":"(rm --recursive --force /)"}}'
+# GNU rm takes any unique prefix of a long option (getopt_long).
+t "rm --rec --forc /" block '{"tool_name":"Bash","tool_input":{"command":"rm --rec --forc /"}}'
+t "rm --r --f /"     block '{"tool_name":"Bash","tool_input":{"command":"rm --r --f /"}}'
+t "rm --recur dir"   ask   '{"tool_name":"Bash","tool_input":{"command":"rm --recur /srv/data"}}'
+t "rm --verbose file" allow '{"tool_name":"Bash","tool_input":{"command":"rm --verbose notes.txt"}}'
 
 echo "--- allow: rm near misses ---"
 # Force alone is not recursive; `rm` is bounded as its own shell word; and the
@@ -60,6 +65,20 @@ t "chmod -R 777"     block '{"tool_name":"Bash","tool_input":{"command":"chmod -
 echo "--- block: mv to /dev/null ---"
 t "mv /dev/null"     block '{"tool_name":"Bash","tool_input":{"command":"mv important.log /dev/null"}}'
 
+echo "--- block: raw disk writes ---"
+t "dd of=/dev/sda"       block '{"tool_name":"Bash","tool_input":{"command":"dd if=/dev/zero of=/dev/sda bs=1M"}}'
+t "sudo dd of=rdisk"     block '{"tool_name":"Bash","tool_input":{"command":"sudo dd if=img.iso of=/dev/rdisk4 bs=4m"}}'
+t "dd of=/dev/nvme0n1"   block '{"tool_name":"Bash","tool_input":{"command":"dd if=/dev/urandom of=/dev/nvme0n1"}}'
+t "mkfs.ext4 /dev/sdb1"  block '{"tool_name":"Bash","tool_input":{"command":"mkfs.ext4 /dev/sdb1"}}'
+t "mkfs -t ext4 /dev"    block '{"tool_name":"Bash","tool_input":{"command":"mkfs -t ext4 /dev/sdb1"}}'
+t "> /dev/sda"           block '{"tool_name":"Bash","tool_input":{"command":"cat image.bin > /dev/sda"}}'
+t "diskutil eraseDisk"   block '{"tool_name":"Bash","tool_input":{"command":"diskutil eraseDisk APFS Blank /dev/disk4"}}'
+t "dd of=file"           allow '{"tool_name":"Bash","tool_input":{"command":"dd if=/dev/zero of=./blank.img bs=1M count=10"}}'
+t "dd if=/dev/sda (read)" allow '{"tool_name":"Bash","tool_input":{"command":"dd if=/dev/sda of=./backup.img"}}'
+t "> /dev/null"          allow '{"tool_name":"Bash","tool_input":{"command":"make build > /dev/null"}}'
+t "diskutil list"        allow '{"tool_name":"Bash","tool_input":{"command":"diskutil list"}}'
+t "grep mkfs"            allow '{"tool_name":"Bash","tool_input":{"command":"grep -rn mkfs docs/"}}'
+
 echo "--- block: shred ---"
 t "shred file"       block '{"tool_name":"Bash","tool_input":{"command":"shred secret.key"}}'
 
@@ -72,6 +91,21 @@ t "rm -r dir"        ask   '{"tool_name":"Bash","tool_input":{"command":"rm -r o
 
 echo "--- ask: mv / ---"
 t "mv /etc"          ask   '{"tool_name":"Bash","tool_input":{"command":"mv /etc/config /etc/config.bak"}}'
+t "mv /etc/hosts"    ask   '{"tool_name":"Bash","tool_input":{"command":"mv /etc/hosts /tmp/hosts"}}'
+t "mv /usr/local/bin" ask  '{"tool_name":"Bash","tool_input":{"command":"mv /usr/local/bin/tool /tmp/"}}'
+t "mv / (root)"      ask   '{"tool_name":"Bash","tool_input":{"command":"mv / /tmp/root"}}'
+t "mv -f /etc"       ask   '{"tool_name":"Bash","tool_input":{"command":"mv -f /etc/hosts /tmp/hosts"}}'
+t "mv /private/etc"  ask   '{"tool_name":"Bash","tool_input":{"command":"mv /private/etc/hosts /tmp/hosts"}}'
+t "mv /var/log"      ask   '{"tool_name":"Bash","tool_input":{"command":"mv /var/log/system.log /tmp/"}}'
+t "mv /Library"      ask   '{"tool_name":"Bash","tool_input":{"command":"mv /Library/LaunchDaemons/x.plist /tmp/"}}'
+t "mv home path"     allow '{"tool_name":"Bash","tool_input":{"command":"mv /Users/me/src/repo/a.md /Users/me/src/repo/b.md"}}'
+t "mv /home path"    allow '{"tool_name":"Bash","tool_input":{"command":"mv /home/me/a.md /home/me/b.md"}}'
+t "mv /tmp"          allow '{"tool_name":"Bash","tool_input":{"command":"mv /tmp/draft.md ./docs/draft.md"}}'
+t "mv /private/tmp"  allow '{"tool_name":"Bash","tool_input":{"command":"mv /private/tmp/claude-502/out.json ./out.json"}}'
+t "mv /var/tmp"      allow '{"tool_name":"Bash","tool_input":{"command":"mv /var/tmp/x ./x"}}'
+t "mv /var/folders (macOS TMPDIR)" allow '{"tool_name":"Bash","tool_input":{"command":"mv /var/folders/ab/T/x ./x"}}'
+t "mv /etcetera (not /etc)" allow '{"tool_name":"Bash","tool_input":{"command":"mv /etcetera/x ./x"}}'
+t "gmv /etc (not mv)" allow '{"tool_name":"Bash","tool_input":{"command":"gmv /etc/x ./x"}}'
 
 echo "--- ask: chmod ---"
 t "chmod 644"        ask   '{"tool_name":"Bash","tool_input":{"command":"chmod 644 readme.md"}}'
@@ -137,6 +171,12 @@ unset CLAUDE_PROJECT_DIR
 export CLAUDE_PROJECT_DIR=/
 t "rm -rf project root is /"     ask   '{"tool_name":"Bash","tool_input":{"command":"rm -rf /etc/foo"}}'
 unset CLAUDE_PROJECT_DIR
+
+echo "--- a program spelled by its path (EN-15) ---"
+t "/bin/rm -rf /"            block '{"tool_name":"Bash","tool_input":{"command":"/bin/rm -rf /"}}'
+t "/bin/mv /etc"             ask   '{"tool_name":"Bash","tool_input":{"command":"/bin/mv /etc/config /etc/config.bak"}}'
+t "/bin/rm -r in-tree"       allow '{"tool_name":"Bash","cwd":"/work/repo","tool_input":{"command":"/bin/rm -r build"}}'
+t "path argument untouched"  allow '{"tool_name":"Bash","tool_input":{"command":"ls -l /bin/rm"}}'
 
 echo "--- is_ephemeral_scratch: regenerable tool output allowed from any cwd ---"
 t "rm -rf playwright scratch"    allow '{"tool_name":"Bash","cwd":"/somewhere/else","tool_input":{"command":"rm -rf /work/repo/.playwright-mcp"}}'

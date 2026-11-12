@@ -231,6 +231,39 @@ run_test "$TMPDIR_TARGETS/watch-target.yml" "bash filter skips non-matching" all
 run_test "$TMPDIR_TARGETS/watch-target.yml" "filter does not gate file-content" block \
   '{"tool_name":"Write","tool_input":{"file_path":"x.foo","content":"destroy-file without filter keyword"}}'
 
+echo "--- target=file-path matches the Write/Edit path ([RL-21]) ---"
+cat > "$TMPDIR_TARGETS/path-target.yml" <<'YAMLEOF'
+name: path-target
+filter: '\bnever-matches\b'
+rules:
+  block:
+    - name: guarded dir
+      pattern: '/guarded/'
+      target: file-path
+      reason: path rule fired
+      ref: n/a
+  ask:
+    - name: guarded ask
+      pattern: '/asked/'
+      target: file-path
+      reason: path ask fired
+      ref: n/a
+YAMLEOF
+run_test "$TMPDIR_TARGETS/path-target.yml" "path rule fires on Write" block \
+  '{"tool_name":"Write","tool_input":{"file_path":"/w/guarded/x.txt","content":"anything"}}'
+run_test "$TMPDIR_TARGETS/path-target.yml" "path rule fires on Edit" block \
+  '{"tool_name":"Edit","tool_input":{"file_path":"/w/guarded/x.txt","old_string":"a","new_string":"b"}}'
+run_test "$TMPDIR_TARGETS/path-target.yml" "path rule fires on an emptying Write" block \
+  '{"tool_name":"Write","tool_input":{"file_path":"/w/guarded/x.txt","content":""}}'
+run_test "$TMPDIR_TARGETS/path-target.yml" "path ask rule asks" ask \
+  '{"tool_name":"Write","tool_input":{"file_path":"/w/asked/x.txt","content":"x"}}'
+run_test "$TMPDIR_TARGETS/path-target.yml" "path rule ignores other paths" allow \
+  '{"tool_name":"Write","tool_input":{"file_path":"/w/open/x.txt","content":"x"}}'
+run_test "$TMPDIR_TARGETS/path-target.yml" "path rule never reads a bash command" allow \
+  '{"tool_name":"Bash","tool_input":{"command":"cat /w/guarded/x.txt never-matches"}}'
+run_test "$TMPDIR_TARGETS/watch-target.yml" "emptying Write skips file-content rules" allow \
+  '{"tool_name":"Write","tool_input":{"file_path":"x.foo","content":""}}'
+
 echo "--- invalid target blocks ---"
 cat > "$TMPDIR_TARGETS/bad-target.yml" <<'YAMLEOF'
 name: bad-target
@@ -319,7 +352,7 @@ echo "=== Monitor input ==="
 # included: a monitor command runs unattended and repeats on a single approval.
 # A Monitor call carrying a `ws` object has no shell command to screen.
 run_test "$RULES_DIR" "Monitor block"                  block '{"tool_name":"Monitor","tool_input":{"command":"git push --force origin main"}}'
-run_test "$RULES_DIR" "Monitor bare ask prompts"       ask   '{"tool_name":"Monitor","tool_input":{"command":"git stash list"}}'
+run_test "$RULES_DIR" "Monitor bare ask prompts"       ask   '{"tool_name":"Monitor","tool_input":{"command":"git stash pop"}}'
 run_test "$RULES_DIR" "Monitor poll loop escalates"    block '{"tool_name":"Monitor","tool_input":{"command":"while true; do git commit -m wip; sleep 30; done"}}'
 run_test "$RULES_DIR" "Monitor log tail stays silent"  allow '{"tool_name":"Monitor","tool_input":{"command":"tail -f app.log | grep --line-buffered ERROR"}}'
 run_test "$RULES_DIR" "Monitor ws form has no command" allow '{"tool_name":"Monitor","tool_input":{"ws":{"url":"wss://example.com/stream"}}}'
@@ -331,8 +364,8 @@ echo "=== compound-command ask escalation ==="
 # The engine escalates an ask to a deny when the bash command is compound, since
 # deny survives the pipe. Operators inside quotes are not shell operators and must
 # not escalate, so a guarded command bare or with a quoted operator still prompts.
-run_test "$RULES_DIR" "bare ask prompts"                    ask   '{"tool_name":"Bash","tool_input":{"command":"git stash list"}}'
-run_test "$RULES_DIR" "piped ask escalates to block"        block '{"tool_name":"Bash","tool_input":{"command":"git stash list | tail -4"}}'
+run_test "$RULES_DIR" "bare ask prompts"                    ask   '{"tool_name":"Bash","tool_input":{"command":"git stash pop"}}'
+run_test "$RULES_DIR" "piped ask escalates to block"        block '{"tool_name":"Bash","tool_input":{"command":"git stash pop | tail -4"}}'
 run_test "$RULES_DIR" "chained ask (&&) escalates to block" block '{"tool_name":"Bash","tool_input":{"command":"git add . && git commit -m \"wip\""}}'
 run_test "$RULES_DIR" "sequenced ask (;) escalates to block" block '{"tool_name":"Bash","tool_input":{"command":"git commit -m wip; echo done"}}'
 # A bare subshell groups without separating, so it carries none of the operators
@@ -375,7 +408,7 @@ run_test "$RULES_DIR" "quoted subcommand"       ask   '{"tool_name":"Bash","tool
 # `VAR=value` and `sudo` prefix a command without being the program, so they
 # cost no normalization budget — `sudo aws s3 rm` has to reach `rm`.
 run_test "$RULES_DIR" "quoted after assignment" ask   '{"tool_name":"Bash","tool_input":{"command":"FOO=1 \"git\" commit -m wip"}}'
-run_test "$RULES_DIR" "quoted after sudo"       ask   '{"tool_name":"Bash","tool_input":{"command":"sudo \"git\" commit -m wip"}}'
+run_test "$RULES_DIR/watch-git.yml" "quoted after sudo" ask  '{"tool_name":"Bash","tool_input":{"command":"sudo \"git\" commit -m wip"}}'
 # An operand keeps the quoting the rules and the compound check both read it
 # by: unquoting a commit message would turn its punctuation into what looks
 # like a command boundary, and a quoted word behind a program that takes no
@@ -393,6 +426,11 @@ run_test "$RULES_DIR" "quoted word resolves"    block '{"tool_name":"Bash","tool
 run_test "$RULES_DIR" "quoted behind -C"        block '{"tool_name":"Bash","tool_input":{"command":"git -C /repo \"push\" --force"}}'
 run_test "$RULES_DIR" "quoted behind -c"        ask   '{"tool_name":"Bash","tool_input":{"command":"git -c user.name=x \"commit\" -m wip"}}'
 run_test "$RULES_DIR" "quoted behind --profile" block '{"tool_name":"Bash","tool_input":{"command":"aws --profile prod \"s3\" rm s3://bucket/x"}}'
+run_test "$RULES_DIR" "path to program"         ask   '{"tool_name":"Bash","tool_input":{"command":"/bin/mv /etc/hosts /tmp/hosts"}}'
+run_test "$RULES_DIR" "quoted path to program"  ask   '{"tool_name":"Bash","tool_input":{"command":"\"/usr/bin/git\" commit -m wip"}}'
+run_test "$RULES_DIR" "relative path to program" ask  '{"tool_name":"Bash","tool_input":{"command":"bin/git commit -m wip"}}'
+run_test "$RULES_DIR" "path argument keeps its path" allow '{"tool_name":"Bash","tool_input":{"command":"file /usr/bin/git"}}'
+run_test "$RULES_DIR" "/dev/tcp after continuation" block '{"tool_name":"Bash","tool_input":{"command":"cat \\\n/dev/tcp/192.0.2.1/80"}}'
 
 echo ""
 echo "=== unless_condition (in-tree exemption) ==="

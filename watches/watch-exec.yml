@@ -1,0 +1,24 @@
+name: watch-exec
+filter: '\b(curl|wget|base64|xxd|nc|ncat|netcat|socat)\b|/dev/(tcp|udp)/'
+
+rules:
+  block:
+    - name: remote script via substitution
+      pattern: '(?:\$\(|<\()\s*(?:curl|wget)\b'
+      reason: runs code fetched from the network without saving it for review
+      ref: https://blog.sandstorm.io/news/2015-09-24-is-curl-bash-insecure-pgp-verified-install.html
+
+    - name: remote script to interpreter
+      pattern: '\b(?:curl|wget)\b[^|]*\|\s*(?:(?:sudo|env)\s+(?:-\S+\s+)*)?(?:dash|ksh|fish|python[0-9.]*|perl|ruby|node|php|pwsh|powershell)\b(?!(?:\s+-\S+)*?\s+-[a-zA-Z]*[mcepr])'
+      reason: runs code fetched from the network without saving it for review
+      ref: https://blog.sandstorm.io/news/2015-09-24-is-curl-bash-insecure-pgp-verified-install.html
+
+    - name: decoded payload to shell
+      pattern: '\b(?:base64\s+(?:-\S+\s+)*(?:-d|-D|--decode)\b|xxd\s+(?:-\S+\s+)*-r\b)[^|]*\|\s*(?:(?:sudo|env)\s+(?:-\S+\s+)*)?(?:(?:ba|z|da|k)?sh|fish|python[0-9.]*|perl|ruby|node)\b(?!(?:\s+-\S+)*?\s+-[a-zA-Z]*[mcepr])'
+      reason: runs a payload that is only readable after decoding
+      ref: https://attack.mitre.org/techniques/T1140/
+
+    - name: network shell
+      pattern: '\b(?:nc|ncat|netcat)\b[^\n;&|]*(?<=\s)-[a-zA-Z]*[ec](?![\w-])|\b(?:nc|ncat|netcat)\b[^|]*\|\s*(?:(?:ba|z|da|k)?sh|fish)\b|\bsocat\b[^\n;&|]*\b(?:(?i:system):|(?i:exec):\S*\b(?:(?:ba|z|da|k)?sh|fish|python[0-9.]*|perl|ruby|node|php|pwsh)\b)|/dev/(?:tcp|udp)/'
+      reason: attaches a shell to a network connection
+      ref: https://attack.mitre.org/techniques/T1059/004/

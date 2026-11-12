@@ -19,14 +19,14 @@ The shipped rule sets, and the exact commands each one blocks or asks about, are
 For each matched command:
 
 - **Block**: destructive operations are rejected outright
-- **Ask**: mutating operations require user confirmation
+- **Ask**: mutating operations get an `ask`, which prompts unless the session runs in `auto`, where a session with no permission mode configured starts ([what an `ask` actually does](https://github.com/chris-peterson/ClaudeWatch#what-an-ask-actually-does))
 
 > [!TIP]
 > See the [rules](/rules) for the full list of protected commands.
 
 ## In action
 
-ClaudeWatch works on its own: it screens every command, and the code Claude writes to disk, blocking the genuinely dangerous and asking before anything that changes state. Here a force-push is blocked outright and a recursive delete pauses for confirmation:
+ClaudeWatch works on its own: it screens every command, and the code Claude writes to disk, blocking the genuinely dangerous and asking before anything that changes state. Here, in a session that prompts, a force-push is blocked outright and a recursive delete pauses for confirmation:
 
 <div class="cw-session" data-cw-session="session"></div>
 

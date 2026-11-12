@@ -150,6 +150,7 @@ t "cat skill cache"       allow '{"tool_name":"Bash","tool_input":{"command":"ca
 t "tail skill cache log"  allow '{"tool_name":"Bash","tool_input":{"command":"tail -n 20 ~/.claude/skills/example-skill/cache/stage.log"}}'
 t "< skill cache"         allow '{"tool_name":"Bash","tool_input":{"command":"< ~/.claude/skills/example-skill/cache/status.json"}}'
 t "cat plugin cache"      allow '{"tool_name":"Bash","tool_input":{"command":"cat ~/.claude/plugins/cache/example-plugin/README.md"}}'
+t "head plugin data log"  allow '{"tool_name":"Bash","tool_input":{"command":"head -12 ~/.claude/plugins/data/example-plugin/cache/fetch.log"}}'
 
 echo "--- ask: the cache exemption stays on the cache path ---"
 asks_via "cat ~/.claude/.credentials.json"  "read dotfiles" "cat ~/.claude/.credentials.json"
@@ -157,6 +158,9 @@ asks_via "cat ~/.claude/settings.json"      "read dotfiles" "cat ~/.claude/setti
 asks_via "secret-named file in a cache"     "read files with secret-like names" "cat ~/.claude/skills/example-skill/cache/token.json"
 asks_via ".. out of a skill cache"          "read dotfiles" "cat ~/.claude/skills/example-skill/cache/../../settings.json"
 asks_via ".. out of the plugin cache"       "read dotfiles" "cat ~/.claude/plugins/cache/../../.credentials.json"
+asks_via ".. out of plugin data"            "read dotfiles" "cat ~/.claude/plugins/data/../../.credentials.json"
+asks_via "secret-named file in plugin data" "read files with secret-like names" "cat ~/.claude/plugins/data/example-plugin/token.json"
+asks_via "a sibling of plugins/data"        "read dotfiles" "cat ~/.claude/plugins/installed_plugins.json"
 asks_via "variable after a cache path"      "read dotfiles" 'cat ~/.claude/plugins/cache/$TARGET'
 asks_via "cache path beside a dotfile"      "read dotfiles" "cat ~/.claude/plugins/cache/example-plugin/README.md ~/.bashrc"
 asks_via "a cache dir not under skills/<name>" "read dotfiles" "cat ~/.claude/cache/state.json"

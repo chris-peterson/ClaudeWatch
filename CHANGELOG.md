@@ -11,7 +11,15 @@
   `allow_candidates` bucket and its `--settings` flag.
 - The README no longer recommends broadening your Bash allow list
   (`Bash(python3 *)`, `Bash(aws *)`) with ClaudeWatch as the safety net.
-
+- The guard fails closed. When the hook can't run (no `python3`, a `python3`
+  that isn't a working interpreter, a crash, a timeout), every Bash, Monitor,
+  Write, and Edit call is blocked instead of running unscreened. README's
+  Installation section lists the prerequisites; on Windows, `python3` must
+  resolve in Git Bash to a real interpreter, not the Microsoft Store alias.
+- `$(` and backticks inside double quotes count as compound, since the shell
+  runs them there. So `rm -rf "$(mktemp -d)"`, `rm -rf /tmp/x && mkdir -p /tmp/x`,
+  and the heredoc commit shape `git commit -m "$(cat <<'EOF' … EOF)"` are
+  blocked. Write the message to a file and run `git commit -F <path>`.
 - `/ClaudeWatch:rules` changes how the rules apply to you instead of editing
   them: it writes `~/.claude/claudewatch/overrides.yml`, which survives plugin
   upgrades, and can move a rule between block and ask or turn a rule or rule set
@@ -79,14 +87,41 @@
   running it. Rules can now match a Write or Edit's file path
   (`target: file-path`), which is how the overrides file is guarded even
   against a Write that empties it.
+- Guarded commands are caught however the shell spells them: `"git" commit`,
+  `g\it commit`, `git "commit"`, a subshell `(git push)`, and a command ended
+  by `;`, `|`, or a backtick instead of a space (`git commit;echo done`).
+- Secret reads are screened for any reader, not just `cat`: `tac`, `xxd`,
+  `less`, `head`, `strings`, a bare `< ~/.aws/credentials`, and others. The
+  cloud-credentials block also covers the AWS SSO and CLI caches. These rules
+  are renamed from `cat …` to `read …`.
 
 ### Fixes
 
+- Input the engine can't read (a malformed payload, a non-string command,
+  bytes that aren't UTF-8) and any internal error now deny the call instead of
+  crashing and letting it run.
+- Edits to a file that isn't UTF-8 are screened. A Latin-1 or binary file
+  crashed the hook, a UTF-16 file was never screened, and a CRLF file could
+  hide `curl … | bash` across a line break.
+- `rm --recursive --force /` and `rm -r -f /` are caught like `rm -rf /`, and
+  so is a recursive `rm` inside a quoted script: `bash -c "rm -rf /"`,
+  `eval "rm -rf ~/Documents"`.
+- The scratch-path exemption checks every `rm` target and resolves `..`, so
+  `rm -rf /tmp/../Users/foo` and `rm -rf /tmp/build ~/Documents` no longer
+  skip the prompt. `/private/tmp`, where macOS resolves `/tmp`, counts as
+  scratch.
 - `git clean --force` and `git branch --delete --force` (or `-d -f`, `-df`)
   are caught like their short forms, and every rule naming a long option also
   matches the prefixes git and GNU `rm` accept for it: `git reset --h` resets
   hard and `git clean --f` deletes, and both ran unguarded.
-
+- A plugin installed under a path containing a space now runs its hooks.
+  Before, the hook command split at the space and nothing was screened.
+- The secret-like filename rule checks the file's own name, not its
+  directories, and skips source files (`.cs`, `.py`, `.ts`, and the like), so
+  `cat SecurityTokenImpl/Domain/Jwt/JwtValidator.cs` no longer asks.
+  `cat -n config/token.json` and `cat README.md secrets.json` now ask.
+- `env` asks only when it prints the environment. `env A=1 make` and
+  `env -i bash` no longer ask; `env`, `env -u PATH`, and `printenv` still do.
 - `git stash list` and `git stash show` no longer ask; they only read the
   stash. Every other `git stash` form still asks.
 - The `mv /` ask fires only for `/` itself and top-level system paths (`/etc`,
@@ -102,6 +137,11 @@
 
 ### Other
 
+- The docs explain what an `ask` actually does in each permission mode. Since
+  Claude Code 2.1.284, a session with no configured mode starts in `auto`,
+  where an `ask` runs without a prompt. Set
+  `"permissions": { "defaultMode": "default" }` to get the prompts back. The
+  ambient note no longer tells agents that a bare guarded command will prompt.
 - The docs describe the two ask-tier changes in Claude Code 2.1.319:
   `permissions.denyInsteadOfPrompting` denies an `ask` in every mode, and `auto`
   with telemetry or feature flags off asks about or denies calls the auto-mode
@@ -110,6 +150,8 @@
 - The same places name a mod's own tool call (`$.tool.call`, Claude Code
   2.1.321) as a case where an `ask` reaches nobody: the call does not run, and
   a `deny` holds as well.
+- The test suite runs in CI on Linux and macOS. The plugin has a new icon and
+  a one-line description that matches on every surface.
 
 ## 0.18.0
 

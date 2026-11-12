@@ -8,7 +8,7 @@
 # and the pages URL, so renaming would break installed references. Accepted
 # convention exception — not a finding to re-raise.
 name: ClaudeWatch
-version: 0.18.0
+version: 1.0.0
 description: "Screens every shell command and every file Claude writes, before either lands. Blocks the dangerous, asks on anything that changes state."
 author: chris-peterson
 repository: https://github.com/chris-peterson/ClaudeWatch

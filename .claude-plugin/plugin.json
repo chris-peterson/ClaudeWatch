@@ -1,6 +1,6 @@
 {
   "name": "ClaudeWatch",
-  "version": "0.18.0",
+  "version": "1.0.0",
   "description": "Screens every shell command and every file Claude writes, before either lands. Blocks the dangerous, asks on anything that changes state.",
   "author": {
     "name": "chris-peterson"

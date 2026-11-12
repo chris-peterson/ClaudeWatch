@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+### Fixes
+
 - Reading a file under `~/.claude/plugins/data/`, where each plugin keeps its
   persistent state, no longer asks through `read dotfiles`, matching the
   existing exemption for `~/.claude/plugins/cache/`. A file there with a

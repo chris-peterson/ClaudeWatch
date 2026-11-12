@@ -38,6 +38,8 @@ Most of the time ClaudeWatch stays out of the way. To look under the hood (see w
 
 ## Installation
 
+Requirements: `python3` on PATH, and on Windows, Git for Windows ([more details](https://github.com/chris-peterson/ClaudeWatch#installation)).
+
 ```bash
 claude plugin marketplace add chris-peterson/claude-marketplace
 claude plugin install ClaudeWatch@chris-peterson

@@ -19,7 +19,7 @@ The shipped rule sets, and the exact commands each one blocks or asks about, are
 For each matched command:
 
 - **Block**: destructive operations are rejected outright
-- **Ask**: mutating operations get an `ask`, which prompts unless the session runs in `auto`, where a session with no permission mode configured starts ([what an `ask` actually does](https://github.com/chris-peterson/ClaudeWatch#what-an-ask-actually-does))
+- **Ask**: mutating operations get an `ask`, which prompts unless the session runs in `auto`, where a session with no permission mode configured starts unless the organization's server-managed settings set a `defaultMode` ([what an `ask` actually does](https://github.com/chris-peterson/ClaudeWatch#what-an-ask-actually-does))
 
 > [!TIP]
 > See the [rules](/rules) for the full list of protected commands.

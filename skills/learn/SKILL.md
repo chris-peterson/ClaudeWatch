@@ -161,7 +161,9 @@ before the mode is checked. An `ask` prompts only in a prompting mode. In `auto`
 the command runs without a prompt
 ([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)),
 and in a headless `--print` run it is denied, since nobody can answer. An
-interactive session with no permission mode configured starts in `auto`.
+interactive session with no permission mode configured starts in `auto`,
+unless the organization's server-managed settings set a `defaultMode`, which it
+takes once settings load (Claude Code 2.1.326).
 
 Claude Code 2.1.319 adds two more outcomes, per its changelog:
 

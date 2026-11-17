@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Other
+
+- The docs qualify `auto` as the default for a session with no permission
+  mode configured: as of Claude Code 2.1.326, a session takes the
+  organization's server-managed `defaultMode` once settings load. The ambient
+  note, README, `/ClaudeWatch:learn`, and `SPEC.md` `[OUT-04]` carry it.
+
 ## 1.0.1
 
 ### Fixes

@@ -4,7 +4,7 @@ Tracking status of the requirements declared in [SPEC.md](SPEC.md). Updated
 whenever an audit (`/spec-audit`) is run, when implementation lands, or when
 the spec is revised.
 
-**Last audit:** 2026-11-09
+**Last audit:** 2026-11-16
 **Spec version:** v1 (root SPEC.md, no versioned tree)
 **Coverage:** 113/113 normative requirements (100%).
 
@@ -56,6 +56,10 @@ the file and its tests.
 | DEV-01..DEV-04 | `just test`, test layout, `just rules`, `just preview-docs` | Covered | `justfile` + `tests/` |
 
 ## Audit history
+
+### 2026-11-16 — Coverage refresh (spec-status)
+
+STATUS.md updated: no ID change, normative count stays 113. OUT-04 qualifies `auto` as the unconfigured default: as of Claude Code 2.1.326 a session takes the organization's server-managed `defaultMode` once settings load. The OUT and HK-04 rows' evidence is unchanged; `tests/test-ambient.sh` still checks the ambient rule's wording.
 
 ### 2026-11-09 — Coverage refresh (spec-status)
 

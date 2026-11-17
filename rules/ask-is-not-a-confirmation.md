@@ -9,8 +9,9 @@ configured, and the hook cannot tell which case it is in. Known cases:
   ([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)).
   With telemetry or feature flags off, including behind an LLM gateway, Claude
   Code 2.1.319 asks about or denies calls the server can't check instead.
-  `auto` is also where a session with no permission mode configured starts; if
-  the user expects ClaudeWatch to prompt, tell them to set
+  `auto` is also where a session with no permission mode configured starts,
+  unless the organization's server-managed settings set a `defaultMode` (Claude
+  Code 2.1.326); if the user expects ClaudeWatch to prompt, tell them to set
   `"permissions": { "defaultMode": "default" }`.
 - **`permissions.denyInsteadOfPrompting` denies it**, interactive sessions,
   subagents and teammates included, and the turn continues (Claude Code

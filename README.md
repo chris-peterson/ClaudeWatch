@@ -77,7 +77,7 @@ An `ask` is a request for confirmation, not a guarantee of one. Whether it reach
 | --- | --- |
 | Interactive, `default` / `plan` / `acceptEdits` | prompts, unless `permissions.denyInsteadOfPrompting` is on: then it is **denied** and the turn continues (Claude Code 2.1.319; applies to subagents and teammates too) |
 | Interactive, `auto` | **runs unprompted** where the auto-mode server check is reachable: the mode clears the call before the hook's `ask` has a prompt surface ([claude-code#89561](https://github.com/anthropics/claude-code/issues/89561)). With telemetry or feature flags off, including behind an LLM gateway, Claude Code 2.1.319 asks about or denies calls the server can't check, unless `CLAUDE_CODE_AUTO_MODE_SERVER=0` keeps the built-in classifier |
-| Interactive, no permission mode configured | as `auto`: the session starts there ([which mode a session starts in](https://code.claude.com/docs/en/permission-modes#which-mode-a-session-starts-in)) |
+| Interactive, no permission mode configured | as `auto`: the session starts there, unless your organization's server-managed settings set a `defaultMode`, which it takes once settings load (Claude Code 2.1.326) ([which mode a session starts in](https://code.claude.com/docs/en/permission-modes#which-mode-a-session-starts-in)) |
 | Headless (`--print`) | **denied**: nobody can answer, so the call fails closed |
 | A mod's own tool call (`$.tool.call`) | **not run**: a mod's call raises no permission prompt (Claude Code 2.1.321; probed headless in `default`, `acceptEdits`, `auto`, `bypassPermissions` and `dontAsk`) |
 

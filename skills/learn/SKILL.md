@@ -173,7 +173,9 @@ Claude Code 2.1.319 adds two more outcomes, per its changelog:
 - **`auto` runs the `ask` unprompted only where the auto-mode server check is
   reachable.** With telemetry or feature flags off (including behind LLM
   gateways), calls the server can't check are asked about or denied, unless
-  `CLAUDE_CODE_AUTO_MODE_SERVER=0` keeps the built-in classifier.
+  `CLAUDE_CODE_AUTO_MODE_SERVER=0` keeps the built-in classifier. Claude Code
+  2.1.327 announced an upcoming release removes that fallback, so don't offer
+  it as a lasting fix.
 
 A mod's own tool call (`$.tool.call`, Claude Code 2.1.321) raises no permission
 prompt, so an `ask` on it leaves the call unrun, and a `deny` holds there too.
